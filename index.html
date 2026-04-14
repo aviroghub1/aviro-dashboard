@@ -821,17 +821,38 @@ function AviroDashboard() {
     return () => clearTimeout(t);
   }, [entityDocs, dbConnected, hasLoaded]);
 
-  // Global doc status calculator (used by alerts, badges, and download pack)
-  const getDocStatusGlobal = (expiryStr, delayMonths) => {
-    if (!expiryStr) return "unknown";
-    const exp = new Date(expiryStr);
+  // Global doc status calculator: renewal date = issueDate + renewalMonths
+  // If noRenewal is true, always "valid" (no alerts)
+  const getDocStatusGlobal = (doc) => {
+    if (!doc) return "unknown";
+    if (doc.noRenewal) return "valid";
+    if (!doc.issueDate && !doc.expiry) return "unknown";
+    const issueStr = doc.issueDate || doc.expiry; // backward compat with old expiry field
+    if (!issueStr) return "unknown";
+    const issue = new Date(issueStr);
+    const renewalMonths = doc.renewalMonths || 12;
+    const renewal = new Date(issue);
+    renewal.setMonth(renewal.getMonth() + renewalMonths);
+    if (doc.delayedUntil) renewal.setMonth(renewal.getMonth() + doc.delayedUntil);
     const now = new Date();
-    if (delayMonths) exp.setMonth(exp.getMonth() + delayMonths);
-    const diffDays = (exp - now) / (1000 * 60 * 60 * 24);
+    const diffDays = (renewal - now) / (1000 * 60 * 60 * 24);
     if (diffDays < 0) return "expired";
     if (diffDays < 90) return "expiring";
     if (diffDays < 180) return "review_soon";
     return "valid";
+  };
+  // Helper: get calculated renewal date string from a doc
+  const getDocRenewalDate = (doc) => {
+    if (!doc) return "";
+    if (doc.noRenewal) return "No renewal";
+    const issueStr = doc.issueDate || doc.expiry;
+    if (!issueStr) return "";
+    const issue = new Date(issueStr);
+    const renewalMonths = doc.renewalMonths || 12;
+    const renewal = new Date(issue);
+    renewal.setMonth(renewal.getMonth() + renewalMonths);
+    if (doc.delayedUntil) renewal.setMonth(renewal.getMonth() + doc.delayedUntil);
+    return renewal.toISOString().split("T")[0];
   };
 
   // Download full company document pack as ZIP with actual files + summary
@@ -873,10 +894,14 @@ function AviroDashboard() {
       summary += "DOCUMENT REGISTER (" + docs.length + " documents)\n";
       summary += "───────────────────────────────────────────\n";
       docs.forEach((d, i) => {
-        const st = getDocStatusGlobal(d.expiry, d.delayedUntil);
+        const st = getDocStatusGlobal(d);
+        const renDate = getDocRenewalDate(d);
         summary += "  " + (i + 1) + ". " + (d.name || "Untitled") + "\n";
-        summary += "     Status: " + st.toUpperCase() + (d.expiry ? " | Renewal: " + d.expiry : "") + "\n";
-        summary += "     Notarised: " + (d.notarised ? "Yes" : "No") + (d.renewalNotes ? " | Notes: " + d.renewalNotes : "") + "\n";
+        summary += "     Status: " + st.toUpperCase();
+        if (d.noRenewal) { summary += " | No renewal needed"; }
+        else { summary += (d.issueDate || d.expiry ? " | Issued: " + (d.issueDate || d.expiry) : "") + (renDate ? " | Renewal due: " + renDate : "") + " | Cycle: " + (d.renewalMonths || 12) + " months"; }
+        summary += "\n";
+        summary += "     Notarised: " + (d.notarised ? "Yes" + (d.notarisedDate ? " (" + d.notarisedDate + ")" : "") : "No") + (d.renewalNotes ? " | Notes: " + d.renewalNotes : "") + "\n";
         if (d.fileName) summary += "     File: " + d.fileName + "\n";
         summary += "\n";
       });
@@ -1055,9 +1080,9 @@ function AviroDashboard() {
     entities.forEach(e => {
       const docs = entityDocs[e.name] || [];
       docs.forEach(d => {
-        const status = getDocStatusGlobal(d.expiry, d.delayedUntil);
+        const status = getDocStatusGlobal(d);
         if (status === "expired" || status === "expiring" || status === "review_soon") {
-          allDocAlerts.push({ entity: e.name, category: cat, doc: d.name, expiry: d.expiry || "No date", status });
+          allDocAlerts.push({ entity: e.name, category: cat, doc: d.name, renewalDate: getDocRenewalDate(d) || "No date", status });
         }
       });
     });
@@ -2381,17 +2406,8 @@ function AviroDashboard() {
     const merged = { ...entity, ...(entityOverrides[entity.name] || {}) };
 
     // Helper: calculate document status
-    const getDocStatus = (expiryStr, delayMonths) => {
-      if (!expiryStr) return "unknown";
-      const exp = new Date(expiryStr);
-      const now = new Date();
-      if (delayMonths) exp.setMonth(exp.getMonth() + delayMonths);
-      const diffDays = (exp - now) / (1000 * 60 * 60 * 24);
-      if (diffDays < 0) return "expired";
-      if (diffDays < 90) return "expiring";
-      if (diffDays < 180) return "review_soon";
-      return "valid";
-    };
+    // Use global doc status calculator
+    const getDocStatus = (doc) => getDocStatusGlobal(doc);
 
     // Standard document list for suggestions
     const standardDocs = ["Certificate of Incorporation", "Gaming License", "UBO Declaration", "Register of Directors", "Certificate of Good Standing", "Proof of Address", "Operational Manual", "AML Policy", "Shareholder Register", "Board Resolution", "Tax Compliance Certificate", "Power of Attorney"];
@@ -2517,8 +2533,8 @@ function AviroDashboard() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
             {[
               { label: "Documents", value: allUserDocs.length, color: "#3b82f6" },
-              { label: "Expiring", value: allUserDocs.filter(d => getDocStatus(d.expiry, d.delayedUntil) === "expiring").length, color: "#ef4444" },
-              { label: "Review Soon", value: allUserDocs.filter(d => getDocStatus(d.expiry, d.delayedUntil) === "review_soon").length, color: "#f59e0b" },
+              { label: "Expiring", value: allUserDocs.filter(d => getDocStatus(d) === "expiring").length, color: "#ef4444" },
+              { label: "Review Soon", value: allUserDocs.filter(d => getDocStatus(d) === "review_soon").length, color: "#f59e0b" },
               { label: "Missing", value: missingDocs.length, color: "#8b5cf6" },
             ].map(s => (
               <div key={s.label} style={{ background: c.surface, borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
@@ -2535,7 +2551,7 @@ function AviroDashboard() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {missingDocs.slice(0, 5).map(d => (
                   <button key={d} onClick={() => {
-                    const newDoc = { id: `doc-${Date.now()}`, name: d, expiry: "", notarised: false, notarisedDate: "", renewalMonths: 6, delayedUntil: null, fileName: "", fileSize: 0 };
+                    const newDoc = { id: `doc-${Date.now()}`, name: d, issueDate: "", noRenewal: false, notarised: false, notarisedDate: "", renewalMonths: 12, delayedUntil: null, fileName: "", fileSize: 0, fileUrl: "", previousVersions: [], renewalNotes: "" };
                     const updated = [...(entityDocs[entity.name] || []), newDoc];
                     setEntityDocs({ ...entityDocs, [entity.name]: updated });
                   }} style={{ background: "transparent", border: `1px solid ${c.accent}`, color: c.accent, borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 10 }}>+ {d}</button>
@@ -2552,7 +2568,8 @@ function AviroDashboard() {
             </div>
           )}
           {allUserDocs.map((doc, i) => {
-            const status = getDocStatus(doc.expiry, doc.delayedUntil);
+            const status = getDocStatus(doc);
+            const renewalDateStr = getDocRenewalDate(doc);
             const statusColors = { expired: "#ef4444", expiring: "#f59e0b", review_soon: "#eab308", valid: "#22c55e", unknown: "#6b7280" };
             const sc = statusColors[status] || statusColors.unknown;
             const isEditing = editingEntityField === `doc-${doc.id}`;
@@ -2623,10 +2640,32 @@ function AviroDashboard() {
                           <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Document Name</label>
                           <input value={doc.name} onChange={e => updateDoc("name", e.target.value)} style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
                         </div>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Renewal Date</label>
-                          <input type="date" value={doc.expiry || ""} onChange={e => updateDoc("expiry", e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+
+                        {/* No renewal checkbox */}
+                        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: c.text, cursor: "pointer" }}>
+                            <input type="checkbox" checked={doc.noRenewal || false} onChange={e => updateDoc("noRenewal", e.target.checked)} style={{ accentColor: c.accent }} /> No renewal needed
+                          </label>
                         </div>
+
+                        {/* Issue date + renewal cycle — only shown if renewal is needed */}
+                        {!doc.noRenewal && (
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Issue Date</label>
+                            <input type="date" value={doc.issueDate || doc.expiry || ""} onChange={e => updateDoc("issueDate", e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+                          </div>
+                        )}
+                        {!doc.noRenewal && (
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Renewal Cycle</label>
+                            <select value={doc.renewalMonths || 12} onChange={e => updateDoc("renewalMonths", parseInt(e.target.value))} style={{ fontSize: 11, padding: "3px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text }}>
+                              {[3,6,9,12,18,24,36].map(m => <option key={m} value={m}>{m} months</option>)}
+                            </select>
+                            {(doc.issueDate || doc.expiry) && <span style={{ fontSize: 10, color: c.textMuted }}>Renewal due: <span style={{ color: c.accent, fontWeight: 600 }}>{getDocRenewalDate(doc)}</span></span>}
+                          </div>
+                        )}
+
+                        {/* File upload drop zone */}
                         <div
                           onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; e.currentTarget.style.background = `${c.accent}15`; }}
                           onDragLeave={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; e.currentTarget.style.background = c.surface; }}
@@ -2649,26 +2688,23 @@ function AviroDashboard() {
                             </div>
                           )}
                         </div>
+
+                        {/* Notarised */}
                         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                           <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: c.text, cursor: "pointer" }}>
                             <input type="checkbox" checked={doc.notarised || false} onChange={e => updateDoc("notarised", e.target.checked)} style={{ accentColor: c.accent }} /> Notarised
                           </label>
                           {doc.notarised && (
                             <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                              <label style={{ fontSize: 10, color: c.textMuted }}>Date:</label>
+                              <label style={{ fontSize: 10, color: c.textMuted }}>Date of Notary:</label>
                               <input type="date" value={doc.notarisedDate || ""} onChange={e => updateDoc("notarisedDate", e.target.value)} style={{ fontSize: 11, padding: "3px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
                             </div>
                           )}
                         </div>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Renewal Cycle</label>
-                          <select value={doc.renewalMonths || 6} onChange={e => updateDoc("renewalMonths", parseInt(e.target.value))} style={{ fontSize: 11, padding: "3px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text }}>
-                            {[3,6,9,12,18,24].map(m => <option key={m} value={m}>{m} months</option>)}
-                          </select>
-                        </div>
+
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Notes</label>
-                          <input value={doc.renewalNotes || ""} onChange={e => updateDoc("renewalNotes", e.target.value)} placeholder="Any renewal notes..." style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+                          <input value={doc.renewalNotes || ""} onChange={e => updateDoc("renewalNotes", e.target.value)} placeholder="Any notes..." style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
                         </div>
                         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
                           <button onClick={() => setEditingEntityField(null)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Done</button>
@@ -2682,10 +2718,17 @@ function AviroDashboard() {
                           {doc.uploadStatus === "uploading" && <span style={{ fontSize: 10, color: c.accent }}>Uploading...</span>}
                         </div>
                         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, marginBottom: 4 }}>
-                          {doc.expiry && <span style={{ color: c.textMuted }}>Renewal: <span style={{ color: sc, fontWeight: 600 }}>{doc.expiry}</span></span>}
+                          {doc.noRenewal ? (
+                            <span style={{ color: c.textMuted }}>No renewal needed</span>
+                          ) : (
+                            <span style={{ color: c.textMuted }}>
+                              {(doc.issueDate || doc.expiry) && <span>Issued: {doc.issueDate || doc.expiry}</span>}
+                              {renewalDateStr && renewalDateStr !== "No renewal" && <span> · Due: <span style={{ color: sc, fontWeight: 600 }}>{renewalDateStr}</span></span>}
+                              <span> · {doc.renewalMonths || 12}mo cycle</span>
+                            </span>
+                          )}
                           {doc.notarised && <span style={{ color: c.accent }}>Notarised{doc.notarisedDate ? ` ${doc.notarisedDate}` : ""}</span>}
                           {doc.delayedUntil > 0 && <span style={{ color: c.textMuted }}>Delayed +{doc.delayedUntil}mo</span>}
-                          <span style={{ color: c.textMuted }}>Cycle: {doc.renewalMonths || 6}mo</span>
                           {doc.renewalNotes && <span style={{ color: c.textMuted, fontStyle: "italic" }}>{doc.renewalNotes}</span>}
                         </div>
                         {doc.fileName && (
@@ -2747,7 +2790,7 @@ function AviroDashboard() {
           {/* Add document */}
           <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
             <button onClick={() => {
-              const newDoc = { id: `doc-${Date.now()}`, name: "", expiry: "", notarised: false, notarisedDate: "", renewalMonths: 6, delayedUntil: 0, fileName: "", fileSize: 0, fileUrl: "", previousVersions: [], renewalNotes: "" };
+              const newDoc = { id: `doc-${Date.now()}`, name: "", issueDate: "", noRenewal: false, notarised: false, notarisedDate: "", renewalMonths: 12, delayedUntil: 0, fileName: "", fileSize: 0, fileUrl: "", previousVersions: [], renewalNotes: "" };
               setEntityDocs({ ...entityDocs, [entity.name]: [...allUserDocs, newDoc] });
               setEditingEntityField(`doc-${newDoc.id}`);
             }} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
@@ -2945,8 +2988,8 @@ function AviroDashboard() {
                       <span style={{ fontWeight: 500, color: a.status === "expired" ? "#ef4444" : a.status === "expiring" ? "#f59e0b" : "#3b82f6" }}>
                         {a.status === "expired" ? "Expired" : a.status === "expiring" ? "Expiring Soon" : "Review Soon"}
                       </span>
-                      {a.expiry && a.expiry !== "No date" && (
-                        <span style={{ color: c.textMuted }}> — renew by {a.expiry}</span>
+                      {a.renewalDate && a.renewalDate !== "No date" && (
+                        <span style={{ color: c.textMuted }}> — renew by {a.renewalDate}</span>
                       )}
                     </span>
                   </div>
@@ -2963,7 +3006,7 @@ function AviroDashboard() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
               {entities.map(entity => {
                 const eDocs = entityDocs[entity.name] || [];
-                const ac = eDocs.filter(d => { const s = getDocStatusGlobal(d.expiry, d.delayedUntil); return s === "expired" || s === "expiring" || s === "review_soon"; }).length;
+                const ac = eDocs.filter(d => { const s = getDocStatusGlobal(d); return s === "expired" || s === "expiring" || s === "review_soon"; }).length;
                 return (
                   <div key={entity.name} onClick={() => { setSelectedEntity(entity.name); setSelectedCategory(category); }}
                     style={{ background: c.card, border: `1px solid ${ac > 0 ? "rgba(239,68,68,0.3)" : c.border}`, borderRadius: 10, padding: 16, cursor: "pointer" }}
