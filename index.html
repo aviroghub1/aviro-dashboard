@@ -2566,7 +2566,11 @@ function AviroDashboard() {
             const formatFileSize = (bytes) => { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
 
             return (
-              <div key={doc.id} style={{ borderLeft: `4px solid ${sc}`, padding: "12px 16px", marginBottom: 8, background: `${sc}08`, borderRadius: "0 8px 8px 0", border: `1px solid ${sc}30` }}>
+              <div key={doc.id}
+                onDragOver={e => { if (!isEditing) { e.preventDefault(); e.currentTarget.style.outline = `2px solid ${c.accent}`; } }}
+                onDragLeave={e => { e.preventDefault(); e.currentTarget.style.outline = "none"; }}
+                onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = "none"; if (!isEditing && e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0], !!doc.fileUrl); }}
+                style={{ borderLeft: `4px solid ${sc}`, padding: "12px 16px", marginBottom: 8, background: `${sc}08`, borderRadius: "0 8px 8px 0", border: `1px solid ${sc}30`, transition: "outline 0.15s" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ flex: 1 }}>
                     {isEditing ? (
@@ -2579,16 +2583,28 @@ function AviroDashboard() {
                           <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Renewal Date</label>
                           <input type="date" value={doc.expiry || ""} onChange={e => updateDoc("expiry", e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
                         </div>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Upload File</label>
-                          <input type="file" onChange={e => { if (e.target.files[0]) handleFileUpload(e.target.files[0], false); }} style={{ fontSize: 11, color: c.text }} />
+                        <div
+                          onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; e.currentTarget.style.background = `${c.accent}15`; }}
+                          onDragLeave={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; e.currentTarget.style.background = c.surface; }}
+                          onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; e.currentTarget.style.background = c.surface; if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0], false); }}
+                          style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: doc.fileName ? "8px 12px" : "16px 12px", textAlign: "center", background: c.surface, cursor: "pointer", transition: "all 0.2s" }}
+                          onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = ev => { if (ev.target.files[0]) handleFileUpload(ev.target.files[0], false); }; inp.click(); }}
+                        >
+                          {doc.uploadStatus === "uploading" ? (
+                            <span style={{ fontSize: 11, color: c.accent }}>Uploading...</span>
+                          ) : doc.fileName ? (
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                              <span style={{ fontSize: 11, color: c.success, fontWeight: 500 }}>{doc.fileName}</span>
+                              <span style={{ fontSize: 10, color: c.textMuted }}>{formatFileSize(doc.fileSize)}</span>
+                              <span style={{ fontSize: 10, color: c.textMuted }}>— click or drag to replace</span>
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 2 }}>Drop file here or click to browse</div>
+                              <div style={{ fontSize: 10, color: c.textMuted }}>PDF, image, or any document file</div>
+                            </div>
+                          )}
                         </div>
-                        {doc.fileName && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 98 }}>
-                            <span style={{ fontSize: 11, color: c.success }}>Uploaded: {doc.fileName}</span>
-                            <span style={{ fontSize: 10, color: c.textMuted }}>{formatFileSize(doc.fileSize)}</span>
-                          </div>
-                        )}
                         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                           <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: c.text, cursor: "pointer" }}>
                             <input type="checkbox" checked={doc.notarised || false} onChange={e => updateDoc("notarised", e.target.checked)} style={{ accentColor: c.accent }} /> Notarised
