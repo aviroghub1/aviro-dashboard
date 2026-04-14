@@ -663,7 +663,7 @@ function AviroDashboard() {
   const [entityOverrides, setEntityOverrides] = useState({}); // { "Entity Name": { jurisdiction: "...", companyNumber: "...", ... } }
   const [entityDocs, setEntityDocs] = useState({}); // { "Entity Name": [{ id, name, expiry, notarised, notarisedDate, renewalMonths, delayedUntil, fileName, fileSize }] }
   const [entityServiceProviders, setEntityServiceProviders] = useState({}); // { "Entity Name": [{ id, name, company, email, phone, notes }] }
-  const [entitySeals, setEntitySeals] = useState({}); // { "Entity Name": [{ id, brand, sealCode, collapsed: true }] }
+  const [entitySeals, setEntitySeals] = useState({}); // { "Entity Name": [{ id, domainName, proofFileName, proofFileUrl, mirrorRangeStart, mirrorRangeEnd, licenseSeals: [{ id, name, sealCode }], collapsed }] }
   const [entityFooters, setEntityFooters] = useState({}); // { "Entity Name": "footer text" }
   const [entityAlertsCollapsed, setEntityAlertsCollapsed] = useState(false);
   const [editingEntityField, setEditingEntityField] = useState(null); // "fieldName" being edited
@@ -946,10 +946,21 @@ function AviroDashboard() {
       });
 
       if (seals.length > 0) {
-        summary += "LICENSE SEALS\n";
+        summary += "DOMAINS & LICENSE SEALS\n";
         summary += "───────────────────────────────────────────\n";
-        seals.forEach(s => { summary += "  " + s.brand + "\n"; });
-        summary += "\n";
+        seals.forEach(dom => {
+          summary += "  Domain: " + (dom.domainName || "—") + "\n";
+          if (dom.proofFileName) summary += "    Proof: " + dom.proofFileName + "\n";
+          if (dom.mirrorRangeStart || dom.mirrorRangeEnd) {
+            const base = (dom.domainName || "").replace(/\.([^.]+)$/, "");
+            const ext = (dom.domainName || "").match(/\.([^.]+)$/)?.[0] || ".com";
+            summary += "    Mirrors: " + base + (dom.mirrorRangeStart || 1) + ext + " → " + base + (dom.mirrorRangeEnd || dom.mirrorRangeStart || 1) + ext + " (" + (parseInt(dom.mirrorRangeEnd || dom.mirrorRangeStart || 1) - parseInt(dom.mirrorRangeStart || 1) + 1) + " domains)\n";
+          }
+          if ((dom.licenseSeals || []).length > 0) {
+            dom.licenseSeals.forEach(s => { summary += "    Seal: " + (s.name || "Unnamed") + "\n"; });
+          }
+          summary += "\n";
+        });
       }
 
       if (footer) { summary += "FOOTER TEXT\n───────────────────────────────────────────\n" + footer + "\n\n"; }
@@ -2848,57 +2859,166 @@ function AviroDashboard() {
         </div>
 
         {/* D: Domains & License Seals */}
-        {entity.domains?.length > 0 && (
+        {(() => {
+          const domains = entitySeals[entity.name] || [];
+          const updateDomains = (updated) => setEntitySeals({ ...entitySeals, [entity.name]: updated });
+          const updateDomain = (domId, field, val) => updateDomains(domains.map(d => d.id === domId ? { ...d, [field]: val } : d));
+
+          // Domain proof upload handler
+          const handleProofUpload = async (domId, file) => {
+            if (!file) return;
+            if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first"); return; }
+            const safeName = entity.name.replace(/[^a-zA-Z0-9]/g, "_");
+            const filePath = safeName + "/proofs/" + domId + "_" + Date.now() + "_" + file.name;
+            updateDomain(domId, "uploadStatus", "uploading");
+            try {
+              const resp = await fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+                method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file,
+              });
+              if (!resp.ok) throw new Error("Upload failed: " + resp.status);
+              const publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+              updateDomains(domains.map(d => d.id === domId ? { ...d, proofFileName: file.name, proofFileUrl: publicUrl, uploadStatus: null } : d));
+            } catch (e) {
+              alert("Upload error: " + e.message);
+              updateDomain(domId, "uploadStatus", null);
+            }
+          };
+
+          // Helper: generate mirror list display
+          const getMirrorSummary = (dom) => {
+            if (!dom.domainName || (!dom.mirrorRangeStart && !dom.mirrorRangeEnd)) return null;
+            const base = dom.domainName.replace(/\.([^.]+)$/, "");
+            const ext = dom.domainName.match(/\.([^.]+)$/)?.[0] || ".com";
+            const start = parseInt(dom.mirrorRangeStart) || 1;
+            const end = parseInt(dom.mirrorRangeEnd) || start;
+            const count = end - start + 1;
+            return { base, ext, start, end, count, example: base + start + ext + " → " + base + end + ext };
+          };
+
+          return (
           <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: 0, textTransform: "uppercase" }}>Domains & License Seals</h3>
               <button onClick={() => {
-                const newSeal = { id: `seal-${Date.now()}`, brand: "New Brand", sealCode: "", collapsed: true };
-                setEntitySeals({ ...entitySeals, [entity.name]: [...(entitySeals[entity.name] || []), newSeal] });
-              }} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Add Seal</button>
+                const newDom = { id: `dom-${Date.now()}`, domainName: "", proofFileName: "", proofFileUrl: "", mirrorRangeStart: "", mirrorRangeEnd: "", licenseSeals: [], collapsed: false };
+                updateDomains([...domains, newDom]);
+              }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Domain</button>
             </div>
 
-            {/* Domain seals */}
-            {entity.domains.map((d, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0", borderBottom: `1px solid ${c.border}` }}>
-                <div>
-                  <div style={{ fontSize: 13, color: c.text, fontWeight: 500, marginBottom: 4 }}>{d}</div>
-                  {entity.sealCodes?.[d] && <code style={{ fontSize: 10, color: c.accent, background: c.accentBg, padding: "2px 6px", borderRadius: 4, display: "block", maxWidth: 300, wordBreak: "break-all" }}>{entity.sealCodes[d]}</code>}
-                </div>
-                <button onClick={() => copyToClipboard(entity.sealCodes?.[d] || "")} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer" }}><Icon type="copy" size={12} /></button>
-              </div>
-            ))}
+            {domains.length === 0 && <div style={{ fontSize: 12, color: c.textMuted, padding: "12px 0", textAlign: "center" }}>No domains added yet. Click "Add Domain" to get started.</div>}
 
-            {/* Custom seals */}
-            {(entitySeals[entity.name] || []).map(seal => (
-              <div key={seal.id} style={{ padding: "12px 0", borderBottom: `1px solid ${c.border}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                  <span style={{ fontSize: 13, color: c.text, fontWeight: 500 }}>{seal.brand}</span>
-                  <button onClick={() => {
-                    const updated = (entitySeals[entity.name] || []).map(s => s.id === seal.id ? { ...s, collapsed: !s.collapsed } : s);
-                    setEntitySeals({ ...entitySeals, [entity.name]: updated });
-                  }} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "2px 8px" }}>{seal.collapsed ? "Expand" : "Collapse"}</button>
+            {domains.map((dom, di) => {
+              const mirrorInfo = getMirrorSummary(dom);
+              return (
+              <div key={dom.id} style={{ background: c.surface, borderRadius: 10, border: `1px solid ${c.border}`, padding: 16, marginBottom: 10 }}>
+                {/* Domain header — always visible */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: c.text }}>{dom.domainName || "New Domain"}</span>
+                    {dom.proofFileUrl && <span style={{ fontSize: 9, color: "#22c55e", background: "rgba(34,197,94,0.12)", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>PROOF ✓</span>}
+                    {mirrorInfo && <span style={{ fontSize: 9, color: c.accent, background: `${c.accent}15`, padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>{mirrorInfo.count} MIRRORS</span>}
+                    {(dom.licenseSeals || []).length > 0 && <span style={{ fontSize: 9, color: "#f59e0b", background: "rgba(245,158,11,0.12)", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>{dom.licenseSeals.length} SEAL{dom.licenseSeals.length > 1 ? "S" : ""}</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => updateDomain(dom.id, "collapsed", !dom.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{dom.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
+                    <button onClick={() => updateDomains(domains.filter(d => d.id !== dom.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                  </div>
                 </div>
-                {!seal.collapsed && (
-                  <div>
-                    <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-                      <input value={seal.brand} onChange={e => {
-                        const updated = (entitySeals[entity.name] || []).map(s => s.id === seal.id ? { ...s, brand: e.target.value } : s);
-                        setEntitySeals({ ...entitySeals, [entity.name]: updated });
-                      }} placeholder="Brand name" style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
-                      <button onClick={() => copyToClipboard(seal.sealCode)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>{copiedText === seal.sealCode ? "Copied!" : "Copy Seal"}</button>
-                      <button onClick={() => { setEntitySeals({ ...entitySeals, [entity.name]: (entitySeals[entity.name] || []).filter(s => s.id !== seal.id) }); }} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 10 }}>Delete</button>
+
+                {/* Expanded edit view */}
+                {!dom.collapsed && (
+                  <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                    {/* Domain Name */}
+                    <div>
+                      <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, display: "block", marginBottom: 4, textTransform: "uppercase" }}>Domain Name</label>
+                      <input value={dom.domainName || ""} onChange={e => updateDomain(dom.id, "domainName", e.target.value)} placeholder="e.g. sharkcasino.com" style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.card, color: c.text, width: "100%", outline: "none", boxSizing: "border-box" }} />
                     </div>
-                    <textarea value={seal.sealCode} onChange={e => {
-                      const updated = (entitySeals[entity.name] || []).map(s => s.id === seal.id ? { ...s, sealCode: e.target.value } : s);
-                      setEntitySeals({ ...entitySeals, [entity.name]: updated });
-                    }} placeholder="Paste seal code here..." style={{ fontSize: 10, padding: "8px 10px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, width: "100%", minHeight: 80, fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box" }} />
+
+                    {/* Domain Proof */}
+                    <div>
+                      <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, display: "block", marginBottom: 4, textTransform: "uppercase" }}>Domain Proof</label>
+                      {dom.proofFileUrl ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34,197,94,0.08)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.2)" }}>
+                          <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, flex: 1 }}>📄 {dom.proofFileName || "proof"}</span>
+                          <a href={dom.proofFileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>Download</a>
+                          <button onClick={() => { updateDomain(dom.id, "proofFileUrl", ""); updateDomain(dom.id, "proofFileName", ""); }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                        </div>
+                      ) : (
+                        <div
+                          onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                          onDragLeave={e => { e.currentTarget.style.borderColor = c.border; }}
+                          onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; handleProofUpload(dom.id, e.dataTransfer.files[0]); }}
+                          style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: "14px 16px", textAlign: "center", cursor: "pointer", transition: "border-color 0.15s" }}
+                          onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = (ev) => handleProofUpload(dom.id, ev.target.files[0]); inp.click(); }}
+                        >
+                          {dom.uploadStatus === "uploading" ? (
+                            <span style={{ fontSize: 11, color: c.accent }}>⟳ Uploading...</span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: c.textMuted }}>Drop proof file here or click to upload</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Mirror Domains */}
+                    <div>
+                      <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, display: "block", marginBottom: 4, textTransform: "uppercase" }}>Mirror Domains</label>
+                      <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 6 }}>
+                        {dom.domainName ? `Mirrors of ${dom.domainName} — specify number range (e.g. 1–200 = ${dom.domainName.replace(/\.([^.]+)$/, "")}1${dom.domainName.match(/\.([^.]+)$/)?.[0] || ".com"} through ${dom.domainName.replace(/\.([^.]+)$/, "")}200${dom.domainName.match(/\.([^.]+)$/)?.[0] || ".com"})` : "Enter domain name first to configure mirrors"}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 11, color: c.textSecondary }}>From</span>
+                        <input type="number" value={dom.mirrorRangeStart || ""} onChange={e => updateDomain(dom.id, "mirrorRangeStart", e.target.value)} placeholder="1" min="1" style={{ fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.card, color: c.text, width: 80, outline: "none" }} />
+                        <span style={{ fontSize: 11, color: c.textSecondary }}>to</span>
+                        <input type="number" value={dom.mirrorRangeEnd || ""} onChange={e => updateDomain(dom.id, "mirrorRangeEnd", e.target.value)} placeholder="200" min="1" style={{ fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.card, color: c.text, width: 80, outline: "none" }} />
+                        {mirrorInfo && <span style={{ fontSize: 11, color: c.accent, fontWeight: 500 }}>= {mirrorInfo.count} mirrors</span>}
+                      </div>
+                      {mirrorInfo && (
+                        <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6, fontFamily: "monospace", background: c.card, padding: "6px 10px", borderRadius: 4 }}>
+                          {mirrorInfo.example}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* License Seals */}
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>License Seals</label>
+                        <button onClick={() => {
+                          const newSeal = { id: `ls-${Date.now()}`, name: "", sealCode: "" };
+                          const updatedSeals = [...(dom.licenseSeals || []), newSeal];
+                          updateDomain(dom.id, "licenseSeals", updatedSeals);
+                        }} style={{ background: `${c.accent}20`, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>+ Add Seal</button>
+                      </div>
+                      {(dom.licenseSeals || []).length === 0 && <div style={{ fontSize: 11, color: c.textMuted, padding: "6px 0" }}>No license seals added</div>}
+                      {(dom.licenseSeals || []).map((seal, si) => (
+                        <div key={seal.id} style={{ background: c.card, borderRadius: 6, border: `1px solid ${c.border}`, padding: 10, marginBottom: 6 }}>
+                          <div style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                            <input value={seal.name || ""} onChange={e => {
+                              const updatedSeals = (dom.licenseSeals || []).map(s => s.id === seal.id ? { ...s, name: e.target.value } : s);
+                              updateDomain(dom.id, "licenseSeals", updatedSeals);
+                            }} placeholder="Seal name / label" style={{ flex: 1, fontSize: 11, padding: "5px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+                            <button onClick={() => copyToClipboard(seal.sealCode)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>{copiedText === seal.sealCode ? "Copied!" : "Copy"}</button>
+                            <button onClick={() => {
+                              const updatedSeals = (dom.licenseSeals || []).filter(s => s.id !== seal.id);
+                              updateDomain(dom.id, "licenseSeals", updatedSeals);
+                            }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                          </div>
+                          <textarea value={seal.sealCode || ""} onChange={e => {
+                            const updatedSeals = (dom.licenseSeals || []).map(s => s.id === seal.id ? { ...s, sealCode: e.target.value } : s);
+                            updateDomain(dom.id, "licenseSeals", updatedSeals);
+                          }} placeholder="Paste seal / embed code here..." style={{ fontSize: 10, padding: "8px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, width: "100%", minHeight: 60, fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box" }} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
-        )}
+          );
+        })()}
 
         {/* E: Footer Display Text */}
         <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
