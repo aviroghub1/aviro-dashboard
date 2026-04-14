@@ -8,6 +8,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
@@ -832,48 +834,90 @@ function AviroDashboard() {
     return "valid";
   };
 
-  // Download full company document pack as JSON
-  const downloadEntityPack = (entityName) => {
+  // Download full company document pack as ZIP with actual files + summary
+  const [packDownloading, setPackDownloading] = useState(false);
+  const downloadEntityPack = async (entityName) => {
     const entity = Object.values(CORPORATE_ENTITIES).flat().find(e => e.name === entityName);
     if (!entity) return;
-    const merged = { ...entity, ...(entityOverrides[entityName] || {}) };
-    const pack = {
-      exportDate: new Date().toISOString(),
-      exportedBy: "Aviro Dashboard",
-      company: {
-        name: merged.name,
-        jurisdiction: merged.jurisdiction,
-        companyNumber: merged.companyNumber,
-        licenseNumber: merged.licenseNumber || "",
-        address: merged.address || "",
-        ubo: merged.ubo || "",
-        director: merged.director || "",
-      },
-      documents: (entityDocs[entityName] || []).map(d => ({
-        name: d.name,
-        renewalDate: d.expiry || "N/A",
-        status: getDocStatusGlobal(d.expiry, d.delayedUntil),
-        notarised: d.notarised ? "Yes" : "No",
-        renewalNotes: d.renewalNotes || "",
-        fileName: d.fileName || "",
-        fileUrl: d.fileUrl || "",
-      })),
-      serviceProviders: (entityServiceProviders[entityName] || []).map(sp => ({
-        role: sp.name, company: sp.company || "", email: sp.email || "", phone: sp.phone || "",
-      })),
-      seals: (entitySeals[entityName] || []).map(s => ({ brand: s.brand, sealCode: s.sealCode || "" })),
-      footerText: entityFooters[entityName] || entity.footerText || "",
-      bankAccounts: (entity.bankAccounts || []).map(b => ({
-        bank: b.bank, currency: b.currency, status: b.status,
-      })),
-    };
-    const blob = new Blob([JSON.stringify(pack, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = entityName.replace(/[^a-zA-Z0-9]/g, "_") + "_document_pack.json";
-    a.click();
-    URL.revokeObjectURL(url);
+    setPackDownloading(true);
+    try {
+      const merged = { ...entity, ...(entityOverrides[entityName] || {}) };
+      const docs = entityDocs[entityName] || [];
+      const providers = entityServiceProviders[entityName] || [];
+      const seals = entitySeals[entityName] || [];
+      const footer = entityFooters[entityName] || entity.footerText || "";
+      const zip = new JSZip();
+
+      // Build summary text file
+      let summary = "═══════════════════════════════════════════\n";
+      summary += "  " + merged.name + " — Document Pack\n";
+      summary += "═══════════════════════════════════════════\n";
+      summary += "Exported: " + new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) + "\n\n";
+      summary += "COMPANY DETAILS\n";
+      summary += "───────────────────────────────────────────\n";
+      summary += "Name:           " + (merged.name || "—") + "\n";
+      summary += "Jurisdiction:   " + (merged.jurisdiction || "—") + "\n";
+      summary += "Company No:     " + (merged.companyNumber || "—") + "\n";
+      summary += "License No:     " + (merged.licenseNumber || "—") + "\n";
+      summary += "Address:        " + (merged.address || "—") + "\n";
+      summary += "UBO:            " + (merged.ubo || "—") + "\n";
+      summary += "Director:       " + (merged.director || "—") + "\n\n";
+
+      if (providers.length > 0) {
+        summary += "SERVICE PROVIDERS\n";
+        summary += "───────────────────────────────────────────\n";
+        providers.forEach(sp => { summary += "  " + (sp.name || "—") + " (" + (sp.company || "") + ") — " + (sp.email || "") + " " + (sp.phone || "") + "\n"; });
+        summary += "\n";
+      }
+
+      summary += "DOCUMENT REGISTER (" + docs.length + " documents)\n";
+      summary += "───────────────────────────────────────────\n";
+      docs.forEach((d, i) => {
+        const st = getDocStatusGlobal(d.expiry, d.delayedUntil);
+        summary += "  " + (i + 1) + ". " + (d.name || "Untitled") + "\n";
+        summary += "     Status: " + st.toUpperCase() + (d.expiry ? " | Renewal: " + d.expiry : "") + "\n";
+        summary += "     Notarised: " + (d.notarised ? "Yes" : "No") + (d.renewalNotes ? " | Notes: " + d.renewalNotes : "") + "\n";
+        if (d.fileName) summary += "     File: " + d.fileName + "\n";
+        summary += "\n";
+      });
+
+      if (seals.length > 0) {
+        summary += "LICENSE SEALS\n";
+        summary += "───────────────────────────────────────────\n";
+        seals.forEach(s => { summary += "  " + s.brand + "\n"; });
+        summary += "\n";
+      }
+
+      if (footer) { summary += "FOOTER TEXT\n───────────────────────────────────────────\n" + footer + "\n\n"; }
+
+      if ((entity.bankAccounts || []).length > 0) {
+        summary += "BANK ACCOUNTS\n";
+        summary += "───────────────────────────────────────────\n";
+        entity.bankAccounts.forEach(b => { summary += "  " + b.bank + " — " + b.currency + " (" + b.status + ")\n"; });
+      }
+
+      zip.file("00_SUMMARY.txt", summary);
+
+      // Download and add actual document files
+      const docsWithFiles = docs.filter(d => d.fileUrl);
+      let downloaded = 0;
+      for (const doc of docsWithFiles) {
+        try {
+          const resp = await fetch(doc.fileUrl);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            const ext = doc.fileName ? doc.fileName.split(".").pop() : "pdf";
+            const safeName = (doc.name || "document").replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "_");
+            zip.file(String(downloaded + 1).padStart(2, "0") + "_" + safeName + "." + ext, blob);
+            downloaded++;
+          }
+        } catch (e) { console.warn("Could not download: " + doc.fileName, e); }
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      saveAs(zipBlob, entityName.replace(/[^a-zA-Z0-9]/g, "_") + "_Document_Pack.zip");
+    } catch (e) { alert("Download failed: " + e.message); }
+    setPackDownloading(false);
   };
 
   const dateStr = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -2393,7 +2437,7 @@ function AviroDashboard() {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <button onClick={() => { setSelectedEntity(null); setSelectedCategory(null); }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, padding: 0 }}>&larr; Back</button>
-          <button onClick={() => downloadEntityPack(entity.name)} style={{ background: c.accent, border: "none", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>↓ Download Company Pack</button>
+          <button onClick={() => downloadEntityPack(entity.name)} disabled={packDownloading} style={{ background: packDownloading ? c.surface : c.accent, border: "none", color: packDownloading ? c.textMuted : "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: packDownloading ? "wait" : "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>{packDownloading ? "⟳ Building Pack..." : "↓ Download Company Pack"}</button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{entity.name}</h2>
@@ -2466,7 +2510,7 @@ function AviroDashboard() {
         <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: 0, textTransform: "uppercase" }}>Document Matrix</h3>
-            <button onClick={() => downloadEntityPack(entity.name)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}><Icon type="download" size={12} /> Download Pack</button>
+            <button onClick={() => downloadEntityPack(entity.name)} disabled={packDownloading} style={{ background: packDownloading ? c.surface : c.accent, border: "none", color: packDownloading ? c.textMuted : c.white, borderRadius: 6, padding: "6px 14px", cursor: packDownloading ? "wait" : "pointer", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}><Icon type="download" size={12} /> {packDownloading ? "Building..." : "Download Pack"}</button>
           </div>
 
           {/* Summary bar */}
