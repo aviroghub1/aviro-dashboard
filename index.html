@@ -851,10 +851,12 @@ function AviroDashboard() {
       },
       documents: (entityDocs[entityName] || []).map(d => ({
         name: d.name,
-        expiry: d.expiry || "N/A",
+        renewalDate: d.expiry || "N/A",
         status: getDocStatusGlobal(d.expiry, d.delayedUntil),
         notarised: d.notarised ? "Yes" : "No",
         renewalNotes: d.renewalNotes || "",
+        fileName: d.fileName || "",
+        fileUrl: d.fileUrl || "",
       })),
       serviceProviders: (entityServiceProviders[entityName] || []).map(sp => ({
         role: sp.name, company: sp.company || "", email: sp.email || "", phone: sp.phone || "",
@@ -2405,10 +2407,10 @@ function AviroDashboard() {
             <EditableField label="Name" value={merged.name} fieldKey="name" />
             <EditableField label="Jurisdiction" value={merged.jurisdiction} fieldKey="jurisdiction" />
             <EditableField label="Company No." value={merged.companyNumber} fieldKey="companyNumber" />
-            <EditableField label="License No." value={merged.licenseNumber} fieldKey="licenseNumber" />
-            {merged.address && <EditableField label="Address" value={merged.address} fieldKey="address" />}
-            <EditableField label="UBO" value={merged.ubo} fieldKey="ubo" />
-            <EditableField label="Director" value={merged.director} fieldKey="director" />
+            <EditableField label="License No." value={merged.licenseNumber || ""} fieldKey="licenseNumber" />
+            <EditableField label="Address" value={merged.address || ""} fieldKey="address" />
+            <EditableField label="UBO" value={merged.ubo || ""} fieldKey="ubo" />
+            <EditableField label="Director" value={merged.director || ""} fieldKey="director" />
           </div>
 
           {/* B: Service Providers */}
@@ -2464,7 +2466,7 @@ function AviroDashboard() {
         <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: 0, textTransform: "uppercase" }}>Document Matrix</h3>
-            <button style={{ background: c.accent, border: "none", color: c.white, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}><Icon type="download" size={12} /> Download All</button>
+            <button onClick={() => downloadEntityPack(entity.name)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}><Icon type="download" size={12} /> Download Pack</button>
           </div>
 
           {/* Summary bar */}
@@ -2502,7 +2504,7 @@ function AviroDashboard() {
           {allUserDocs.length === 0 && (
             <div style={{ background: c.surface, borderRadius: 8, padding: 24, textAlign: "center", marginBottom: 12 }}>
               <div style={{ fontSize: 13, color: c.textMuted, marginBottom: 8 }}>No documents added yet</div>
-              <div style={{ fontSize: 11, color: c.textMuted }}>Click "Add Document" below or use the suggestions above to get started. Documents are stored in your browser's local storage.</div>
+              <div style={{ fontSize: 11, color: c.textMuted }}>Click "Add Document" below or use the suggestions above to get started.</div>
             </div>
           )}
           {allUserDocs.map((doc, i) => {
@@ -2510,24 +2512,83 @@ function AviroDashboard() {
             const statusColors = { expired: "#ef4444", expiring: "#f59e0b", review_soon: "#eab308", valid: "#22c55e", unknown: "#6b7280" };
             const sc = statusColors[status] || statusColors.unknown;
             const isEditing = editingEntityField === `doc-${doc.id}`;
+            const isShowingHistory = editingEntityField === `hist-${doc.id}`;
             const updateDoc = (field, val) => {
               const updated = allUserDocs.map(d => d.id === doc.id ? { ...d, [field]: val } : d);
               setEntityDocs({ ...entityDocs, [entity.name]: updated });
             };
+
+            // File upload handler
+            const handleFileUpload = async (file, isNewVersion) => {
+              if (!file) return;
+              if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first (use Connect Database button above)"); return; }
+              const safeName = entity.name.replace(/[^a-zA-Z0-9]/g, "_");
+              const ts = Date.now();
+              const filePath = safeName + "/" + doc.id + "_" + ts + "_" + file.name;
+              updateDoc("uploadStatus", "uploading");
+              try {
+                const uploadResp = await fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+                  method: "POST",
+                  headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" },
+                  body: file,
+                });
+                if (!uploadResp.ok) {
+                  const errText = await uploadResp.text();
+                  if (errText.includes("Bucket not found")) {
+                    const createBucket = await fetch(supabaseUrl + "/storage/v1/bucket", {
+                      method: "POST",
+                      headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": "application/json" },
+                      body: JSON.stringify({ id: "documents", name: "documents", public: true }),
+                    });
+                    if (createBucket.ok || (await createBucket.text()).includes("already exists")) {
+                      const retry = await fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+                        method: "POST",
+                        headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" },
+                        body: file,
+                      });
+                      if (!retry.ok) throw new Error("Upload failed after creating bucket");
+                    } else { throw new Error("Could not create storage bucket"); }
+                  } else { throw new Error(errText.slice(0, 100)); }
+                }
+                const publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+                if (isNewVersion && doc.fileUrl) {
+                  const prevVersions = doc.previousVersions || [];
+                  prevVersions.push({ fileName: doc.fileName, fileSize: doc.fileSize, fileUrl: doc.fileUrl, uploadedAt: doc.uploadedAt || new Date().toISOString(), renewalDate: doc.expiry || "" });
+                  const updated = allUserDocs.map(d => d.id === doc.id ? { ...d, fileName: file.name, fileSize: file.size, fileUrl: publicUrl, uploadedAt: new Date().toISOString(), previousVersions: prevVersions, uploadStatus: null } : d);
+                  setEntityDocs({ ...entityDocs, [entity.name]: updated });
+                } else {
+                  const updated = allUserDocs.map(d => d.id === doc.id ? { ...d, fileName: file.name, fileSize: file.size, fileUrl: publicUrl, uploadedAt: new Date().toISOString(), uploadStatus: null } : d);
+                  setEntityDocs({ ...entityDocs, [entity.name]: updated });
+                }
+              } catch (e) { updateDoc("uploadStatus", null); alert("Upload failed: " + e.message); }
+            };
+
+            const formatFileSize = (bytes) => { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
+
             return (
-              <div key={doc.id} style={{ borderLeft: `4px solid ${sc}`, paddingLeft: 14, padding: "10px 14px", marginBottom: 6, background: `${sc}08`, borderRadius: "0 8px 8px 0", border: `1px solid ${sc}30` }}>
+              <div key={doc.id} style={{ borderLeft: `4px solid ${sc}`, padding: "12px 16px", marginBottom: 8, background: `${sc}08`, borderRadius: "0 8px 8px 0", border: `1px solid ${sc}30` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ flex: 1 }}>
                     {isEditing ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <label style={{ fontSize: 10, color: c.textMuted, width: 80 }}>Name</label>
+                          <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Document Name</label>
                           <input value={doc.name} onChange={e => updateDoc("name", e.target.value)} style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
                         </div>
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <label style={{ fontSize: 10, color: c.textMuted, width: 80 }}>Expiry Date</label>
+                          <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Renewal Date</label>
                           <input type="date" value={doc.expiry || ""} onChange={e => updateDoc("expiry", e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
                         </div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Upload File</label>
+                          <input type="file" onChange={e => { if (e.target.files[0]) handleFileUpload(e.target.files[0], false); }} style={{ fontSize: 11, color: c.text }} />
+                        </div>
+                        {doc.fileName && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 98 }}>
+                            <span style={{ fontSize: 11, color: c.success }}>Uploaded: {doc.fileName}</span>
+                            <span style={{ fontSize: 10, color: c.textMuted }}>{formatFileSize(doc.fileSize)}</span>
+                          </div>
+                        )}
                         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                           <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: c.text, cursor: "pointer" }}>
                             <input type="checkbox" checked={doc.notarised || false} onChange={e => updateDoc("notarised", e.target.checked)} style={{ accentColor: c.accent }} /> Notarised
@@ -2540,36 +2601,82 @@ function AviroDashboard() {
                           )}
                         </div>
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <label style={{ fontSize: 10, color: c.textMuted, width: 80 }}>Renewal</label>
+                          <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Renewal Cycle</label>
                           <select value={doc.renewalMonths || 6} onChange={e => updateDoc("renewalMonths", parseInt(e.target.value))} style={{ fontSize: 11, padding: "3px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text }}>
                             {[3,6,9,12,18,24].map(m => <option key={m} value={m}>{m} months</option>)}
                           </select>
                         </div>
-                        <div style={{ display: "flex", gap: 6 }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <label style={{ fontSize: 10, color: c.textMuted, width: 90 }}>Notes</label>
+                          <input value={doc.renewalNotes || ""} onChange={e => updateDoc("renewalNotes", e.target.value)} placeholder="Any renewal notes..." style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+                        </div>
+                        <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
                           <button onClick={() => setEditingEntityField(null)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Done</button>
-                          <button onClick={() => { setEntityDocs({ ...entityDocs, [entity.name]: allUserDocs.filter(d => d.id !== doc.id) }); setEditingEntityField(null); }} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11 }}>Delete</button>
+                          <button onClick={() => { setEntityDocs({ ...entityDocs, [entity.name]: allUserDocs.filter(d => d.id !== doc.id) }); setEditingEntityField(null); }} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11 }}>Delete Document</button>
                         </div>
                       </div>
                     ) : (
                       <div>
-                        <div style={{ fontSize: 13, color: c.text, fontWeight: 600, marginBottom: 3 }}>{doc.name}</div>
-                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11 }}>
-                          {doc.expiry && <span style={{ color: c.textMuted }}>Expires: <span style={{ color: sc, fontWeight: 600 }}>{doc.expiry}</span></span>}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 13, color: c.text, fontWeight: 600 }}>{doc.name || "Untitled"}</span>
+                          {doc.uploadStatus === "uploading" && <span style={{ fontSize: 10, color: c.accent }}>Uploading...</span>}
+                        </div>
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, marginBottom: 4 }}>
+                          {doc.expiry && <span style={{ color: c.textMuted }}>Renewal: <span style={{ color: sc, fontWeight: 600 }}>{doc.expiry}</span></span>}
                           {doc.notarised && <span style={{ color: c.accent }}>Notarised{doc.notarisedDate ? ` ${doc.notarisedDate}` : ""}</span>}
                           {doc.delayedUntil > 0 && <span style={{ color: c.textMuted }}>Delayed +{doc.delayedUntil}mo</span>}
-                          <span style={{ color: c.textMuted }}>Renewal: {doc.renewalMonths || 6}mo</span>
+                          <span style={{ color: c.textMuted }}>Cycle: {doc.renewalMonths || 6}mo</span>
+                          {doc.renewalNotes && <span style={{ color: c.textMuted, fontStyle: "italic" }}>{doc.renewalNotes}</span>}
                         </div>
+                        {doc.fileName && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                            <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}>
+                              <Icon type="download" size={10} /> {doc.fileName}
+                            </a>
+                            <span style={{ fontSize: 10, color: c.textMuted }}>{formatFileSize(doc.fileSize)}</span>
+                            {doc.uploadedAt && <span style={{ fontSize: 10, color: c.textMuted }}>{new Date(doc.uploadedAt).toLocaleDateString()}</span>}
+                          </div>
+                        )}
+                        {(doc.previousVersions || []).length > 0 && (
+                          <div style={{ marginTop: 4 }}>
+                            <button onClick={() => setEditingEntityField(isShowingHistory ? null : `hist-${doc.id}`)} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 10, padding: 0 }}>
+                              {isShowingHistory ? "▾ Hide" : "▸ Show"} {doc.previousVersions.length} previous version{doc.previousVersions.length > 1 ? "s" : ""}
+                            </button>
+                            {isShowingHistory && (
+                              <div style={{ marginTop: 4, paddingLeft: 12, borderLeft: `2px solid ${c.border}` }}>
+                                {doc.previousVersions.map((v, vi) => (
+                                  <div key={vi} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 10 }}>
+                                    <a href={v.fileUrl} target="_blank" rel="noopener" style={{ color: c.textMuted, textDecoration: "none" }}><Icon type="download" size={10} /> {v.fileName}</a>
+                                    <span style={{ color: c.textMuted }}>{formatFileSize(v.fileSize)}</span>
+                                    {v.renewalDate && <span style={{ color: c.textMuted }}>Renewed: {v.renewalDate}</span>}
+                                    <span style={{ color: c.textMuted }}>{v.uploadedAt ? new Date(v.uploadedAt).toLocaleDateString() : ""}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                   {!isEditing && (
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                      <DocStatusBadge status={status} />
-                      <button onClick={() => setEditingEntityField(`doc-${doc.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Edit</button>
-                      <select value="" onChange={e => { if (e.target.value) { updateDoc("delayedUntil", (doc.delayedUntil || 0) + parseInt(e.target.value)); e.target.value = ""; } }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 4, padding: "3px 4px", fontSize: 10, width: 85 }}>
-                        <option value="">Delay...</option>
-                        {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>+{m} month{m > 1 ? "s" : ""}</option>)}
-                      </select>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <DocStatusBadge status={status} />
+                        <button onClick={() => setEditingEntityField(`doc-${doc.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Edit</button>
+                      </div>
+                      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <label style={{ position: "relative", cursor: "pointer" }}>
+                          <input type="file" style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} onChange={e => { if (e.target.files[0]) handleFileUpload(e.target.files[0], true); }} />
+                          <span style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.accent, borderRadius: 4, padding: "3px 8px", fontSize: 10, fontWeight: 600, display: "inline-block" }}>
+                            {doc.fileUrl ? "↑ New Version" : "↑ Upload"}
+                          </span>
+                        </label>
+                        <select value="" onChange={e => { if (e.target.value) { updateDoc("delayedUntil", (doc.delayedUntil || 0) + parseInt(e.target.value)); e.target.value = ""; } }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 4, padding: "3px 4px", fontSize: 10, width: 70 }}>
+                          <option value="">Delay...</option>
+                          {[1,2,3,6,12].map(m => <option key={m} value={m}>+{m}mo</option>)}
+                        </select>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2577,16 +2684,17 @@ function AviroDashboard() {
             );
           })}
 
-          {/* Add document form */}
+          {/* Add document */}
           <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
             <button onClick={() => {
-              const newDoc = { id: `doc-${Date.now()}`, name: "", expiry: "", notarised: false, notarisedDate: "", renewalMonths: 6, delayedUntil: 0, fileName: "", fileSize: 0 };
+              const newDoc = { id: `doc-${Date.now()}`, name: "", expiry: "", notarised: false, notarisedDate: "", renewalMonths: 6, delayedUntil: 0, fileName: "", fileSize: 0, fileUrl: "", previousVersions: [], renewalNotes: "" };
               setEntityDocs({ ...entityDocs, [entity.name]: [...allUserDocs, newDoc] });
               setEditingEntityField(`doc-${newDoc.id}`);
             }} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
               <Icon type="plus" size={12} /> Add Document
             </button>
-            <span style={{ fontSize: 10, color: c.textMuted }}>Documents metadata stored in browser localStorage</span>
+            {dbConnected && <span style={{ fontSize: 10, color: c.success }}>Documents synced to Supabase database</span>}
+            {!dbConnected && <span style={{ fontSize: 10, color: c.textMuted }}>Connect database to sync documents centrally</span>}
           </div>
         </div>
 
