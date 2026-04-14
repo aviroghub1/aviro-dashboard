@@ -755,7 +755,7 @@ function AviroDashboard() {
     return fetch(url, { ...opts, headers: { ...getSupabaseHeaders(), ...(opts.headers || {}) } });
   }, [supabaseUrl, getSupabaseHeaders]);
 
-  // Push entity docs to Supabase
+  // Push entity docs + overrides to Supabase
   const syncToDb = useCallback(async () => {
     if (!supabaseUrl || !supabaseKey) return;
     setDbSyncStatus("syncing");
@@ -776,17 +776,38 @@ function AviroDashboard() {
       if (rows.length > 0) {
         await dbApi("entity_documents", { method: "POST", body: JSON.stringify(rows) });
       }
+      // Sync entity overrides (company details)
+      const overrideEntries = Object.entries(entityOverrides);
+      for (const [entName, ov] of overrideEntries) {
+        if (!ov || Object.keys(ov).length === 0) continue;
+        // Upsert: try to update first, insert if not found
+        const upsertData = {
+          entity_name: entName,
+          jurisdiction: ov.jurisdiction || null,
+          company_number: ov.companyNumber || null,
+          license_number: ov.licenseNumber || null,
+          address: ov.address || null,
+          ubo: ov.ubo || null,
+          director: ov.director || null,
+        };
+        await dbApi("entity_overrides", {
+          method: "POST",
+          query: "?on_conflict=entity_name",
+          headers: { "Prefer": "return=representation,resolution=merge-duplicates" },
+          body: JSON.stringify(upsertData),
+        });
+      }
       setDbConnected(true);
       setDbSyncStatus("success");
-      setDbSyncMessage("Pushed " + rows.length + " documents");
+      setDbSyncMessage("Pushed " + rows.length + " docs + " + overrideEntries.length + " overrides");
     } catch (e) {
       setDbSyncStatus("error");
       setDbSyncMessage("Push failed: " + e.message);
     }
     setTimeout(() => setDbSyncStatus("idle"), 5000);
-  }, [supabaseUrl, supabaseKey, entityDocs, dbApi]);
+  }, [supabaseUrl, supabaseKey, entityDocs, entityOverrides, dbApi]);
 
-  // Pull entity docs from Supabase
+  // Pull entity docs + overrides from Supabase
   const syncFromDb = useCallback(async () => {
     if (!supabaseUrl || !supabaseKey) return;
     setDbSyncStatus("syncing");
@@ -804,9 +825,27 @@ function AviroDashboard() {
         });
       });
       setEntityDocs(docs);
+      // Pull entity overrides (company details)
+      const ovResp = await dbApi("entity_overrides", { method: "GET", query: "?select=*" });
+      if (ovResp.ok) {
+        const ovRows = await ovResp.json();
+        const overrides = { ...entityOverrides };
+        ovRows.forEach(r => {
+          overrides[r.entity_name] = {
+            ...(overrides[r.entity_name] || {}),
+            jurisdiction: r.jurisdiction || "",
+            companyNumber: r.company_number || "",
+            licenseNumber: r.license_number || "",
+            address: r.address || "",
+            ubo: r.ubo || "",
+            director: r.director || "",
+          };
+        });
+        setEntityOverrides(overrides);
+      }
       setDbConnected(true);
       setDbSyncStatus("success");
-      setDbSyncMessage("Pulled " + rows.length + " documents");
+      setDbSyncMessage("Pulled " + rows.length + " documents + company details");
     } catch (e) {
       setDbSyncStatus("error");
       setDbSyncMessage("Pull failed: " + e.message);
@@ -814,12 +853,12 @@ function AviroDashboard() {
     setTimeout(() => setDbSyncStatus("idle"), 5000);
   }, [supabaseUrl, supabaseKey, dbApi]);
 
-  // Auto-sync to DB when docs change (only if connected, debounced 5s)
+  // Auto-sync to DB when docs or overrides change (only if connected, debounced 5s)
   useEffect(() => {
     if (!dbConnected || !hasLoaded) return;
     const t = setTimeout(() => { syncToDb(); }, 5000);
     return () => clearTimeout(t);
-  }, [entityDocs, dbConnected, hasLoaded]);
+  }, [entityDocs, entityOverrides, dbConnected, hasLoaded]);
 
   // Global doc status calculator: renewal date = issueDate + renewalMonths
   // If noRenewal is true, always "valid" (no alerts)
@@ -2423,26 +2462,33 @@ function AviroDashboard() {
     // Footer text
     const footerText = entityFooters[entity.name] !== undefined ? entityFooters[entity.name] : (entity.footerText || "");
 
-    // Editable field helper
+    // Editable field helper — click anywhere on the row to edit
     const EditableField = ({ label, value, fieldKey, onSave }) => {
       const [editing, setEditing] = useState(false);
       const [inputVal, setInputVal] = useState(value || "");
+      const [hovered, setHovered] = useState(false);
       const handleSave = () => {
         const updated = { ...entityOverrides[entity.name] || {}, [fieldKey]: inputVal };
         setEntityOverrides({ ...entityOverrides, [entity.name]: updated });
         setEditing(false);
       };
       return (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${c.border}`, fontSize: 13 }}>
-          <span style={{ color: c.textSecondary }}>{label}</span>
+        <div
+          onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+          onClick={() => { if (!editing) setEditing(true); }}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", marginBottom: 2, borderRadius: 6, fontSize: 13, cursor: editing ? "default" : "pointer", background: hovered && !editing ? `${c.accent}12` : "transparent", transition: "background 0.15s" }}
+        >
+          <span style={{ color: c.textSecondary, fontSize: 12 }}>{label}</span>
           {!editing ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ color: c.text, fontWeight: 500 }}>{value || "—"}</span>
-              <button onClick={() => setEditing(true)} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", padding: 0 }}><Icon type="edit" size={12} /></button>
+              <span style={{ color: value ? c.text : c.textMuted, fontWeight: 500, fontStyle: value ? "normal" : "italic" }}>{value || "Click to add"}</span>
+              <span style={{ color: hovered ? c.accent : c.textMuted, fontSize: 11, opacity: hovered ? 1 : 0.4, transition: "all 0.15s" }}>✎</span>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-              <input type="text" value={inputVal} onChange={e => setInputVal(e.target.value)} onBlur={handleSave} onKeyDown={e => e.key === "Enter" && handleSave()} autoFocus style={{ fontSize: 12, padding: "4px 8px", borderRadius: 4, border: `1px solid ${c.accent}`, background: c.surface, color: c.text, width: 200, outline: "none" }} />
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={e => e.stopPropagation()}>
+              <input type="text" value={inputVal} onChange={e => setInputVal(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }} autoFocus style={{ fontSize: 12, padding: "5px 10px", borderRadius: 6, border: `1px solid ${c.accent}`, background: c.surface, color: c.text, width: 220, outline: "none" }} />
+              <button onClick={handleSave} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 5, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Save</button>
+              <button onClick={() => { setInputVal(value || ""); setEditing(false); }} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 5, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}>✕</button>
             </div>
           )}
         </div>
