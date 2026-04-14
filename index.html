@@ -2980,36 +2980,78 @@ function AviroDashboard() {
                       )}
                     </div>
 
-                    {/* License Seals */}
+                    {/* License Seals — document uploads */}
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                         <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>License Seals</label>
                         <button onClick={() => {
-                          const newSeal = { id: `ls-${Date.now()}`, name: "", sealCode: "" };
+                          const newSeal = { id: `ls-${Date.now()}`, name: "", fileName: "", fileUrl: "", uploadStatus: null };
                           const updatedSeals = [...(dom.licenseSeals || []), newSeal];
                           updateDomain(dom.id, "licenseSeals", updatedSeals);
                         }} style={{ background: `${c.accent}20`, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>+ Add Seal</button>
                       </div>
                       {(dom.licenseSeals || []).length === 0 && <div style={{ fontSize: 11, color: c.textMuted, padding: "6px 0" }}>No license seals added</div>}
-                      {(dom.licenseSeals || []).map((seal, si) => (
+                      {(dom.licenseSeals || []).map((seal, si) => {
+                        const handleSealUpload = async (file) => {
+                          if (!file) return;
+                          if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first"); return; }
+                          const safeName = entity.name.replace(/[^a-zA-Z0-9]/g, "_");
+                          const filePath = safeName + "/seals/" + seal.id + "_" + Date.now() + "_" + file.name;
+                          const updatingSeals = (dom.licenseSeals || []).map(s => s.id === seal.id ? { ...s, uploadStatus: "uploading" } : s);
+                          updateDomain(dom.id, "licenseSeals", updatingSeals);
+                          try {
+                            const resp = await fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+                              method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file,
+                            });
+                            if (!resp.ok) throw new Error("Upload failed: " + resp.status);
+                            const publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+                            const doneSeals = (dom.licenseSeals || []).map(s => s.id === seal.id ? { ...s, fileName: file.name, fileUrl: publicUrl, uploadStatus: null } : s);
+                            updateDomain(dom.id, "licenseSeals", doneSeals);
+                          } catch (e) {
+                            alert("Upload error: " + e.message);
+                            const errSeals = (dom.licenseSeals || []).map(s => s.id === seal.id ? { ...s, uploadStatus: null } : s);
+                            updateDomain(dom.id, "licenseSeals", errSeals);
+                          }
+                        };
+                        return (
                         <div key={seal.id} style={{ background: c.card, borderRadius: 6, border: `1px solid ${c.border}`, padding: 10, marginBottom: 6 }}>
-                          <div style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                          <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
                             <input value={seal.name || ""} onChange={e => {
                               const updatedSeals = (dom.licenseSeals || []).map(s => s.id === seal.id ? { ...s, name: e.target.value } : s);
                               updateDomain(dom.id, "licenseSeals", updatedSeals);
                             }} placeholder="Seal name / label" style={{ flex: 1, fontSize: 11, padding: "5px 8px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
-                            <button onClick={() => copyToClipboard(seal.sealCode)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>{copiedText === seal.sealCode ? "Copied!" : "Copy"}</button>
                             <button onClick={() => {
                               const updatedSeals = (dom.licenseSeals || []).filter(s => s.id !== seal.id);
                               updateDomain(dom.id, "licenseSeals", updatedSeals);
                             }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
                           </div>
-                          <textarea value={seal.sealCode || ""} onChange={e => {
-                            const updatedSeals = (dom.licenseSeals || []).map(s => s.id === seal.id ? { ...s, sealCode: e.target.value } : s);
-                            updateDomain(dom.id, "licenseSeals", updatedSeals);
-                          }} placeholder="Paste seal / embed code here..." style={{ fontSize: 10, padding: "8px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, width: "100%", minHeight: 60, fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box" }} />
+                          {seal.fileUrl ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34,197,94,0.08)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.2)" }}>
+                              <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, flex: 1 }}>📄 {seal.fileName || "seal document"}</span>
+                              <a href={seal.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>Download</a>
+                              <button onClick={() => {
+                                const updatedSeals = (dom.licenseSeals || []).map(s => s.id === seal.id ? { ...s, fileUrl: "", fileName: "" } : s);
+                                updateDomain(dom.id, "licenseSeals", updatedSeals);
+                              }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                            </div>
+                          ) : (
+                            <div
+                              onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                              onDragLeave={e => { e.currentTarget.style.borderColor = c.border; }}
+                              onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; handleSealUpload(e.dataTransfer.files[0]); }}
+                              style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: "12px 16px", textAlign: "center", cursor: "pointer", transition: "border-color 0.15s" }}
+                              onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".doc,.docx,.pdf,.png,.jpg,.jpeg"; inp.onchange = (ev) => handleSealUpload(ev.target.files[0]); inp.click(); }}
+                            >
+                              {seal.uploadStatus === "uploading" ? (
+                                <span style={{ fontSize: 11, color: c.accent }}>⟳ Uploading...</span>
+                              ) : (
+                                <span style={{ fontSize: 11, color: c.textMuted }}>Drop seal document here or click to upload (.docx, .pdf, etc.)</span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
