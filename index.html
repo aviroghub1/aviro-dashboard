@@ -27,151 +27,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 
 // ===== AVIRO GROUP MASTER DASHBOARD =====
-const CORPORATE_ENTITIES = {
-  "Gaming Licenses": [
-    {
-      name: "Astor Holdings Limited", jurisdiction: "Anjouan", address: "Suite 4, Hamchako, Mutsamudu, Anjouan, Comoros",
-      companyNumber: "AH-2024-001", ubo: "David Nicholson", director: "David Nicholson",
-      csp: { name: "Anjouan Corporate Services", contact: "compliance@acs.com" },
-      domains: ["sharkcasino.com", "rocketbet.com"], sealCodes: { "sharkcasino.com": "AHL-SC-2024-001", "rocketbet.com": "AHL-RB-2024-001" },
-      footerText: "Astor Holdings Limited is licensed and regulated by the Anjouan Gaming Authority. License No: AHL-2024-001",
-      bankAccounts: [],
-      contracts: ["Payment Processing Agreement with PT Wolven Services Ltd", "Software License with Aviro Technology Services LLC-FZ"],
-      agreements: ["Revenue share agreement with Blue Orbit Management Inc.", "Sub-licensing agreement with NexGen Entertainment Ltd"],
-      documents: [
-        { name: "Certificate of Incorporation", expiry: "2027-01-15", status: "valid" },
-        { name: "Gaming License", expiry: "2026-06-30", status: "valid" },
-        { name: "UBO Declaration", expiry: "2026-07-01", status: "review_soon" },
-        { name: "Register of Directors", expiry: "2026-10-15", status: "valid" },
-        { name: "Certificate of Good Standing", expiry: "2026-04-20", status: "expiring" },
-      ]
-    },
-    {
-      name: "Vesaro Ltd", jurisdiction: "Anjouan", address: "Suite 7, Hamchako, Mutsamudu, Anjouan, Comoros",
-      companyNumber: "VL-2024-002", ubo: "David Nicholson", director: "David Nicholson",
-      csp: { name: "Anjouan Corporate Services", contact: "compliance@acs.com" },
-      domains: ["puntersvip.io", "elitebet.com"], sealCodes: { "puntersvip.io": "VL-PV-2024-001", "elitebet.com": "VL-EB-2024-001" },
-      footerText: "Vesaro Limited is licensed and regulated by the Anjouan Gaming Authority. License No: VL-2024-002",
-      bankAccounts: [],
-      contracts: ["Payment Processing Agreement with Areoncorp Ltd", "Software License with Aviro Technology Services LLC-FZ"],
-      agreements: ["Revenue share agreement with Blue Orbit Management Inc."],
-      documents: [
-        { name: "Certificate of Incorporation", expiry: "2027-03-01", status: "valid" },
-        { name: "Gaming License", expiry: "2026-09-15", status: "valid" },
-        { name: "UBO Declaration", expiry: "2026-05-15", status: "review_soon" },
-        { name: "Register of Directors", expiry: "2026-11-01", status: "valid" },
-        { name: "Certificate of Good Standing", expiry: "2026-04-30", status: "expiring" },
-      ]
-    },
-    {
-      name: "R Bostock Enterprises BV", jurisdiction: "Curacao", address: "Kaya W.F.G. Mensing 14, Willemstad, Curacao",
-      companyNumber: "RBE-2023-001", ubo: "David Nicholson", director: "David Nicholson",
-      csp: { name: "Curacao Gaming Authority", contact: "licensing@cga.cw" },
-      domains: ["bet-40.com"], sealCodes: { "bet-40.com": "RBE-B40-2024-001" },
-      footerText: "R Bostock Enterprises BV operates under the Curacao Gaming Authority.",
-      bankAccounts: [],
-      contracts: ["Payment Processing Agreement with PK Investitute Ltd"],
-      agreements: ["Management agreement with Blue Orbit Management Inc."],
-      documents: [
-        { name: "Certificate of Incorporation", expiry: "2027-06-01", status: "valid" },
-        { name: "Gaming License", expiry: "2026-12-31", status: "valid" },
-        { name: "Operational Manual", expiry: "2026-04-15", status: "expiring" },
-        { name: "UBO Declaration", expiry: "2026-08-01", status: "valid" },
-      ]
-    },
-    {
-      name: "NexGen Entertainment Ltd", jurisdiction: "Tobique", address: "Tobique First Nation, New Brunswick, Canada",
-      companyNumber: "NEL-2024-003", ubo: "David Nicholson", director: "David Nicholson",
-      csp: { name: "Tobique Gaming Commission", contact: "info@tobiquegaming.com" },
-      domains: ["ukingbet.com", "acr-poker.com"], sealCodes: { "ukingbet.com": "NEL-UK-2024-001", "acr-poker.com": "NEL-ACR-2024-001" },
-      footerText: "NexGen Entertainment Ltd is licensed by the Tobique Gaming Commission.",
-      bankAccounts: [],
-      contracts: ["Payment Processing Agreement with JJ Emicorp Ltd"],
-      agreements: ["Sub-license agreement with Astor Holdings Limited"],
-      documents: [
-        { name: "Certificate of Incorporation", expiry: "2027-02-15", status: "valid" },
-        { name: "Gaming License", expiry: "2026-08-30", status: "valid" },
-        { name: "UBO Declaration", expiry: "2026-06-01", status: "review_soon" },
-      ]
-    },
-    {
-      name: "T3 Entertainment Ltd", jurisdiction: "Tobique", companyNumber: "T3E-2024-004", ubo: "David Nicholson", director: "David Nicholson",
-      csp: { name: "Tobique Gaming Commission", contact: "info@tobiquegaming.com" },
-      domains: [], sealCodes: {}, footerText: "T3 Entertainment Ltd is licensed by the Tobique Gaming Commission.",
-      bankAccounts: [], contracts: [], agreements: [],
-      documents: [{ name: "Certificate of Incorporation", expiry: "2027-04-01", status: "valid" }, { name: "Gaming License", expiry: "2026-10-15", status: "valid" }]
-    },
-    {
-      name: "Ultima Entertainment Ltd", jurisdiction: "Anjouan", companyNumber: "UEL-2024-005", ubo: "David Nicholson", director: "David Nicholson",
-      csp: { name: "Anjouan Corporate Services", contact: "compliance@acs.com" },
-      domains: ["ultimacasino.com"], sealCodes: { "ultimacasino.com": "UEL-UC-2024-001" },
-      footerText: "Ultima Entertainment Ltd is licensed and regulated by the Anjouan Gaming Authority.",
-      bankAccounts: [],
-      contracts: ["Software License with Aviro Technology Services LLC-FZ"],
-      agreements: ["Revenue share with Cronus Global Foundation"],
-      documents: [
-        { name: "Certificate of Incorporation", expiry: "2027-01-30", status: "valid" },
-        { name: "Gaming License", expiry: "2026-07-15", status: "review_soon" },
-        { name: "UBO Declaration", expiry: "2026-05-01", status: "expiring" },
-      ]
-    },
-  ],
-  "Payment Agents": [
-    { name: "PT Wolven Services Ltd", jurisdiction: "Cyprus", companyNumber: "PWS-CY-001", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [],
-      contracts: ["Payment agent agreement with Astor Holdings Limited", "Payment agent agreement with Vesaro Ltd"],
-      agreements: ["Intra-company transfer agreement with Blue Orbit Management Inc."],
-      documents: [{ name: "Certificate of Incorporation", expiry: "2027-05-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-06-15", status: "review_soon" }, { name: "Proof of Address", expiry: "2026-04-25", status: "expiring" }]
-    },
-    { name: "Areoncorp Ltd", jurisdiction: "UK", companyNumber: "AC-UK-002", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [],
-      contracts: ["Payment agent agreement with Vesaro Ltd"], agreements: ["Service agreement with Blue Orbit Management Inc."],
-      documents: [{ name: "Certificate of Incorporation", expiry: "2027-08-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-07-01", status: "valid" }]
-    },
-    { name: "PK Investitute Ltd", jurisdiction: "UK", companyNumber: "PKI-UK-003", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [],
-      contracts: ["Payment agent agreement with R Bostock Enterprises BV"], agreements: [],
-      documents: [{ name: "Certificate of Incorporation", expiry: "2027-03-15", status: "valid" }, { name: "UBO Declaration", expiry: "2026-08-01", status: "valid" }]
-    },
-    { name: "JJ Emicorp Ltd", jurisdiction: "UK", companyNumber: "JJE-UK-004", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [], contracts: ["Payment agent agreement with NexGen Entertainment Ltd"], agreements: [],
-      documents: [{ name: "Certificate of Incorporation", expiry: "2027-06-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-09-01", status: "valid" }]
-    },
-  ],
-  "Technology Companies": [
-    { name: "Aviro Technology Services LLC-FZ", jurisdiction: "UAE (Free Zone)", companyNumber: "ATS-UAE-001", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [],
-      contracts: ["Software license to Astor Holdings Limited", "Software license to Vesaro Ltd", "Software license to Ultima Entertainment Ltd"],
-      agreements: ["Technology partnership with Blue Orbit Management Inc."],
-      documents: [{ name: "Trade License", expiry: "2026-12-31", status: "valid" }, { name: "Certificate of Incorporation", expiry: "2027-02-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-05-30", status: "review_soon" }]
-    },
-  ],
-  "Management Companies": [
-    { name: "Blue Orbit Management Inc.", jurisdiction: "Canada", companyNumber: "BOM-CA-001", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [],
-      contracts: ["Management agreement with all gaming license entities"],
-      agreements: ["Revenue share with Astor Holdings Limited", "Revenue share with Vesaro Ltd", "Service agreement with Areoncorp Ltd"],
-      documents: [{ name: "Certificate of Incorporation", expiry: "2027-09-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-10-01", status: "valid" }]
-    },
-  ],
-  "Canada MSB": [
-    { name: "Cube Pay Inc.", jurisdiction: "Canada", companyNumber: "CPI-CA-001", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [],
-      contracts: ["MSB services for all group payment processing"], agreements: ["Gateway.io platform agreement"],
-      documents: [{ name: "MSB Registration", expiry: "2026-12-31", status: "valid" }, { name: "Certificate of Incorporation", expiry: "2027-04-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-06-01", status: "review_soon" }]
-    },
-  ],
-  "Cayman Foundation Companies": [
-    { name: "Cronus Global Foundation", jurisdiction: "Cayman Islands", companyNumber: "CGF-KY-001", subsidiary: "Vesaro Limited", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [], contracts: ["Foundation agreement with Vesaro Ltd subsidiary"], agreements: ["Revenue distribution to Ultima Entertainment Ltd"],
-      documents: [{ name: "Certificate of Incorporation", expiry: "2027-07-01", status: "valid" }, { name: "Foundation Charter", expiry: "2027-07-01", status: "valid" }]
-    },
-    { name: "Ultima Entertainment Foundation", jurisdiction: "Cayman Islands", companyNumber: "UEF-KY-002", subsidiary: "Ultima Entertainment Limited", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [], contracts: ["Foundation agreement with Ultima Entertainment Ltd subsidiary"], agreements: [],
-      documents: [{ name: "Certificate of Incorporation", expiry: "2027-07-01", status: "valid" }, { name: "Foundation Charter", expiry: "2027-07-01", status: "valid" }]
-    },
-  ],
-};
+const ENTITY_TYPES = ["Gaming License", "Payment Agent", "Technology Company", "Management Company", "Financial Institute", "Cayman Foundation Company", "Other"];
 
 // Gaming brands are now managed via editable state (gamingBrands)
 
@@ -648,6 +504,8 @@ function AviroDashboard() {
   const [newPJPriority, setNewPJPriority] = useState("normal");
   const [pjFilter, setPjFilter] = useState("all"); // all, urgent, high, normal, low, done
 
+  // Corporate entities — fully editable
+  const [corporateEntities, setCorporateEntities] = useState([]); // [{ id, name, category, jurisdiction, companyNumber, address, ubo, director, licenseNumber, footerText }]
   // Entity overrides and documents
   const [entityOverrides, setEntityOverrides] = useState({}); // { "Entity Name": { jurisdiction: "...", companyNumber: "...", ... } }
   const [entityDocs, setEntityDocs] = useState({}); // { "Entity Name": [{ id, name, expiry, notarised, notarisedDate, renewalMonths, delayedUntil, fileName, fileSize }] }
@@ -685,13 +543,13 @@ function AviroDashboard() {
         calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
         signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems,
         calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
-        entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
+        corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
         bankRelationships, bankAccountsList, gamingBrands,
         supabaseUrl, supabaseKey,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, bankRelationships, bankAccountsList, gamingBrands, supabaseUrl, supabaseKey]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, bankRelationships, bankAccountsList, gamingBrands, supabaseUrl, supabaseKey]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -723,6 +581,7 @@ function AviroDashboard() {
         if (s.dailyProgress) setDailyProgress(s.dailyProgress);
         if (s.primaryTZ) setPrimaryTZ(s.primaryTZ);
         if (s.calSubSection) setCalSubSection(s.calSubSection);
+        if (s.corporateEntities) setCorporateEntities(s.corporateEntities);
         if (s.entityOverrides) setEntityOverrides(s.entityOverrides);
         if (s.entityDocs) setEntityDocs(s.entityDocs);
         if (s.entityServiceProviders) setEntityServiceProviders(s.entityServiceProviders);
@@ -737,6 +596,14 @@ function AviroDashboard() {
     } catch (e) { console.warn("Load state failed:", e); }
     setHasLoaded(true);
   }, []);
+
+  // Computed: entities grouped by category (replaces old hardcoded CORPORATE_ENTITIES)
+  const CORPORATE_ENTITIES = {};
+  corporateEntities.forEach(e => {
+    const cat = e.category || "Other";
+    if (!CORPORATE_ENTITIES[cat]) CORPORATE_ENTITIES[cat] = [];
+    CORPORATE_ENTITIES[cat].push(e);
+  });
 
   // ===== SUPABASE DATABASE SYNC =====
   const getSupabaseHeaders = useCallback(() => ({
@@ -2473,6 +2340,9 @@ function AviroDashboard() {
       const [inputVal, setInputVal] = useState(value || "");
       const [hovered, setHovered] = useState(false);
       const handleSave = () => {
+        // Save directly to the corporateEntities state
+        setCorporateEntities(corporateEntities.map(ce => ce.name === entity.name ? { ...ce, [fieldKey]: inputVal } : ce));
+        // Also keep entityOverrides in sync for backward compat
         const updated = { ...entityOverrides[entity.name] || {}, [fieldKey]: inputVal };
         setEntityOverrides({ ...entityOverrides, [entity.name]: updated });
         setEditing(false);
@@ -3103,6 +2973,23 @@ function AviroDashboard() {
   };
 
   // ===== ENTITIES =====
+  const [showAddEntity, setShowAddEntity] = useState(false);
+  const [newEntityName, setNewEntityName] = useState("");
+  const [newEntityType, setNewEntityType] = useState("");
+
+  const handleAddEntity = () => {
+    if (!newEntityName.trim() || !newEntityType) return;
+    const newEnt = {
+      id: `ent-${Date.now()}`, name: newEntityName.trim(), category: newEntityType,
+      jurisdiction: "", companyNumber: "", address: "", ubo: "", director: "", licenseNumber: "",
+      footerText: "", domains: [], sealCodes: {}, contracts: [], agreements: [], documents: [], bankAccounts: [],
+    };
+    setCorporateEntities([...corporateEntities, newEnt]);
+    setNewEntityName("");
+    setNewEntityType("");
+    setShowAddEntity(false);
+  };
+
   const renderEntities = () => {
     if (selectedEntity && selectedCategory) {
       const ent = CORPORATE_ENTITIES[selectedCategory]?.find(e => e.name === selectedEntity);
@@ -3113,7 +3000,7 @@ function AviroDashboard() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
           <div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Corporate Entity Matrix</h2>
-            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{Object.values(CORPORATE_ENTITIES).flat().length} entities across {Object.keys(CORPORATE_ENTITIES).length} categories</p>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{corporateEntities.length} entities across {Object.keys(CORPORATE_ENTITIES).length} categories</p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {dbConnected && (
@@ -3211,6 +3098,31 @@ function AviroDashboard() {
             )}
           </div>
         )}
+        {/* Add Entity button + form */}
+        <div style={{ marginBottom: 20 }}>
+          {!showAddEntity ? (
+            <button onClick={() => setShowAddEntity(true)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Entity</button>
+          ) : (
+            <div style={{ background: c.card, border: `1px solid ${c.accent}40`, borderRadius: 10, padding: 20, display: "flex", gap: 10, alignItems: "flex-end" }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 }}>Entity Name</label>
+                <input value={newEntityName} onChange={e => setNewEntityName(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAddEntity()} autoFocus placeholder="e.g. Astor Holdings Limited" style={{ width: "100%", fontSize: 13, padding: "8px 12px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 }}>Entity Type</label>
+                <select value={newEntityType} onChange={e => setNewEntityType(e.target.value)} style={{ width: "100%", fontSize: 13, padding: "8px 12px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" }}>
+                  <option value="">— Select Type —</option>
+                  {ENTITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <button onClick={handleAddEntity} disabled={!newEntityName.trim() || !newEntityType} style={{ background: newEntityName.trim() && newEntityType ? c.accent : c.surface, border: "none", color: newEntityName.trim() && newEntityType ? "#fff" : c.textMuted, borderRadius: 6, padding: "8px 20px", cursor: newEntityName.trim() && newEntityType ? "pointer" : "default", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>Create</button>
+              <button onClick={() => { setShowAddEntity(false); setNewEntityName(""); setNewEntityType(""); }} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "8px 14px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
+            </div>
+          )}
+        </div>
+
+        {corporateEntities.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 40, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No entities added yet. Click "+ Add Entity" to get started.</div>}
+
         {Object.entries(CORPORATE_ENTITIES).map(([category, entities]) => (
           <div key={category} style={{ marginBottom: 24 }}>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: `1px solid ${c.border}`, paddingBottom: 8 }}>
@@ -3221,19 +3133,20 @@ function AviroDashboard() {
                 const eDocs = entityDocs[entity.name] || [];
                 const ac = eDocs.filter(d => { const s = getDocStatusGlobal(d); return s === "expired" || s === "expiring" || s === "review_soon"; }).length;
                 return (
-                  <div key={entity.name} onClick={() => { setSelectedEntity(entity.name); setSelectedCategory(category); }}
-                    style={{ background: c.card, border: `1px solid ${ac > 0 ? "rgba(239,68,68,0.3)" : c.border}`, borderRadius: 10, padding: 16, cursor: "pointer" }}
+                  <div key={entity.name || entity.id} style={{ background: c.card, border: `1px solid ${ac > 0 ? "rgba(239,68,68,0.3)" : c.border}`, borderRadius: 10, padding: 16, cursor: "pointer", position: "relative" }}
                     onMouseEnter={e => e.currentTarget.style.background = c.cardHover} onMouseLeave={e => e.currentTarget.style.background = c.card}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{entity.name}</div>
-                      {ac > 0 && <span style={{ background: c.dangerBg, color: c.danger, fontSize: 10, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>{ac} alert{ac > 1 ? "s" : ""}</span>}
-                    </div>
-                    <div style={{ fontSize: 12, color: c.textSecondary }}>{entity.jurisdiction}</div>
-                    <div style={{ fontSize: 11, color: c.textMuted }}>{entity.companyNumber}</div>
-                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                      {bankAccountsList.filter(a => a.entityName === entity.name).length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 6px", borderRadius: 3 }}>{bankAccountsList.filter(a => a.entityName === entity.name).length} bank</span>}
-                      {(entity.contracts || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 6px", borderRadius: 3 }}>{entity.contracts.length} contracts</span>}
-                      {(entity.domains || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 6px", borderRadius: 3 }}>{entity.domains.length} domains</span>}
+                    <button onClick={e => { e.stopPropagation(); if (confirm("Delete " + entity.name + "?")) setCorporateEntities(corporateEntities.filter(ce => ce.id !== entity.id)); }} style={{ position: "absolute", top: 8, right: 8, background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 10, opacity: 0.5, padding: "2px 6px" }} title="Delete entity">✕</button>
+                    <div onClick={() => { setSelectedEntity(entity.name); setSelectedCategory(category); }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, paddingRight: 16 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{entity.name}</div>
+                        {ac > 0 && <span style={{ background: c.dangerBg, color: c.danger, fontSize: 10, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>{ac} alert{ac > 1 ? "s" : ""}</span>}
+                      </div>
+                      <div style={{ fontSize: 12, color: c.textSecondary }}>{entity.jurisdiction || "No jurisdiction set"}</div>
+                      <div style={{ fontSize: 11, color: c.textMuted }}>{entity.companyNumber || ""}</div>
+                      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                        {bankAccountsList.filter(a => a.entityName === entity.name).length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 6px", borderRadius: 3 }}>{bankAccountsList.filter(a => a.entityName === entity.name).length} bank</span>}
+                        {(entityDocs[entity.name] || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 6px", borderRadius: 3 }}>{(entityDocs[entity.name] || []).length} docs</span>}
+                      </div>
                     </div>
                   </div>
                 );
@@ -3552,8 +3465,8 @@ function AviroDashboard() {
   };
 
   // ===== GAMING BRANDS =====
-  const gamingLicenseEntities = (CORPORATE_ENTITIES["Gaming Licenses"] || []).map(e => e.name);
-  const paymentAgentEntities = (CORPORATE_ENTITIES["Payment Agents"] || []).map(e => e.name);
+  const gamingLicenseEntities = (CORPORATE_ENTITIES["Gaming License"] || []).map(e => e.name);
+  const paymentAgentEntities = (CORPORATE_ENTITIES["Payment Agent"] || []).map(e => e.name);
 
   const renderBrands = () => {
     const updateBrand = (id, field, val) => setGamingBrands(gamingBrands.map(b => b.id === id ? { ...b, [field]: val } : b));
