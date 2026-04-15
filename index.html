@@ -3552,8 +3552,50 @@ function AviroDashboard() {
   };
 
   // ===== GAMING BRANDS =====
+  const gamingLicenseEntities = (CORPORATE_ENTITIES["Gaming Licenses"] || []).map(e => e.name);
+  const paymentAgentEntities = (CORPORATE_ENTITIES["Payment Agents"] || []).map(e => e.name);
+
   const renderBrands = () => {
     const updateBrand = (id, field, val) => setGamingBrands(gamingBrands.map(b => b.id === id ? { ...b, [field]: val } : b));
+    const toggleBrandLicense = (id, lic) => {
+      setGamingBrands(gamingBrands.map(b => {
+        if (b.id !== id) return b;
+        const lics = b.licenses || [];
+        const updated = lics.includes(lic) ? lics.filter(l => l !== lic) : [...lics, lic];
+        // If footerLicense was removed, clear it
+        const newFooter = updated.includes(b.footerLicense) ? b.footerLicense : "";
+        return { ...b, licenses: updated, footerLicense: newFooter };
+      }));
+    };
+    const addPaymentMethod = (id) => {
+      setGamingBrands(gamingBrands.map(b => b.id === id ? { ...b, paymentMethods: [...(b.paymentMethods || []), ""] } : b));
+    };
+    const updatePaymentMethod = (id, idx, val) => {
+      setGamingBrands(gamingBrands.map(b => {
+        if (b.id !== id) return b;
+        const pm = [...(b.paymentMethods || [])];
+        pm[idx] = val;
+        return { ...b, paymentMethods: pm };
+      }));
+    };
+    const removePaymentMethod = (id, idx) => {
+      setGamingBrands(gamingBrands.map(b => b.id !== id ? b : { ...b, paymentMethods: (b.paymentMethods || []).filter((_, i) => i !== idx) }));
+    };
+    const addMirror = (id) => {
+      setGamingBrands(gamingBrands.map(b => b.id === id ? { ...b, mirrors: [...(b.mirrors || []), ""] } : b));
+    };
+    const updateMirror = (id, idx, val) => {
+      setGamingBrands(gamingBrands.map(b => {
+        if (b.id !== id) return b;
+        const m = [...(b.mirrors || [])];
+        m[idx] = val;
+        return { ...b, mirrors: m };
+      }));
+    };
+    const removeMirror = (id, idx) => {
+      setGamingBrands(gamingBrands.map(b => b.id !== id ? b : { ...b, mirrors: (b.mirrors || []).filter((_, i) => i !== idx) }));
+    };
+
     const inputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
     const labelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
 
@@ -3565,38 +3607,128 @@ function AviroDashboard() {
           <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gamingBrands.length} brand{gamingBrands.length !== 1 ? "s" : ""}</p>
         </div>
         <button onClick={() => {
-          setGamingBrands([...gamingBrands, { id: `gb-${Date.now()}`, brand: "", domain: "", collapsed: false }]);
+          setGamingBrands([...gamingBrands, { id: `gb-${Date.now()}`, brand: "", domain: "", mirrors: [], licenses: [], footerLicense: "", paymentAgent: "", paymentMethods: [], mainOperations: "", collapsed: false }]);
         }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "7px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Gaming Brand</button>
       </div>
 
       {gamingBrands.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No gaming brands added yet. Click "Add Gaming Brand" to get started.</div>}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {gamingBrands.map(brand => (
+        {gamingBrands.map(brand => {
+          const selectedLicenses = brand.licenses || [];
+          return (
           <div key={brand.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 18 }}>
-            {/* Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: brand.collapsed ? 0 : 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: c.text }}>{brand.brand || "New Brand"}</span>
-                {brand.domain && <a href={`https://${brand.domain}`} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, textDecoration: "none" }}>{brand.domain}</a>}
+            {/* Header — always visible summary */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: c.text }}>{brand.brand || "New Brand"}</span>
+                  {brand.domain && <a href={`https://${brand.domain}`} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, textDecoration: "none" }}>{brand.domain}</a>}
+                </div>
+                {/* Collapsed summary info */}
+                {brand.collapsed && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+                    {(brand.mirrors || []).length > 0 && <div style={{ fontSize: 11, color: c.textMuted }}><span style={{ fontWeight: 600, color: c.textSecondary }}>Mirrors:</span> {brand.mirrors.filter(Boolean).join(", ")}</div>}
+                    {selectedLicenses.length > 0 && <div style={{ fontSize: 11, color: c.textMuted }}><span style={{ fontWeight: 600, color: c.textSecondary }}>Licenses:</span> {selectedLicenses.join(", ")}</div>}
+                    {brand.footerLicense && <div style={{ fontSize: 11, color: c.textMuted }}><span style={{ fontWeight: 600, color: c.textSecondary }}>Footer:</span> {brand.footerLicense}</div>}
+                    {brand.paymentAgent && <div style={{ fontSize: 11, color: c.textMuted }}><span style={{ fontWeight: 600, color: c.textSecondary }}>Payment Agent:</span> {brand.paymentAgent}</div>}
+                    {(brand.paymentMethods || []).filter(Boolean).length > 0 && <div style={{ fontSize: 11, color: c.textMuted }}><span style={{ fontWeight: 600, color: c.textSecondary }}>Payment Methods:</span> {brand.paymentMethods.filter(Boolean).join(", ")}</div>}
+                    {brand.mainOperations && <div style={{ fontSize: 11, color: c.textMuted }}><span style={{ fontWeight: 600, color: c.textSecondary }}>Operations:</span> {brand.mainOperations}</div>}
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 8 }}>
                 <button onClick={() => updateBrand(brand.id, "collapsed", !brand.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{brand.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
                 <button onClick={() => setGamingBrands(gamingBrands.filter(b => b.id !== brand.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
               </div>
             </div>
 
-            {/* Expanded */}
+            {/* Expanded edit view */}
             {!brand.collapsed && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+                {/* Name + Domain */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div><label style={labelStyle}>Brand Name</label><input value={brand.brand || ""} onChange={e => updateBrand(brand.id, "brand", e.target.value)} placeholder="e.g. Shark Casino" style={{ ...inputStyle, width: "100%" }} /></div>
-                  <div><label style={labelStyle}>Domain</label><input value={brand.domain || ""} onChange={e => updateBrand(brand.id, "domain", e.target.value)} placeholder="e.g. sharkcasino.com" style={{ ...inputStyle, width: "100%" }} /></div>
+                  <div><label style={labelStyle}>Domain Name</label><input value={brand.domain || ""} onChange={e => updateBrand(brand.id, "domain", e.target.value)} placeholder="e.g. sharkcasino.com" style={{ ...inputStyle, width: "100%" }} /></div>
+                </div>
+
+                {/* Mirror Domains */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>Mirror Domains</label>
+                    <button onClick={() => addMirror(brand.id)} style={{ fontSize: 10, color: c.accent, background: `${c.accent}15`, border: `1px solid ${c.accent}40`, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontWeight: 600 }}>+ Add Mirror</button>
+                  </div>
+                  {(brand.mirrors || []).length === 0 && <div style={{ fontSize: 11, color: c.textMuted }}>No mirrors added</div>}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {(brand.mirrors || []).map((m, mi) => (
+                      <div key={mi} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <input value={m} onChange={e => updateMirror(brand.id, mi, e.target.value)} placeholder="mirror.com" style={{ ...inputStyle, width: 160 }} />
+                        <button onClick={() => removeMirror(brand.id, mi)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, padding: "2px 4px" }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Licenses — multi-select from Gaming Licenses entities */}
+                <div>
+                  <label style={labelStyle}>Licenses</label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {gamingLicenseEntities.map(lic => {
+                      const active = selectedLicenses.includes(lic);
+                      return <button key={lic} onClick={() => toggleBrandLicense(brand.id, lic)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: active ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: active ? `${c.accent}20` : "transparent", color: active ? c.accent : c.textMuted, transition: "all 0.15s" }}>{lic}</button>;
+                    })}
+                  </div>
+                </div>
+
+                {/* Footer License — select one of the selected licenses */}
+                <div>
+                  <label style={labelStyle}>Footer License</label>
+                  {selectedLicenses.length === 0 ? (
+                    <div style={{ fontSize: 11, color: c.textMuted }}>Select licenses above first</div>
+                  ) : (
+                    <select value={brand.footerLicense || ""} onChange={e => updateBrand(brand.id, "footerLicense", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                      <option value="">— Select Footer License —</option>
+                      {selectedLicenses.map(lic => <option key={lic} value={lic}>{lic}</option>)}
+                    </select>
+                  )}
+                </div>
+
+                {/* Payment Agent — select from Payment Agents */}
+                <div>
+                  <label style={labelStyle}>Payment Agent</label>
+                  <select value={brand.paymentAgent || ""} onChange={e => updateBrand(brand.id, "paymentAgent", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                    <option value="">— Select Payment Agent —</option>
+                    {paymentAgentEntities.map(pa => <option key={pa} value={pa}>{pa}</option>)}
+                  </select>
+                </div>
+
+                {/* Payment Methods Active */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>Payment Methods Active</label>
+                    <button onClick={() => addPaymentMethod(brand.id)} style={{ fontSize: 10, color: c.accent, background: `${c.accent}15`, border: `1px solid ${c.accent}40`, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontWeight: 600 }}>+ Add</button>
+                  </div>
+                  {(brand.paymentMethods || []).length === 0 && <div style={{ fontSize: 11, color: c.textMuted }}>No payment methods added</div>}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {(brand.paymentMethods || []).map((pm, pi) => (
+                      <div key={pi} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <input value={pm} onChange={e => updatePaymentMethod(brand.id, pi, e.target.value)} placeholder="e.g. Visa, Crypto..." style={{ ...inputStyle, width: 150 }} />
+                        <button onClick={() => removePaymentMethod(brand.id, pi)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, padding: "2px 4px" }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Main Operations */}
+                <div>
+                  <label style={labelStyle}>Main Operations</label>
+                  <input value={brand.mainOperations || ""} onChange={e => updateBrand(brand.id, "mainOperations", e.target.value)} placeholder="e.g. John Smith" style={{ ...inputStyle, width: "100%" }} />
                 </div>
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
     );
