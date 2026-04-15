@@ -512,6 +512,8 @@ function AviroDashboard() {
   const [entityServiceProviders, setEntityServiceProviders] = useState({}); // { "Entity Name": [{ id, name, company, email, phone, notes }] }
   const [entitySeals, setEntitySeals] = useState({}); // { "Entity Name": [{ id, domainName, proofFileName, proofFileUrl, mirrorRangeStart, mirrorRangeEnd, licenseSeals: [{ id, name, sealCode }], collapsed }] }
   const [entityFooters, setEntityFooters] = useState({}); // { "Entity Name": "footer text" }
+  const [entityIntraAgreements, setEntityIntraAgreements] = useState({}); // { "Entity Name": [{ id, name, counterpartyEntity, notes, fileName, fileUrl, startDate, renewalMonths }] }
+  const [entityCorpAgreements, setEntityCorpAgreements] = useState({}); // { "Entity Name": [{ id, name, counterparty, notes, fileName, fileUrl, startDate, renewalMonths }] }
   const [bankRelationships, setBankRelationships] = useState([]); // [{ id, bankName, mainContact, relationshipLevel, contactEmail, contactPhone, offeredServices:[], supportEmail, supportChannels:[], fees: { b2b: {pct,tx}, b2c: {pct,tx}, c2b: {pct,tx}, fx: {pct,tx} } }]
   const [bankAccountsList, setBankAccountsList] = useState([]); // [{ id, bankRelId, entityName, accountPurpose:[], dateOpened, feesOverride: null|{...}, collapsed }]
   const [gamingBrands, setGamingBrands] = useState([]); // [{ id, brand, domain, collapsed }]
@@ -544,12 +546,13 @@ function AviroDashboard() {
         signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems,
         calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
         corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
+        entityIntraAgreements, entityCorpAgreements,
         bankRelationships, bankAccountsList, gamingBrands,
         supabaseUrl, supabaseKey,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, bankRelationships, bankAccountsList, gamingBrands, supabaseUrl, supabaseKey]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, supabaseUrl, supabaseKey]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -587,6 +590,8 @@ function AviroDashboard() {
         if (s.entityServiceProviders) setEntityServiceProviders(s.entityServiceProviders);
         if (s.entitySeals) setEntitySeals(s.entitySeals);
         if (s.entityFooters) setEntityFooters(s.entityFooters);
+        if (s.entityIntraAgreements) setEntityIntraAgreements(s.entityIntraAgreements);
+        if (s.entityCorpAgreements) setEntityCorpAgreements(s.entityCorpAgreements);
         if (s.bankRelationships) setBankRelationships(s.bankRelationships);
         if (s.bankAccountsList) setBankAccountsList(s.bankAccountsList);
         if (s.gamingBrands) setGamingBrands(s.gamingBrands);
@@ -2935,15 +2940,175 @@ function AviroDashboard() {
           </div>
         </div>
 
-        {/* F: Contracts & Agreements */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-          {[["Contracts", entity.contracts], ["Corporate Agreements", entity.agreements]].map(([title, items]) => (
-            <div key={title} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>{title}</h3>
-              {(items || []).length === 0 ? <div style={{ fontSize: 12, color: c.textMuted }}>None recorded</div> : items.map((item, i) => <div key={i} style={{ fontSize: 13, color: c.text, padding: "6px 0", borderBottom: `1px solid ${c.border}` }}>{item}</div>)}
+        {/* F: Agreements — Intra-Company + Corporate */}
+        {(() => {
+          const intraAgs = entityIntraAgreements[entity.name] || [];
+          const corpAgs = entityCorpAgreements[entity.name] || [];
+          const otherEntities = corporateEntities.filter(ce => ce.name !== entity.name).map(ce => ce.name);
+          const agInputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+          const agLabelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
+
+          const updateIntra = (id, field, val) => {
+            const updated = intraAgs.map(a => a.id === id ? { ...a, [field]: val } : a);
+            setEntityIntraAgreements({ ...entityIntraAgreements, [entity.name]: updated });
+          };
+          const updateCorp = (id, field, val) => {
+            const updated = corpAgs.map(a => a.id === id ? { ...a, [field]: val } : a);
+            setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: updated });
+          };
+
+          // File upload for agreements
+          const handleAgreementUpload = async (agId, file, agType) => {
+            if (!file) return;
+            if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first"); return; }
+            const safeName = entity.name.replace(/[^a-zA-Z0-9]/g, "_");
+            const filePath = safeName + "/agreements/" + agId + "_" + Date.now() + "_" + file.name;
+            const updater = agType === "intra" ? updateIntra : updateCorp;
+            updater(agId, "uploadStatus", "uploading");
+            try {
+              const resp = await fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+                method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file,
+              });
+              if (!resp.ok) throw new Error("Upload failed: " + resp.status);
+              const publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+              const list = agType === "intra" ? intraAgs : corpAgs;
+              const updatedList = list.map(a => a.id === agId ? { ...a, fileName: file.name, fileUrl: publicUrl, uploadStatus: null } : a);
+              if (agType === "intra") setEntityIntraAgreements({ ...entityIntraAgreements, [entity.name]: updatedList });
+              else setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: updatedList });
+            } catch (e) {
+              alert("Upload error: " + e.message);
+              updater(agId, "uploadStatus", null);
+            }
+          };
+
+          // Render a single agreement card
+          const renderAgreementCard = (ag, agType) => {
+            const updater = agType === "intra" ? updateIntra : updateCorp;
+            const isEditing = editingEntityField === `ag-${ag.id}`;
+            const renewalDate = ag.startDate && ag.renewalMonths ? (() => {
+              const d = new Date(ag.startDate); d.setMonth(d.getMonth() + parseInt(ag.renewalMonths)); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+            })() : null;
+            return (
+              <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 14, marginBottom: 8 }}>
+                {/* Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
+                    <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                      {agType === "intra" ? (<>{entity.name} <span style={{ color: c.accent }}>↔</span> {ag.counterpartyEntity || "—"}</>) : (<>Counterparty: {ag.counterparty || "—"}</>)}
+                      {ag.startDate && <span> · Started {ag.startDate}</span>}
+                      {renewalDate && <span> · Renews {renewalDate}</span>}
+                      {ag.startDate && !ag.renewalMonths && <span> · No renewal</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                    {ag.fileUrl && <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>↓ Download</a>}
+                    <button onClick={() => setEditingEntityField(isEditing ? null : `ag-${ag.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 8px" }}>{isEditing ? "Done" : "Edit"}</button>
+                    <button onClick={() => {
+                      if (agType === "intra") setEntityIntraAgreements({ ...entityIntraAgreements, [entity.name]: intraAgs.filter(a => a.id !== ag.id) });
+                      else setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: corpAgs.filter(a => a.id !== ag.id) });
+                    }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                  </div>
+                </div>
+
+                {/* Edit form */}
+                {isEditing && (
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div><label style={agLabelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => updater(ag.id, "name", e.target.value)} placeholder="e.g. Payment Processing Agreement" style={{ ...agInputStyle, width: "100%" }} /></div>
+
+                    {agType === "intra" ? (
+                      <div>
+                        <label style={agLabelStyle}>Counterparty Entity</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 12, color: c.text, fontWeight: 500, whiteSpace: "nowrap" }}>{entity.name}</span>
+                          <span style={{ color: c.accent, fontSize: 12 }}>↔</span>
+                          <select value={ag.counterpartyEntity || ""} onChange={e => updater(ag.id, "counterpartyEntity", e.target.value)} style={{ ...agInputStyle, flex: 1 }}>
+                            <option value="">— Select Entity —</option>
+                            {otherEntities.map(en => <option key={en} value={en}>{en}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    ) : (
+                      <div><label style={agLabelStyle}>Counterparty</label><input value={ag.counterparty || ""} onChange={e => updater(ag.id, "counterparty", e.target.value)} placeholder="e.g. External company name" style={{ ...agInputStyle, width: "100%" }} /></div>
+                    )}
+
+                    <div><label style={agLabelStyle}>Notes</label><textarea value={ag.notes || ""} onChange={e => updater(ag.id, "notes", e.target.value)} placeholder="Agreement notes..." style={{ ...agInputStyle, width: "100%", minHeight: 50, resize: "vertical", fontFamily: "system-ui" }} /></div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div><label style={agLabelStyle}>Document Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => updater(ag.id, "startDate", e.target.value)} style={{ ...agInputStyle, width: "100%" }} /></div>
+                      <div>
+                        <label style={agLabelStyle}>Renewal (months)</label>
+                        <input type="number" min="0" value={ag.renewalMonths || ""} onChange={e => updater(ag.id, "renewalMonths", e.target.value)} placeholder="Leave blank = no renewal" style={{ ...agInputStyle, width: "100%" }} />
+                        {ag.startDate && ag.renewalMonths && renewalDate && <div style={{ fontSize: 10, color: c.accent, marginTop: 3 }}>Renews: {renewalDate}</div>}
+                      </div>
+                    </div>
+
+                    {/* Document upload */}
+                    <div>
+                      <label style={agLabelStyle}>Document</label>
+                      {ag.fileUrl ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34,197,94,0.08)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.2)" }}>
+                          <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, flex: 1 }}>📄 {ag.fileName || "document"}</span>
+                          <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>Download</a>
+                          <button onClick={() => { updater(ag.id, "fileUrl", ""); updater(ag.id, "fileName", ""); }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                        </div>
+                      ) : (
+                        <div
+                          onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                          onDragLeave={e => { e.currentTarget.style.borderColor = c.border; }}
+                          onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; handleAgreementUpload(ag.id, e.dataTransfer.files[0], agType); }}
+                          style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: "12px 16px", textAlign: "center", cursor: "pointer", transition: "border-color 0.15s" }}
+                          onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".doc,.docx,.pdf,.png,.jpg,.jpeg,.xlsx"; inp.onchange = (ev) => handleAgreementUpload(ag.id, ev.target.files[0], agType); inp.click(); }}
+                        >
+                          {ag.uploadStatus === "uploading" ? (
+                            <span style={{ fontSize: 11, color: c.accent }}>⟳ Uploading...</span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: c.textMuted }}>Drop document here or click to upload</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes preview when collapsed */}
+                {!isEditing && ag.notes && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6, fontStyle: "italic" }}>{ag.notes}</div>}
+              </div>
+            );
+          };
+
+          return (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            {/* Intra-Company Agreements */}
+            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: 0, textTransform: "uppercase" }}>Intra-Company Agreements</h3>
+                <button onClick={() => {
+                  const newAg = { id: `ia-${Date.now()}`, name: "", counterpartyEntity: "", notes: "", fileName: "", fileUrl: "", startDate: "", renewalMonths: "", uploadStatus: null };
+                  setEntityIntraAgreements({ ...entityIntraAgreements, [entity.name]: [...intraAgs, newAg] });
+                  setEditingEntityField(`ag-${newAg.id}`);
+                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
+              </div>
+              {intraAgs.length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No intra-company agreements</div>}
+              {intraAgs.map(ag => renderAgreementCard(ag, "intra"))}
             </div>
-          ))}
-        </div>
+
+            {/* Corporate Agreements */}
+            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: 0, textTransform: "uppercase" }}>Corporate Agreements</h3>
+                <button onClick={() => {
+                  const newAg = { id: `ca-${Date.now()}`, name: "", counterparty: "", notes: "", fileName: "", fileUrl: "", startDate: "", renewalMonths: "", uploadStatus: null };
+                  setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: [...corpAgs, newAg] });
+                  setEditingEntityField(`ag-${newAg.id}`);
+                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
+              </div>
+              {corpAgs.length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No corporate agreements</div>}
+              {corpAgs.map(ag => renderAgreementCard(ag, "corp"))}
+            </div>
+          </div>
+          );
+        })()}
 
         {/* G: Bank Accounts — from central banking system */}
         {(() => {
