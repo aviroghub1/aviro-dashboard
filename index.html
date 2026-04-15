@@ -173,18 +173,7 @@ const CORPORATE_ENTITIES = {
   ],
 };
 
-const GAMING_BRANDS = [
-  { brand: "Shark Casino", url: "sharkcasino.com", licenses: ["Astor Holdings Limited"], footer: "Astor Holdings Limited - Anjouan Gaming Authority", mirrors: ["sharkcasino1.com", "sharkcasino2.com", "sharkcasino3.com"], activeMirror: "sharkcasino1.com" },
-  { brand: "Rocket Bet", url: "rocketbet.com", licenses: ["Astor Holdings Limited"], footer: "Astor Holdings Limited - Anjouan Gaming Authority", mirrors: ["rocketbet1.com", "rocketbet2.com"], activeMirror: "rocketbet1.com" },
-  { brand: "Punters VIP", url: "puntersvip.io", licenses: ["Vesaro Ltd"], footer: "Vesaro Limited - Anjouan Gaming Authority", mirrors: ["puntersvip1.com", "puntersvip2.com"], activeMirror: "puntersvip1.com" },
-  { brand: "Elite Bet", url: "elitebet.com", licenses: ["Vesaro Ltd"], footer: "Vesaro Limited - Anjouan Gaming Authority", mirrors: ["elitebet1.com", "elitebet2.com"], activeMirror: "elitebet1.com" },
-  { brand: "Bet-40", url: "bet-40.com", licenses: ["R Bostock Enterprises BV"], footer: "R Bostock Enterprises BV - Curacao Gaming Authority", mirrors: ["bet40-1.com", "bet40-2.com"], activeMirror: "bet40-1.com" },
-  { brand: "UKingBet", url: "ukingbet.com", licenses: ["NexGen Entertainment Ltd"], footer: "NexGen Entertainment Ltd - Tobique Gaming Commission", mirrors: ["ukingbet1.com", "ukingbet2.com"], activeMirror: "ukingbet1.com" },
-  { brand: "Luna Bet", url: "lunabet.com", licenses: ["T3 Entertainment Ltd"], footer: "T3 Entertainment Ltd - Tobique Gaming Commission", mirrors: ["lunabet1.com", "lunabet2.com"], activeMirror: "lunabet1.com" },
-  { brand: "Ultima Casino", url: "ultimacasino.com", licenses: ["Ultima Entertainment Ltd"], footer: "Ultima Entertainment Ltd - Anjouan Gaming Authority", mirrors: ["ultimacasino1.com", "ultimacasino2.com"], activeMirror: "ultimacasino1.com" },
-  { brand: "ACR Poker", url: "acr-poker.com", licenses: ["NexGen Entertainment Ltd"], footer: "NexGen Entertainment Ltd - Tobique Gaming Commission", mirrors: [], activeMirror: null },
-  { brand: "Turbo Casino", url: "turbocasino.com", licenses: ["T3 Entertainment Ltd"], footer: "T3 Entertainment Ltd - Tobique Gaming Commission", mirrors: ["turbocasino1.com"], activeMirror: "turbocasino1.com" },
-];
+// Gaming brands are now managed via editable state (gamingBrands)
 
 const MONEY_FLOWS = [
   { from: "Astor Holdings Limited", to: "PT Wolven Services Ltd", type: "Payment Processing", description: "Player deposits/withdrawals via payment agent" },
@@ -667,6 +656,7 @@ function AviroDashboard() {
   const [entityFooters, setEntityFooters] = useState({}); // { "Entity Name": "footer text" }
   const [bankRelationships, setBankRelationships] = useState([]); // [{ id, bankName, mainContact, relationshipLevel, contactEmail, contactPhone, offeredServices:[], supportEmail, supportChannels:[], fees: { b2b: {pct,tx}, b2c: {pct,tx}, c2b: {pct,tx}, fx: {pct,tx} } }]
   const [bankAccountsList, setBankAccountsList] = useState([]); // [{ id, bankRelId, entityName, accountPurpose:[], dateOpened, feesOverride: null|{...}, collapsed }]
+  const [gamingBrands, setGamingBrands] = useState([]); // [{ id, brand, domain, collapsed }]
   const [entityAlertsCollapsed, setEntityAlertsCollapsed] = useState(false);
   const [editingEntityField, setEditingEntityField] = useState(null); // "fieldName" being edited
 
@@ -696,12 +686,12 @@ function AviroDashboard() {
         signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems,
         calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
         entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
-        bankRelationships, bankAccountsList,
+        bankRelationships, bankAccountsList, gamingBrands,
         supabaseUrl, supabaseKey,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, bankRelationships, bankAccountsList, supabaseUrl, supabaseKey]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, bankRelationships, bankAccountsList, gamingBrands, supabaseUrl, supabaseKey]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -740,6 +730,7 @@ function AviroDashboard() {
         if (s.entityFooters) setEntityFooters(s.entityFooters);
         if (s.bankRelationships) setBankRelationships(s.bankRelationships);
         if (s.bankAccountsList) setBankAccountsList(s.bankAccountsList);
+        if (s.gamingBrands) setGamingBrands(s.gamingBrands);
         if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
         if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
       }
@@ -3561,29 +3552,46 @@ function AviroDashboard() {
   };
 
   // ===== GAMING BRANDS =====
-  const renderBrands = () => (
+  const renderBrands = () => {
+    const updateBrand = (id, field, val) => setGamingBrands(gamingBrands.map(b => b.id === id ? { ...b, [field]: val } : b));
+    const inputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const labelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
+
+    return (
     <div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 24px 0" }}>Gaming Brands</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Gaming Brands</h2>
+          <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gamingBrands.length} brand{gamingBrands.length !== 1 ? "s" : ""}</p>
+        </div>
+        <button onClick={() => {
+          setGamingBrands([...gamingBrands, { id: `gb-${Date.now()}`, brand: "", domain: "", collapsed: false }]);
+        }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "7px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Gaming Brand</button>
+      </div>
+
+      {gamingBrands.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No gaming brands added yet. Click "Add Gaming Brand" to get started.</div>}
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {GAMING_BRANDS.map((brand, idx) => (
-          <div key={idx} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: c.text }}>{brand.brand}</div>
-            <a href={`https://${brand.url}`} target="_blank" rel="noopener" style={{ fontSize: 12, color: c.accent, textDecoration: "none" }}>{brand.url}</a>
-            <div style={{ fontSize: 12, color: c.textSecondary, marginTop: 6 }}>License: {brand.licenses.join(", ")}</div>
-            <div style={{ background: c.surface, borderRadius: 8, padding: 10, marginTop: 8, position: "relative" }}>
-              <div style={{ fontSize: 10, color: c.textMuted }}>Footer:</div>
-              <div style={{ fontSize: 11, color: c.text }}>{brand.footer}</div>
-              <button onClick={() => copyToClipboard(brand.footer)} style={{ position: "absolute", top: 6, right: 6, background: "transparent", border: "none", color: copiedText === brand.footer ? c.success : c.textMuted, cursor: "pointer" }}><Icon type={copiedText === brand.footer ? "check" : "copy"} size={12} /></button>
+        {gamingBrands.map(brand => (
+          <div key={brand.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 18 }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: brand.collapsed ? 0 : 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: c.text }}>{brand.brand || "New Brand"}</span>
+                {brand.domain && <a href={`https://${brand.domain}`} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, textDecoration: "none" }}>{brand.domain}</a>}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => updateBrand(brand.id, "collapsed", !brand.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{brand.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
+                <button onClick={() => setGamingBrands(gamingBrands.filter(b => b.id !== brand.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+              </div>
             </div>
-            {brand.mirrors.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 4, textTransform: "uppercase" }}>Mirrors:</div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {brand.mirrors.map((m, i) => (
-                    <span key={i} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, background: m === brand.activeMirror ? c.successBg : c.surface, color: m === brand.activeMirror ? c.success : c.textMuted, border: `1px solid ${m === brand.activeMirror ? "rgba(34,197,94,0.3)" : c.border}` }}>
-                      {m}{m === brand.activeMirror && " (active)"}
-                    </span>
-                  ))}
+
+            {/* Expanded */}
+            {!brand.collapsed && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div><label style={labelStyle}>Brand Name</label><input value={brand.brand || ""} onChange={e => updateBrand(brand.id, "brand", e.target.value)} placeholder="e.g. Shark Casino" style={{ ...inputStyle, width: "100%" }} /></div>
+                  <div><label style={labelStyle}>Domain</label><input value={brand.domain || ""} onChange={e => updateBrand(brand.id, "domain", e.target.value)} placeholder="e.g. sharkcasino.com" style={{ ...inputStyle, width: "100%" }} /></div>
                 </div>
               </div>
             )}
@@ -3591,7 +3599,8 @@ function AviroDashboard() {
         ))}
       </div>
     </div>
-  );
+    );
+  };
 
   // ===== DAILY PROGRESS =====
   const renderDailyProgress = () => {
