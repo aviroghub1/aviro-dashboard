@@ -35,7 +35,7 @@ const CORPORATE_ENTITIES = {
       csp: { name: "Anjouan Corporate Services", contact: "compliance@acs.com" },
       domains: ["sharkcasino.com", "rocketbet.com"], sealCodes: { "sharkcasino.com": "AHL-SC-2024-001", "rocketbet.com": "AHL-RB-2024-001" },
       footerText: "Astor Holdings Limited is licensed and regulated by the Anjouan Gaming Authority. License No: AHL-2024-001",
-      bankAccounts: [{ bank: "Privalgo", currency: "EUR", status: "Active" }],
+      bankAccounts: [],
       contracts: ["Payment Processing Agreement with PT Wolven Services Ltd", "Software License with Aviro Technology Services LLC-FZ"],
       agreements: ["Revenue share agreement with Blue Orbit Management Inc.", "Sub-licensing agreement with NexGen Entertainment Ltd"],
       documents: [
@@ -52,7 +52,7 @@ const CORPORATE_ENTITIES = {
       csp: { name: "Anjouan Corporate Services", contact: "compliance@acs.com" },
       domains: ["puntersvip.io", "elitebet.com"], sealCodes: { "puntersvip.io": "VL-PV-2024-001", "elitebet.com": "VL-EB-2024-001" },
       footerText: "Vesaro Limited is licensed and regulated by the Anjouan Gaming Authority. License No: VL-2024-002",
-      bankAccounts: [{ bank: "Equals", currency: "EUR", status: "Pending" }, { bank: "OneFinance", currency: "EUR", status: "Active" }],
+      bankAccounts: [],
       contracts: ["Payment Processing Agreement with Areoncorp Ltd", "Software License with Aviro Technology Services LLC-FZ"],
       agreements: ["Revenue share agreement with Blue Orbit Management Inc."],
       documents: [
@@ -69,7 +69,7 @@ const CORPORATE_ENTITIES = {
       csp: { name: "Curacao Gaming Authority", contact: "licensing@cga.cw" },
       domains: ["bet-40.com"], sealCodes: { "bet-40.com": "RBE-B40-2024-001" },
       footerText: "R Bostock Enterprises BV operates under the Curacao Gaming Authority.",
-      bankAccounts: [{ bank: "P8Swiss", currency: "EUR", status: "Pending" }],
+      bankAccounts: [],
       contracts: ["Payment Processing Agreement with PK Investitute Ltd"],
       agreements: ["Management agreement with Blue Orbit Management Inc."],
       documents: [
@@ -85,7 +85,7 @@ const CORPORATE_ENTITIES = {
       csp: { name: "Tobique Gaming Commission", contact: "info@tobiquegaming.com" },
       domains: ["ukingbet.com", "acr-poker.com"], sealCodes: { "ukingbet.com": "NEL-UK-2024-001", "acr-poker.com": "NEL-ACR-2024-001" },
       footerText: "NexGen Entertainment Ltd is licensed by the Tobique Gaming Commission.",
-      bankAccounts: [{ bank: "Frontier Pay", currency: "USD", status: "Pending" }],
+      bankAccounts: [],
       contracts: ["Payment Processing Agreement with JJ Emicorp Ltd"],
       agreements: ["Sub-license agreement with Astor Holdings Limited"],
       documents: [
@@ -106,7 +106,7 @@ const CORPORATE_ENTITIES = {
       csp: { name: "Anjouan Corporate Services", contact: "compliance@acs.com" },
       domains: ["ultimacasino.com"], sealCodes: { "ultimacasino.com": "UEL-UC-2024-001" },
       footerText: "Ultima Entertainment Ltd is licensed and regulated by the Anjouan Gaming Authority.",
-      bankAccounts: [{ bank: "Privalgo", currency: "EUR", status: "Active" }],
+      bankAccounts: [],
       contracts: ["Software License with Aviro Technology Services LLC-FZ"],
       agreements: ["Revenue share with Cronus Global Foundation"],
       documents: [
@@ -118,18 +118,18 @@ const CORPORATE_ENTITIES = {
   ],
   "Payment Agents": [
     { name: "PT Wolven Services Ltd", jurisdiction: "Cyprus", companyNumber: "PWS-CY-001", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [{ bank: "Privalgo", currency: "EUR", status: "Active" }],
+      bankAccounts: [],
       contracts: ["Payment agent agreement with Astor Holdings Limited", "Payment agent agreement with Vesaro Ltd"],
       agreements: ["Intra-company transfer agreement with Blue Orbit Management Inc."],
       documents: [{ name: "Certificate of Incorporation", expiry: "2027-05-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-06-15", status: "review_soon" }, { name: "Proof of Address", expiry: "2026-04-25", status: "expiring" }]
     },
     { name: "Areoncorp Ltd", jurisdiction: "UK", companyNumber: "AC-UK-002", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [{ bank: "Equals", currency: "GBP", status: "Pending" }],
+      bankAccounts: [],
       contracts: ["Payment agent agreement with Vesaro Ltd"], agreements: ["Service agreement with Blue Orbit Management Inc."],
       documents: [{ name: "Certificate of Incorporation", expiry: "2027-08-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-07-01", status: "valid" }]
     },
     { name: "PK Investitute Ltd", jurisdiction: "UK", companyNumber: "PKI-UK-003", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [{ bank: "OneFinance", currency: "GBP", status: "Active" }],
+      bankAccounts: [],
       contracts: ["Payment agent agreement with R Bostock Enterprises BV"], agreements: [],
       documents: [{ name: "Certificate of Incorporation", expiry: "2027-03-15", status: "valid" }, { name: "UBO Declaration", expiry: "2026-08-01", status: "valid" }]
     },
@@ -140,7 +140,7 @@ const CORPORATE_ENTITIES = {
   ],
   "Technology Companies": [
     { name: "Aviro Technology Services LLC-FZ", jurisdiction: "UAE (Free Zone)", companyNumber: "ATS-UAE-001", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [{ bank: "Privalgo", currency: "USD", status: "Active" }],
+      bankAccounts: [],
       contracts: ["Software license to Astor Holdings Limited", "Software license to Vesaro Ltd", "Software license to Ultima Entertainment Ltd"],
       agreements: ["Technology partnership with Blue Orbit Management Inc."],
       documents: [{ name: "Trade License", expiry: "2026-12-31", status: "valid" }, { name: "Certificate of Incorporation", expiry: "2027-02-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-05-30", status: "review_soon" }]
@@ -148,7 +148,7 @@ const CORPORATE_ENTITIES = {
   ],
   "Management Companies": [
     { name: "Blue Orbit Management Inc.", jurisdiction: "Canada", companyNumber: "BOM-CA-001", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [{ bank: "Privalgo", currency: "CAD", status: "Active" }],
+      bankAccounts: [],
       contracts: ["Management agreement with all gaming license entities"],
       agreements: ["Revenue share with Astor Holdings Limited", "Revenue share with Vesaro Ltd", "Service agreement with Areoncorp Ltd"],
       documents: [{ name: "Certificate of Incorporation", expiry: "2027-09-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-10-01", status: "valid" }]
@@ -156,7 +156,7 @@ const CORPORATE_ENTITIES = {
   ],
   "Canada MSB": [
     { name: "Cube Pay Inc.", jurisdiction: "Canada", companyNumber: "CPI-CA-001", ubo: "David Nicholson", director: "David Nicholson",
-      bankAccounts: [{ bank: "Unison", currency: "CAD", status: "Application" }, { bank: "Privalgo", currency: "EUR", status: "Active" }],
+      bankAccounts: [],
       contracts: ["MSB services for all group payment processing"], agreements: ["Gateway.io platform agreement"],
       documents: [{ name: "MSB Registration", expiry: "2026-12-31", status: "valid" }, { name: "Certificate of Incorporation", expiry: "2027-04-01", status: "valid" }, { name: "UBO Declaration", expiry: "2026-06-01", status: "review_soon" }]
     },
@@ -665,6 +665,8 @@ function AviroDashboard() {
   const [entityServiceProviders, setEntityServiceProviders] = useState({}); // { "Entity Name": [{ id, name, company, email, phone, notes }] }
   const [entitySeals, setEntitySeals] = useState({}); // { "Entity Name": [{ id, domainName, proofFileName, proofFileUrl, mirrorRangeStart, mirrorRangeEnd, licenseSeals: [{ id, name, sealCode }], collapsed }] }
   const [entityFooters, setEntityFooters] = useState({}); // { "Entity Name": "footer text" }
+  const [bankRelationships, setBankRelationships] = useState([]); // [{ id, bankName, mainContact, relationshipLevel, contactEmail, contactPhone, offeredServices:[], supportEmail, supportChannels:[], fees: { b2b: {pct,tx}, b2c: {pct,tx}, c2b: {pct,tx}, fx: {pct,tx} } }]
+  const [bankAccountsList, setBankAccountsList] = useState([]); // [{ id, bankRelId, entityName, accountPurpose:[], dateOpened, feesOverride: null|{...}, collapsed }]
   const [entityAlertsCollapsed, setEntityAlertsCollapsed] = useState(false);
   const [editingEntityField, setEditingEntityField] = useState(null); // "fieldName" being edited
 
@@ -694,11 +696,12 @@ function AviroDashboard() {
         signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems,
         calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
         entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
+        bankRelationships, bankAccountsList,
         supabaseUrl, supabaseKey,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, supabaseUrl, supabaseKey]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, bankRelationships, bankAccountsList, supabaseUrl, supabaseKey]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -735,6 +738,8 @@ function AviroDashboard() {
         if (s.entityServiceProviders) setEntityServiceProviders(s.entityServiceProviders);
         if (s.entitySeals) setEntitySeals(s.entitySeals);
         if (s.entityFooters) setEntityFooters(s.entityFooters);
+        if (s.bankRelationships) setBankRelationships(s.bankRelationships);
+        if (s.bankAccountsList) setBankAccountsList(s.bankAccountsList);
         if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
         if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
       }
@@ -965,10 +970,11 @@ function AviroDashboard() {
 
       if (footer) { summary += "FOOTER TEXT\n───────────────────────────────────────────\n" + footer + "\n\n"; }
 
-      if ((entity.bankAccounts || []).length > 0) {
+      const linkedBankAccts = bankAccountsList.filter(a => a.entityName === entityName);
+      if (linkedBankAccts.length > 0) {
         summary += "BANK ACCOUNTS\n";
         summary += "───────────────────────────────────────────\n";
-        entity.bankAccounts.forEach(b => { summary += "  " + b.bank + " — " + b.currency + " (" + b.status + ")\n"; });
+        linkedBankAccts.forEach(a => { const rel = bankRelationships.find(r => r.id === a.bankRelId); summary += "  " + (rel ? rel.bankName : "Unknown") + " — " + ((a.accountPurpose || []).join(", ") || "No purpose") + (a.dateOpened ? " (Opened " + a.dateOpened + ")" : "") + "\n"; });
       }
 
       zip.file("00_SUMMARY.txt", summary);
@@ -1138,10 +1144,7 @@ function AviroDashboard() {
     });
   });
 
-  const allBankAccounts = [];
-  Object.entries(CORPORATE_ENTITIES).forEach(([cat, entities]) => {
-    entities.forEach(e => { (e.bankAccounts || []).forEach(b => { allBankAccounts.push({ entity: e.name, category: cat, ...b }); }); });
-  });
+  // Bank accounts are now managed centrally via bankRelationships + bankAccountsList state
 
   const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0-23 (midnight to midnight)
   const scrollRef = useRef(null);
@@ -3081,18 +3084,29 @@ function AviroDashboard() {
           ))}
         </div>
 
-        {/* G: Bank Accounts */}
-        <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Bank Accounts</h3>
-          {(entity.bankAccounts || []).length === 0 ? <div style={{ fontSize: 12, color: c.textMuted }}>No accounts linked</div> :
-            entity.bankAccounts.map((b, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${c.border}` }}>
-                <span style={{ fontSize: 13, color: c.text }}>{b.bank}</span>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ fontSize: 11, color: c.textMuted }}>{b.currency}</span><StatusBadge status={b.status} /></div>
-              </div>
-            ))
-          }
-        </div>
+        {/* G: Bank Accounts — from central banking system */}
+        {(() => {
+          const linkedAccounts = bankAccountsList.filter(a => a.entityName === entity.name);
+          return (
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Bank Accounts</h3>
+            {linkedAccounts.length === 0 ? (
+              <div style={{ fontSize: 12, color: c.textMuted }}>No accounts linked to this entity. <span style={{ color: c.accent, cursor: "pointer", textDecoration: "underline" }} onClick={() => { setActiveSection("banks"); }}>Go to Banking →</span></div>
+            ) : linkedAccounts.map(acct => {
+              const rel = bankRelationships.find(r => r.id === acct.bankRelId);
+              return (
+                <div key={acct.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${c.border}` }}>
+                  <div>
+                    <div style={{ fontSize: 13, color: c.text, fontWeight: 500 }}>{rel ? rel.bankName : "Unknown Bank"}</div>
+                    <div style={{ fontSize: 11, color: c.textMuted }}>{(acct.accountPurpose || []).join(", ") || "No purpose set"}{acct.dateOpened ? ` · Opened ${acct.dateOpened}` : ""}</div>
+                  </div>
+                  {rel && rel.mainContact && <span style={{ fontSize: 10, color: c.textMuted }}>{rel.mainContact}</span>}
+                </div>
+              );
+            })}
+          </div>
+          );
+        })()}
       </div>
     );
   };
@@ -3226,7 +3240,7 @@ function AviroDashboard() {
                     <div style={{ fontSize: 12, color: c.textSecondary }}>{entity.jurisdiction}</div>
                     <div style={{ fontSize: 11, color: c.textMuted }}>{entity.companyNumber}</div>
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                      {(entity.bankAccounts || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 6px", borderRadius: 3 }}>{entity.bankAccounts.length} bank</span>}
+                      {bankAccountsList.filter(a => a.entityName === entity.name).length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 6px", borderRadius: 3 }}>{bankAccountsList.filter(a => a.entityName === entity.name).length} bank</span>}
                       {(entity.contracts || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 6px", borderRadius: 3 }}>{entity.contracts.length} contracts</span>}
                       {(entity.domains || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 6px", borderRadius: 3 }}>{entity.domains.length} domains</span>}
                     </div>
@@ -3264,25 +3278,287 @@ function AviroDashboard() {
   );
 
   // ===== BANK ACCOUNTS =====
-  const renderBanks = () => (
+  const SERVICE_OPTIONS = ["C2B", "B2C", "B2B", "Treasury", "Internal"];
+  const FEE_TYPES = ["B2B", "B2C", "C2B", "FX"];
+  const allEntityNames = Object.values(CORPORATE_ENTITIES).flat().map(e => e.name);
+
+  const renderBanks = () => {
+    const updateRel = (id, field, val) => setBankRelationships(bankRelationships.map(r => r.id === id ? { ...r, [field]: val } : r));
+    const updateRelFee = (id, feeType, feeField, val) => {
+      setBankRelationships(bankRelationships.map(r => {
+        if (r.id !== id) return r;
+        const fees = { ...(r.fees || {}) };
+        fees[feeType] = { ...(fees[feeType] || { pct: "", tx: "" }), [feeField]: val };
+        return { ...r, fees };
+      }));
+    };
+    const toggleRelService = (id, svc) => {
+      setBankRelationships(bankRelationships.map(r => {
+        if (r.id !== id) return r;
+        const svcs = r.offeredServices || [];
+        return { ...r, offeredServices: svcs.includes(svc) ? svcs.filter(s => s !== svc) : [...svcs, svc] };
+      }));
+    };
+    const addSupportChannel = (id) => {
+      setBankRelationships(bankRelationships.map(r => r.id === id ? { ...r, supportChannels: [...(r.supportChannels || []), ""] } : r));
+    };
+    const updateSupportChannel = (id, idx, val) => {
+      setBankRelationships(bankRelationships.map(r => {
+        if (r.id !== id) return r;
+        const ch = [...(r.supportChannels || [])];
+        ch[idx] = val;
+        return { ...r, supportChannels: ch };
+      }));
+    };
+    const removeSupportChannel = (id, idx) => {
+      setBankRelationships(bankRelationships.map(r => {
+        if (r.id !== id) return r;
+        return { ...r, supportChannels: (r.supportChannels || []).filter((_, i) => i !== idx) };
+      }));
+    };
+
+    const updateAcct = (id, field, val) => setBankAccountsList(bankAccountsList.map(a => a.id === id ? { ...a, [field]: val } : a));
+    const toggleAcctPurpose = (id, purpose) => {
+      setBankAccountsList(bankAccountsList.map(a => {
+        if (a.id !== id) return a;
+        const p = a.accountPurpose || [];
+        return { ...a, accountPurpose: p.includes(purpose) ? p.filter(x => x !== purpose) : [...p, purpose] };
+      }));
+    };
+
+    const inputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const labelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
+
+    return (
     <div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 24px 0" }}>Bank Accounts Summary</h2>
-      <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 80px 100px", padding: "12px 20px", background: c.surface, borderBottom: `1px solid ${c.border}` }}>
-          {["Entity", "Category", "Bank", "Currency", "Status"].map(h => <span key={h} style={{ fontSize: 11, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>{h}</span>)}
+      <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 6px 0" }}>Banking</h2>
+      <p style={{ color: c.textSecondary, fontSize: 13, margin: "0 0 24px 0" }}>{bankRelationships.length} bank relationship{bankRelationships.length !== 1 ? "s" : ""}, {bankAccountsList.length} account{bankAccountsList.length !== 1 ? "s" : ""}</p>
+
+      {/* ===== SECTION 1: BANK RELATIONSHIPS ===== */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: c.text, margin: 0 }}>Bank Relationships</h3>
+          <button onClick={() => {
+            setBankRelationships([...bankRelationships, {
+              id: `br-${Date.now()}`, bankName: "", mainContact: "", relationshipLevel: 5, contactEmail: "", contactPhone: "",
+              offeredServices: [], supportEmail: "", supportChannels: [],
+              fees: { B2B: { pct: "", tx: "" }, B2C: { pct: "", tx: "" }, C2B: { pct: "", tx: "" }, FX: { pct: "", tx: "" } },
+              collapsed: false,
+            }]);
+          }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "7px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Bank Relationship</button>
         </div>
-        {allBankAccounts.map((acc, i) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 80px 100px", padding: "10px 20px", borderBottom: `1px solid ${c.border}`, alignItems: "center" }}>
-            <span style={{ fontSize: 13, color: c.text, fontWeight: 500 }}>{acc.entity}</span>
-            <span style={{ fontSize: 12, color: c.textSecondary }}>{acc.category}</span>
-            <span style={{ fontSize: 13, color: c.text }}>{acc.bank}</span>
-            <span style={{ fontSize: 12, color: c.textMuted }}>{acc.currency}</span>
-            <StatusBadge status={acc.status} />
+
+        {bankRelationships.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No bank relationships added yet.</div>}
+
+        {bankRelationships.map(rel => (
+          <div key={rel.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 10 }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: c.text }}>{rel.bankName || "New Bank"}</span>
+                {rel.relationshipLevel && <span style={{ fontSize: 10, color: c.accent, background: `${c.accent}15`, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Level {rel.relationshipLevel}/10</span>}
+                {(rel.offeredServices || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{rel.offeredServices.join(", ")}</span>}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => updateRel(rel.id, "collapsed", !rel.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{rel.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
+                <button onClick={() => setBankRelationships(bankRelationships.filter(r => r.id !== rel.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+              </div>
+            </div>
+
+            {/* Expanded */}
+            {!rel.collapsed && (
+              <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                {/* Row 1: Name + Contact + Level */}
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr", gap: 10 }}>
+                  <div><label style={labelStyle}>Bank Name</label><input value={rel.bankName || ""} onChange={e => updateRel(rel.id, "bankName", e.target.value)} placeholder="e.g. Privalgo" style={{ ...inputStyle, width: "100%" }} /></div>
+                  <div><label style={labelStyle}>Main Contact</label><input value={rel.mainContact || ""} onChange={e => updateRel(rel.id, "mainContact", e.target.value)} placeholder="Contact name" style={{ ...inputStyle, width: "100%" }} /></div>
+                  <div><label style={labelStyle}>Relationship Level</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input type="range" min="1" max="10" value={rel.relationshipLevel || 5} onChange={e => updateRel(rel.id, "relationshipLevel", parseInt(e.target.value))} style={{ flex: 1 }} />
+                      <span style={{ fontSize: 13, fontWeight: 700, color: c.accent, minWidth: 28, textAlign: "center" }}>{rel.relationshipLevel || 5}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 2: Contact details */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                  <div><label style={labelStyle}>Contact Email</label><input type="email" value={rel.contactEmail || ""} onChange={e => updateRel(rel.id, "contactEmail", e.target.value)} placeholder="contact@bank.com" style={{ ...inputStyle, width: "100%" }} /></div>
+                  <div><label style={labelStyle}>Contact Phone</label><input value={rel.contactPhone || ""} onChange={e => updateRel(rel.id, "contactPhone", e.target.value)} placeholder="+44..." style={{ ...inputStyle, width: "100%" }} /></div>
+                  <div><label style={labelStyle}>Support Email</label><input type="email" value={rel.supportEmail || ""} onChange={e => updateRel(rel.id, "supportEmail", e.target.value)} placeholder="support@bank.com" style={{ ...inputStyle, width: "100%" }} /></div>
+                </div>
+
+                {/* Offered Services */}
+                <div>
+                  <label style={labelStyle}>Offered Services</label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {SERVICE_OPTIONS.map(svc => {
+                      const active = (rel.offeredServices || []).includes(svc);
+                      return <button key={svc} onClick={() => toggleRelService(rel.id, svc)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: active ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: active ? `${c.accent}20` : "transparent", color: active ? c.accent : c.textMuted, transition: "all 0.15s" }}>{svc}</button>;
+                    })}
+                  </div>
+                </div>
+
+                {/* Support Channels */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>Support Channels</label>
+                    <button onClick={() => addSupportChannel(rel.id)} style={{ fontSize: 10, color: c.accent, background: `${c.accent}15`, border: `1px solid ${c.accent}40`, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontWeight: 600 }}>+ Add</button>
+                  </div>
+                  {(rel.supportChannels || []).map((ch, ci) => (
+                    <div key={ci} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                      <input value={ch} onChange={e => updateSupportChannel(rel.id, ci, e.target.value)} placeholder="e.g. Slack #bank-support, WhatsApp group..." style={{ ...inputStyle, flex: 1 }} />
+                      <button onClick={() => removeSupportChannel(rel.id, ci)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, padding: "2px 6px" }}>✕</button>
+                    </div>
+                  ))}
+                  {(rel.supportChannels || []).length === 0 && <div style={{ fontSize: 11, color: c.textMuted }}>No channels added</div>}
+                </div>
+
+                {/* Fees Grid */}
+                <div>
+                  <label style={labelStyle}>Fees</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr", gap: 6, alignItems: "center" }}>
+                    <span></span><span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textAlign: "center" }}>% Rate</span><span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textAlign: "center" }}>TX Fee</span>
+                    {FEE_TYPES.map(ft => (
+                      <React.Fragment key={ft}>
+                        <span style={{ fontSize: 11, color: c.textSecondary, fontWeight: 600 }}>{ft}</span>
+                        <input value={(rel.fees?.[ft]?.pct) || ""} onChange={e => updateRelFee(rel.id, ft, "pct", e.target.value)} placeholder="0.00%" style={{ ...inputStyle, textAlign: "center" }} />
+                        <input value={(rel.fees?.[ft]?.tx) || ""} onChange={e => updateRelFee(rel.id, ft, "tx", e.target.value)} placeholder="$0.00" style={{ ...inputStyle, textAlign: "center" }} />
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
+
+      {/* ===== SECTION 2: BANK ACCOUNTS ===== */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: c.text, margin: 0 }}>Bank Accounts</h3>
+          <button onClick={() => {
+            setBankAccountsList([...bankAccountsList, {
+              id: `ba-${Date.now()}`, bankRelId: "", entityName: "", accountPurpose: [],
+              dateOpened: "", feesOverride: null, collapsed: false,
+            }]);
+          }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "7px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Bank Account</button>
+        </div>
+
+        {bankAccountsList.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No bank accounts added yet.</div>}
+
+        {bankAccountsList.map(acct => {
+          const linkedRel = bankRelationships.find(r => r.id === acct.bankRelId);
+          const acctFees = acct.feesOverride || (linkedRel ? linkedRel.fees : null);
+          return (
+          <div key={acct.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 10 }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: c.text }}>{linkedRel ? linkedRel.bankName : "No Bank"}</span>
+                <span style={{ fontSize: 11, color: c.textSecondary }}>→</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: c.text }}>{acct.entityName || "No Entity"}</span>
+                {(acct.accountPurpose || []).length > 0 && (acct.accountPurpose || []).map(p => (
+                  <span key={p} style={{ fontSize: 9, color: c.accent, background: `${c.accent}15`, padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>{p}</span>
+                ))}
+                {acct.dateOpened && <span style={{ fontSize: 10, color: c.textMuted }}>Opened {acct.dateOpened}</span>}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => updateAcct(acct.id, "collapsed", !acct.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{acct.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
+                <button onClick={() => setBankAccountsList(bankAccountsList.filter(a => a.id !== acct.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+              </div>
+            </div>
+
+            {/* Expanded */}
+            {!acct.collapsed && (
+              <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                  {/* Bank select */}
+                  <div>
+                    <label style={labelStyle}>Bank</label>
+                    <select value={acct.bankRelId || ""} onChange={e => updateAcct(acct.id, "bankRelId", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                      <option value="">— Select Bank —</option>
+                      {bankRelationships.map(r => <option key={r.id} value={r.id}>{r.bankName || "Unnamed"}</option>)}
+                    </select>
+                  </div>
+                  {/* Entity select */}
+                  <div>
+                    <label style={labelStyle}>Entity</label>
+                    <select value={acct.entityName || ""} onChange={e => updateAcct(acct.id, "entityName", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                      <option value="">— Select Entity —</option>
+                      {allEntityNames.map(en => <option key={en} value={en}>{en}</option>)}
+                    </select>
+                  </div>
+                  {/* Date Opened */}
+                  <div>
+                    <label style={labelStyle}>Date Opened</label>
+                    <input type="date" value={acct.dateOpened || ""} onChange={e => updateAcct(acct.id, "dateOpened", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                  </div>
+                </div>
+
+                {/* Account Purpose */}
+                <div>
+                  <label style={labelStyle}>Account Purpose</label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {["B2B", "C2B", "B2C", "Treasury"].map(p => {
+                      const active = (acct.accountPurpose || []).includes(p);
+                      return <button key={p} onClick={() => toggleAcctPurpose(acct.id, p)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: active ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: active ? `${c.accent}20` : "transparent", color: active ? c.accent : c.textMuted, transition: "all 0.15s" }}>{p}</button>;
+                    })}
+                  </div>
+                </div>
+
+                {/* Fees — inherited or overridden */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>Fees {acct.feesOverride ? "(Manual Override)" : linkedRel ? `(From ${linkedRel.bankName})` : "(No bank linked)"}</label>
+                    {linkedRel && !acct.feesOverride && (
+                      <button onClick={() => updateAcct(acct.id, "feesOverride", linkedRel.fees ? { ...linkedRel.fees } : { B2B: { pct: "", tx: "" }, B2C: { pct: "", tx: "" }, C2B: { pct: "", tx: "" }, FX: { pct: "", tx: "" } })} style={{ fontSize: 10, color: c.accent, background: `${c.accent}15`, border: `1px solid ${c.accent}40`, borderRadius: 4, padding: "2px 8px", cursor: "pointer" }}>Override Manually</button>
+                    )}
+                    {acct.feesOverride && (
+                      <button onClick={() => updateAcct(acct.id, "feesOverride", null)} style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 4, padding: "2px 8px", cursor: "pointer" }}>Use Bank Fees</button>
+                    )}
+                  </div>
+                  {acctFees ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr", gap: 6, alignItems: "center" }}>
+                      <span></span><span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textAlign: "center" }}>% Rate</span><span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textAlign: "center" }}>TX Fee</span>
+                      {FEE_TYPES.map(ft => (
+                        <React.Fragment key={ft}>
+                          <span style={{ fontSize: 11, color: c.textSecondary, fontWeight: 600 }}>{ft}</span>
+                          {acct.feesOverride ? (
+                            <>
+                              <input value={(acct.feesOverride[ft]?.pct) || ""} onChange={e => {
+                                const f = { ...(acct.feesOverride || {}) };
+                                f[ft] = { ...(f[ft] || {}), pct: e.target.value };
+                                updateAcct(acct.id, "feesOverride", f);
+                              }} placeholder="0.00%" style={{ ...inputStyle, textAlign: "center" }} />
+                              <input value={(acct.feesOverride[ft]?.tx) || ""} onChange={e => {
+                                const f = { ...(acct.feesOverride || {}) };
+                                f[ft] = { ...(f[ft] || {}), tx: e.target.value };
+                                updateAcct(acct.id, "feesOverride", f);
+                              }} placeholder="$0.00" style={{ ...inputStyle, textAlign: "center" }} />
+                            </>
+                          ) : (
+                            <>
+                              <span style={{ fontSize: 12, color: c.text, textAlign: "center" }}>{acctFees[ft]?.pct || "—"}</span>
+                              <span style={{ fontSize: 12, color: c.text, textAlign: "center" }}>{acctFees[ft]?.tx || "—"}</span>
+                            </>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: c.textMuted }}>Select a bank to see inherited fees, or override manually.</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          );
+        })}
+      </div>
     </div>
-  );
+    );
+  };
 
   // ===== GAMING BRANDS =====
   const renderBrands = () => (
