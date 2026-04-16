@@ -3329,9 +3329,12 @@ function AviroDashboard() {
                     </div>
 
                     {/* Service type */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: svc.serviceType2 === "Cards" ? "1fr 1fr 1fr" : "1fr 1fr", gap: 10 }}>
                       <div><label style={labelStyle3}>Service Type</label><select value={svc.serviceType1 || ""} onChange={e => updateService(prov.id, svc.id, "serviceType1", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{SERVICE_TYPES_1.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                       <div><label style={labelStyle3}>Channel</label><select value={svc.serviceType2 || ""} onChange={e => updateService(prov.id, svc.id, "serviceType2", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{SERVICE_TYPES_2.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                      {svc.serviceType2 === "Cards" && (
+                        <div><label style={labelStyle3}>Card Type</label><select value={svc.cardType || ""} onChange={e => updateService(prov.id, svc.id, "cardType", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option><option value="7995">7995</option><option value="6051">6051</option><option value="Other">Other</option></select></div>
+                      )}
                     </div>
 
                     {/* Regions */}
@@ -3346,17 +3349,54 @@ function AviroDashboard() {
                     </div>
 
                     {/* Agreement & Entities */}
-                    <div><label style={labelStyle3}>Agreement Type</label><select value={svc.agreementType || ""} onChange={e => updateService(prov.id, svc.id, "agreementType", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{AGREEMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                    <div>
-                      <label style={labelStyle3}>Entity/ies Onboarded With</label>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                        {entityNames.map(en => {
-                          const sel = (svc.entities || []).includes(en);
-                          return <button key={en} onClick={() => { const ents = svc.entities || []; updateService(prov.id, svc.id, "entities", sel ? ents.filter(x => x !== en) : [...ents, en]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? c.accentBg : c.surface, color: sel ? c.accent : c.textMuted, border: `1px solid ${sel ? c.accent + "40" : c.border}` }}>{en}</button>;
-                        })}
-                        {entityNames.length === 0 && <span style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>No entities — add them in Corporate Matrix</span>}
-                      </div>
-                    </div>
+                    <div><label style={labelStyle3}>Agreement Type</label><select value={svc.agreementType || ""} onChange={e => { updateService(prov.id, svc.id, "agreementType", e.target.value); updateService(prov.id, svc.id, "entities", []); }} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{AGREEMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    {svc.agreementType && (() => {
+                      const financialInstitutes = corporateEntities.filter(e => e.category === "Financial Institute").map(e => e.name);
+                      const paymentAgents = corporateEntities.filter(e => e.category === "Payment Agent").map(e => e.name);
+                      const gamingLicenses = corporateEntities.filter(e => e.category === "Gaming License").map(e => e.name);
+                      const clientNames = gatewayClients.map(cl2 => cl2.name);
+
+                      let options = [];
+                      let label = "Entity/ies Onboarded With";
+                      if (svc.agreementType === "PayFac" || svc.agreementType === "MOR") {
+                        options = financialInstitutes;
+                        label = "Financial Institution(s)";
+                      } else if (svc.agreementType === "Payment Agent") {
+                        options = paymentAgents;
+                        label = "Payment Agent(s)";
+                      } else if (svc.agreementType === "Direct to Merchant") {
+                        options = [...gamingLicenses.map(n => ({ name: n, type: "License" })), ...clientNames.map(n => ({ name: n, type: "Client" }))];
+                      }
+
+                      if (svc.agreementType === "Direct to Merchant") {
+                        return (
+                          <div>
+                            <label style={labelStyle3}>Gaming License / Client</label>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                              {options.map(opt => {
+                                const sel = (svc.entities || []).includes(opt.name);
+                                const isLicense = opt.type === "License";
+                                return <button key={opt.name} onClick={() => { const ents = svc.entities || []; updateService(prov.id, svc.id, "entities", sel ? ents.filter(x => x !== opt.name) : [...ents, opt.name]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? (isLicense ? "rgba(139,92,246,0.12)" : c.accentBg) : c.surface, color: sel ? (isLicense ? "#8b5cf6" : c.accent) : c.textMuted, border: `1px solid ${sel ? (isLicense ? "rgba(139,92,246,0.4)" : c.accent + "40") : c.border}` }}>{isLicense ? "🔑 " : "👤 "}{opt.name}</button>;
+                              })}
+                              {options.length === 0 && <span style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>No gaming licenses or clients found</span>}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div>
+                          <label style={labelStyle3}>{label}</label>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                            {options.map(en => {
+                              const sel = (svc.entities || []).includes(en);
+                              return <button key={en} onClick={() => { const ents = svc.entities || []; updateService(prov.id, svc.id, "entities", sel ? ents.filter(x => x !== en) : [...ents, en]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? c.accentBg : c.surface, color: sel ? c.accent : c.textMuted, border: `1px solid ${sel ? c.accent + "40" : c.border}` }}>{en}</button>;
+                            })}
+                            {options.length === 0 && <span style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>No {svc.agreementType === "Payment Agent" ? "payment agents" : "financial institutions"} in Corporate Matrix</span>}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Right col */}
