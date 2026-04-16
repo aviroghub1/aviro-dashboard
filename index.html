@@ -205,7 +205,7 @@ function AviroDashboard() {
   const [collapsed, setCollapsed] = useState(false);
 
   // Calendar state
-  const [selectedDate, setSelectedDate] = useState(new Date(2026, 3, 13));
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [calEvents, setCalEvents] = useState([
     { id: "gc0", date: "2026-04-06", startHour: 6.0, endHour: 6.5, title: "FYI - Update Mirror domains on all licenses", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
     { id: "gc1", date: "2026-04-06", startHour: 6.5, endHour: 7.5, title: "FYI License updates - weekly checks", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
