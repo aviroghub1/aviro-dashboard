@@ -2991,7 +2991,8 @@ function AviroDashboard() {
                   const updates = { stage: st };
                   if (st === "Testing") updates.testStarted = true;
                   if (st === "Deployed") { updates.deployedSuccessfully = true; updates.testStarted = true; updates.deployedDate = new Date().toISOString().split("T")[0]; }
-                  if (st === "Roadmap" || st === "Planning") { updates.testStarted = false; updates.deployedSuccessfully = false; updates.pace = ""; }
+                  if (st === "Roadmap" || st === "Planning" || st === "Execution") { updates.testStarted = false; updates.deployedSuccessfully = false; }
+                  if (st === "Roadmap" || st === "Planning") { updates.pace = ""; }
                   setIntegrations(integrations.map(x => x.id === ig.id ? { ...x, ...updates } : x));
                 }} style={{ flex: 1, padding: "10px 8px", borderRadius: 8, textAlign: "center", cursor: "pointer", background: isActive ? sc.bg : c.surface, border: `2px solid ${isCurrent ? sc.text : isActive ? sc.border : c.border}`, transition: "all 0.15s" }}>
                   <div style={{ fontSize: 12, fontWeight: isCurrent ? 700 : 500, color: isActive ? sc.text : c.textMuted }}>{st}</div>
@@ -3109,19 +3110,20 @@ function AviroDashboard() {
                 <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Status</h3>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${c.border}` }}>
                   <span style={{ fontSize: 13, color: c.text }}>Testing Started</span>
-                  <div onClick={() => { if (ig.stage !== "Testing" && ig.stage !== "Deployed") updateIntegration(ig.id, "testStarted", !ig.testStarted); }} style={{ width: 40, height: 22, borderRadius: 11, background: ig.testStarted ? c.success : c.surface, border: `1px solid ${ig.testStarted ? c.success : c.border}`, cursor: (ig.stage === "Testing" || ig.stage === "Deployed") ? "default" : "pointer", position: "relative", transition: "all 0.2s" }}>
+                  <div onClick={() => { if (ig.stage === "Testing" || ig.stage === "Deployed") return; if (ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution") return; updateIntegration(ig.id, "testStarted", !ig.testStarted); }} style={{ width: 40, height: 22, borderRadius: 11, background: (ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution") ? c.surface : ig.testStarted ? c.success : c.surface, border: `1px solid ${(ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution") ? c.border : ig.testStarted ? c.success : c.border}`, cursor: (ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution" || ig.stage === "Testing" || ig.stage === "Deployed") ? "default" : "pointer", position: "relative", transition: "all 0.2s", opacity: (ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution") ? 0.4 : 1 }}>
                     <div style={{ width: 16, height: 16, borderRadius: 8, background: "#fff", position: "absolute", top: 2, left: ig.testStarted ? 21 : 2, transition: "left 0.2s" }} />
                   </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0" }}>
                   <span style={{ fontSize: 13, color: c.text }}>Deployed Successfully</span>
                   <div onClick={() => {
+                    if (ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution") return;
                     if (!ig.deployedSuccessfully) {
                       setIntegrations(integrations.map(x => x.id === ig.id ? { ...x, deployedSuccessfully: true, stage: "Deployed", testStarted: true, deployedDate: x.deployedDate || new Date().toISOString().split("T")[0] } : x));
                     } else {
                       updateIntegration(ig.id, "deployedSuccessfully", false);
                     }
-                  }} style={{ width: 40, height: 22, borderRadius: 11, background: ig.deployedSuccessfully ? c.success : c.surface, border: `1px solid ${ig.deployedSuccessfully ? c.success : c.border}`, cursor: "pointer", position: "relative", transition: "all 0.2s" }}>
+                  }} style={{ width: 40, height: 22, borderRadius: 11, background: (ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution") ? c.surface : ig.deployedSuccessfully ? c.success : c.surface, border: `1px solid ${(ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution") ? c.border : ig.deployedSuccessfully ? c.success : c.border}`, cursor: (ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution") ? "default" : "pointer", position: "relative", transition: "all 0.2s", opacity: (ig.stage === "Roadmap" || ig.stage === "Planning" || ig.stage === "Execution") ? 0.4 : 1 }}>
                     <div style={{ width: 16, height: 16, borderRadius: 8, background: "#fff", position: "absolute", top: 2, left: ig.deployedSuccessfully ? 21 : 2, transition: "left 0.2s" }} />
                   </div>
                 </div>
