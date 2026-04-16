@@ -3310,12 +3310,20 @@ function AviroDashboard() {
             const showPayout = svc.serviceType1 === "Payout" || svc.serviceType1 === "Both";
             return (
               <div key={svc.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: c.accent, background: c.accentBg, padding: "2px 8px", borderRadius: 4 }}>SERVICE {svcIdx + 1}</span>
                     {svc.name && <span style={{ fontSize: 15, fontWeight: 700, color: c.text }}>{svc.name}</span>}
                   </div>
                   <button onClick={() => { if (confirm("Delete this service?")) updateProvider(prov.id, "services", svcs.filter(s => s.id !== svc.id)); }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Delete</button>
+                </div>
+                {/* Service Status */}
+                <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+                  {["Onboarding", "Integrating", "Active", "Deactivated"].map(st => {
+                    const sel = svc.serviceStatus === st;
+                    const stColor = st === "Active" ? "#22c55e" : st === "Deactivated" ? "#ef4444" : st === "Integrating" ? "#f59e0b" : "#6366f1";
+                    return <button key={st} onClick={() => updateService(prov.id, svc.id, "serviceStatus", st)} style={{ flex: 1, padding: "7px 6px", borderRadius: 6, fontSize: 11, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? stColor + "18" : c.surface, color: sel ? stColor : c.textMuted, border: `2px solid ${sel ? stColor : c.border}`, transition: "all 0.15s" }}>{st}</button>;
+                  })}
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -3424,6 +3432,12 @@ function AviroDashboard() {
                             <div><label style={labelStyle3}>TX Fee</label><input value={svc.payinTxFee || ""} onChange={e => updateService(prov.id, svc.id, "payinTxFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle3, width: "100%" }} /></div>
                             <div><label style={labelStyle3}>Currency</label><select value={svc.payinTxCurrency || "USD"} onChange={e => updateService(prov.id, svc.id, "payinTxCurrency", e.target.value)} style={{ ...inputStyle3, width: "100%" }}>{FEE_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
                           </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                            <label style={{ ...labelStyle3, margin: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                              <input type="checkbox" checked={!!svc.payinICC} onChange={e => updateService(prov.id, svc.id, "payinICC", e.target.checked)} style={{ accentColor: c.accent }} />
+                              ICC++
+                            </label>
+                          </div>
                         </div>
                       )}
                       {showPayout && (
@@ -3434,14 +3448,42 @@ function AviroDashboard() {
                             <div><label style={labelStyle3}>TX Fee</label><input value={svc.payoutTxFee || ""} onChange={e => updateService(prov.id, svc.id, "payoutTxFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle3, width: "100%" }} /></div>
                             <div><label style={labelStyle3}>Currency</label><select value={svc.payoutTxCurrency || "USD"} onChange={e => updateService(prov.id, svc.id, "payoutTxCurrency", e.target.value)} style={{ ...inputStyle3, width: "100%" }}>{FEE_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
                           </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                            <label style={{ ...labelStyle3, margin: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                              <input type="checkbox" checked={!!svc.payoutICC} onChange={e => updateService(prov.id, svc.id, "payoutICC", e.target.checked)} style={{ accentColor: c.accent }} />
+                              ICC++
+                            </label>
+                          </div>
                         </div>
                       )}
                     </div>
 
                     {/* Settlement */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      <div><label style={labelStyle3}>Settlement Terms</label><select value={svc.settlementTerms || ""} onChange={e => updateService(prov.id, svc.id, "settlementTerms", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{SETTLEMENT_TERMS_P.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                      <div><label style={labelStyle3}>Settlement Fee</label><input value={svc.settlementFee || ""} onChange={e => updateService(prov.id, svc.id, "settlementFee", e.target.value)} placeholder="e.g. 0.10 EUR" style={{ ...inputStyle3, width: "100%" }} /></div>
+                    <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: `1px solid ${c.border}` }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" }}>Settlement</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+                        <div><label style={labelStyle3}>Settlement Terms</label><select value={svc.settlementTerms || ""} onChange={e => updateService(prov.id, svc.id, "settlementTerms", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{SETTLEMENT_TERMS_P.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                        <div><label style={labelStyle3}>Settlement Fee (%)</label><input value={svc.settlementFee || ""} onChange={e => updateService(prov.id, svc.id, "settlementFee", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
+                        <div><label style={labelStyle3}>Settlement Method</label><select value={svc.settlementMethod || ""} onChange={e => updateService(prov.id, svc.id, "settlementMethod", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option><option value="Fiat">Fiat</option><option value="Crypto">Crypto</option></select></div>
+                      </div>
+                      {svc.settlementMethod === "Fiat" && (() => {
+                        const selEntities = svc.entities || [];
+                        const matchedAccounts = bankAccountsList.filter(a => selEntities.includes(a.entityName));
+                        return (
+                          <div>
+                            <label style={labelStyle3}>Settlement Bank Account</label>
+                            <select value={svc.settlementBankAccount || ""} onChange={e => updateService(prov.id, svc.id, "settlementBankAccount", e.target.value)} style={{ ...inputStyle3, width: "100%" }}>
+                              <option value="">— Select Bank Account —</option>
+                              {matchedAccounts.map(acc => {
+                                const bankRel = bankRelationships.find(b => b.id === acc.bankRelId);
+                                const bankName = bankRel ? bankRel.bankName : "Unknown Bank";
+                                return <option key={acc.id} value={acc.id}>{bankName} — {acc.entityName}{acc.accountPurpose && acc.accountPurpose.length ? ` (${acc.accountPurpose.join(", ")})` : ""}</option>;
+                              })}
+                            </select>
+                            {matchedAccounts.length === 0 && <div style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic", marginTop: 4 }}>No bank accounts found for the selected entities. Add bank accounts in the Corporate Matrix section first.</div>}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
