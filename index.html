@@ -2676,26 +2676,106 @@ function AviroDashboard() {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <button onClick={() => { setSelectedEntity(null); setSelectedCategory(null); }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, padding: 0 }}>&larr; Back</button>
-          <button onClick={() => downloadEntityPack(entity.name)} disabled={packDownloading} style={{ background: packDownloading ? c.surface : c.accent, border: "none", color: packDownloading ? c.textMuted : "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: packDownloading ? "wait" : "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>{packDownloading ? "⟳ Building Pack..." : "↓ Download Company Pack"}</button>
+          <button onClick={() => downloadEntityPack(entity.name)} disabled={packDownloading} style={{ background: packDownloading ? c.surface : c.accent, border: "none", color: packDownloading ? c.textMuted : "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: packDownloading ? "wait" : "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>{packDownloading ? "⟳ Building Pack..." : "↓ Download Full KYB Pack"}</button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{entity.name}</h2>
           <span style={{ fontSize: 12, color: c.textMuted, background: c.surface, padding: "4px 10px", borderRadius: 6 }}>{category}</span>
         </div>
 
-        {/* A: Editable Company Details */}
+        {/* A: Entity Details + Licensing + UBO/Director */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
           <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Company Details</h3>
-            <EditableField label="Name" value={merged.name} fieldKey="name" />
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Entity Details</h3>
+            <EditableField label="Entity Name" value={merged.name} fieldKey="name" />
             <EditableField label="Jurisdiction" value={merged.jurisdiction} fieldKey="jurisdiction" />
             <EditableField label="Company No." value={merged.companyNumber} fieldKey="companyNumber" />
-            <EditableField label="License No." value={merged.licenseNumber || ""} fieldKey="licenseNumber" />
-            <EditableField label="Address" value={merged.address || ""} fieldKey="address" />
-            <EditableField label="UBO" value={merged.ubo || ""} fieldKey="ubo" />
-            <EditableField label="Director" value={merged.director || ""} fieldKey="director" />
+            <EditableField label="Registered Address" value={merged.address || ""} fieldKey="address" />
+
+            {/* Licensed toggle */}
+            <div style={{ padding: "10px 10px 4px 10px", marginTop: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <span style={{ color: c.textSecondary, fontSize: 12 }}>Licensed</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {["Yes", "No"].map(opt => (
+                    <button key={opt} onClick={() => {
+                      setCorporateEntities(corporateEntities.map(ce => ce.name === entity.name ? { ...ce, isLicensed: opt === "Yes" } : ce));
+                      setEntityOverrides({ ...entityOverrides, [entity.name]: { ...(entityOverrides[entity.name] || {}), isLicensed: opt === "Yes" } });
+                    }} style={{
+                      background: (merged.isLicensed === true && opt === "Yes") || (merged.isLicensed === false && opt === "No") ? `${c.accent}20` : "transparent",
+                      border: `1px solid ${(merged.isLicensed === true && opt === "Yes") || (merged.isLicensed === false && opt === "No") ? c.accent : c.border}`,
+                      color: (merged.isLicensed === true && opt === "Yes") || (merged.isLicensed === false && opt === "No") ? c.accent : c.textMuted,
+                      borderRadius: 5, padding: "3px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600,
+                    }}>{opt}</button>
+                  ))}
+                </div>
+              </div>
+              {merged.isLicensed && (
+                <div style={{ paddingLeft: 4 }}>
+                  <EditableField label="License Jurisdiction" value={merged.licenseJurisdiction || ""} fieldKey="licenseJurisdiction" />
+                  <EditableField label="License Number" value={merged.licenseNumber || ""} fieldKey="licenseNumber" />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 2 }}>
+                    <span style={{ color: c.textSecondary, fontSize: 12 }}>License Expiry</span>
+                    <input type="date" value={merged.licenseExpiry || ""} onChange={e => {
+                      setCorporateEntities(corporateEntities.map(ce => ce.name === entity.name ? { ...ce, licenseExpiry: e.target.value } : ce));
+                      setEntityOverrides({ ...entityOverrides, [entity.name]: { ...(entityOverrides[entity.name] || {}), licenseExpiry: e.target.value } });
+                    }} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+                    {merged.licenseExpiry && (() => {
+                      const exp = new Date(merged.licenseExpiry);
+                      const now = new Date();
+                      const daysLeft = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+                      const alertColor = daysLeft <= 0 ? "#ef4444" : daysLeft <= 30 ? "#f59e0b" : daysLeft <= 90 ? "#eab308" : "#22c55e";
+                      const alertText = daysLeft <= 0 ? "EXPIRED" : daysLeft <= 30 ? `${daysLeft}d — EXPIRING SOON` : daysLeft <= 90 ? `${daysLeft}d — Review soon` : `${daysLeft}d remaining`;
+                      return <span style={{ fontSize: 10, color: alertColor, fontWeight: 700, marginLeft: 4 }}>{alertText}</span>;
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
+          {/* UBO + Director */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, flex: 1 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>UBO (Ultimate Beneficial Owner)</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: c.text, cursor: "pointer" }}>
+                  <input type="checkbox" checked={merged.uboIsEntity || false} onChange={e => {
+                    setCorporateEntities(corporateEntities.map(ce => ce.name === entity.name ? { ...ce, uboIsEntity: e.target.checked } : ce));
+                    setEntityOverrides({ ...entityOverrides, [entity.name]: { ...(entityOverrides[entity.name] || {}), uboIsEntity: e.target.checked } });
+                  }} style={{ accentColor: c.accent }} />
+                  Owned by another entity
+                </label>
+              </div>
+              {merged.uboIsEntity ? (
+                <div>
+                  <select value={merged.uboEntityName || ""} onChange={e => {
+                    setCorporateEntities(corporateEntities.map(ce => ce.name === entity.name ? { ...ce, uboEntityName: e.target.value } : ce));
+                    setEntityOverrides({ ...entityOverrides, [entity.name]: { ...(entityOverrides[entity.name] || {}), uboEntityName: e.target.value } });
+                  }} style={{ fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", width: "100%" }}>
+                    <option value="">— Select Entity —</option>
+                    {corporateEntities.filter(ce => ce.name !== entity.name).map(ce => <option key={ce.name} value={ce.name}>{ce.name}</option>)}
+                  </select>
+                  {merged.uboEntityName && (
+                    <button onClick={() => {
+                      const target = corporateEntities.find(ce => ce.name === merged.uboEntityName);
+                      if (target) { setSelectedEntity(target.name); setSelectedCategory(target.category); }
+                    }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 11, padding: "6px 0", fontWeight: 600 }}>→ View {merged.uboEntityName}</button>
+                  )}
+                </div>
+              ) : (
+                <EditableField label="UBO Name" value={merged.ubo || ""} fieldKey="ubo" />
+              )}
+            </div>
+            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, flex: 1 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Director</h3>
+              <EditableField label="Director Name" value={merged.director || ""} fieldKey="director" />
+            </div>
+          </div>
+        </div>
+
+        {/* B: Service Providers */}
+        <div style={{ marginBottom: 16 }}>
           {/* B: Service Providers */}
           <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -2745,11 +2825,11 @@ function AviroDashboard() {
           </div>
         </div>
 
-        {/* C: Document Matrix */}
+        {/* C: KYB Documents */}
         <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: 0, textTransform: "uppercase" }}>Document Matrix</h3>
-            <button onClick={() => downloadEntityPack(entity.name)} disabled={packDownloading} style={{ background: packDownloading ? c.surface : c.accent, border: "none", color: packDownloading ? c.textMuted : c.white, borderRadius: 6, padding: "6px 14px", cursor: packDownloading ? "wait" : "pointer", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}><Icon type="download" size={12} /> {packDownloading ? "Building..." : "Download Pack"}</button>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: 0, textTransform: "uppercase" }}>KYB Documents</h3>
+            <button onClick={() => downloadEntityPack(entity.name)} disabled={packDownloading} style={{ background: packDownloading ? c.surface : c.accent, border: "none", color: packDownloading ? c.textMuted : c.white, borderRadius: 6, padding: "6px 14px", cursor: packDownloading ? "wait" : "pointer", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}><Icon type="download" size={12} /> {packDownloading ? "Building..." : "Download Full KYB Pack"}</button>
           </div>
 
           {/* Summary bar */}
@@ -2770,7 +2850,7 @@ function AviroDashboard() {
           {/* AI Suggestions */}
           {missingDocs.length > 0 && (
             <div style={{ background: `${c.accent}15`, border: `1px solid ${c.accent}40`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: c.accent, marginBottom: 6 }}>Missing Core Corporate Documents</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: c.accent, marginBottom: 6 }}>Missing KYB Documents</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {missingDocs.map(d => (
                   <button key={d} onClick={() => {
