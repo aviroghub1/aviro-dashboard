@@ -531,6 +531,10 @@ function AviroDashboard() {
 
   // Gateway / Corporate
   const [gatewayClients, setGatewayClients] = useState([]); // [{ id, name, clientType, clientEntities, agreements, introduction, introductionDeal, monthlyFee, monthlyFeeCurrency, revenueSharePct, revenueShareFrom, settlementGroup, settlementTerms, settlementFee, bankAccounts, providers }]
+  const [integrations, setIntegrations] = useState([]); // [{ id, name, stage, provider, methodType, methodChannel, regions, apiDocs, mainContact, groupName, groupPlatform, groupPlatformOther, startDate, weeksToDeployment, pace, behindReason, behindDelayWeeks, aheadWeeks, testStarted, deployedSuccessfully }]
+  const [selectedIntegration, setSelectedIntegration] = useState(null);
+  const [newIntegrationName, setNewIntegrationName] = useState("");
+  const [showAddIntegration, setShowAddIntegration] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
   const [editingClientField, setEditingClientField] = useState(null);
   const [selectedEntity, setSelectedEntity] = useState(null);
@@ -550,12 +554,12 @@ function AviroDashboard() {
         calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
         corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
         entityIntraAgreements, entityCorpAgreements,
-        bankRelationships, bankAccountsList, gamingBrands, gatewayClients,
+        bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations,
         supabaseUrl, supabaseKey,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, supabaseUrl, supabaseKey]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, supabaseUrl, supabaseKey]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -612,6 +616,7 @@ function AviroDashboard() {
         if (s.bankAccountsList) setBankAccountsList(s.bankAccountsList);
         if (s.gamingBrands) setGamingBrands(s.gamingBrands);
         if (s.gatewayClients) setGatewayClients(s.gatewayClients);
+        if (s.integrations) setIntegrations(s.integrations);
         if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
         if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
       }
@@ -2916,26 +2921,305 @@ function AviroDashboard() {
   };
 
   // ===== INTEGRATION ROADMAP =====
-  const renderRoadmap = () => (
-    <div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 24px 0" }}>Integration Roadmap</h2>
-      {INTEGRATION_ROADMAP.sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || "")).map((item, idx) => (
-        <div key={idx} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 16, marginBottom: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-            <div><span style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{item.name}</span><span style={{ fontSize: 11, color: c.textMuted, marginLeft: 8 }}>{item.brand}</span></div>
-            <div style={{ display: "flex", gap: 8 }}><StatusBadge status={item.status} /><PriorityBadge priority={item.priority} /></div>
+  const renderRoadmap = () => {
+    const STAGES = ["Roadmap", "Planning", "Execution", "Testing", "Deployed"];
+    const STAGE_COLORS = { "Roadmap": { bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.4)", text: "#8b5cf6" }, "Planning": { bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.4)", text: "#3b82f6" }, "Execution": { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.4)", text: "#f59e0b" }, "Testing": { bg: "rgba(234,179,8,0.12)", border: "rgba(234,179,8,0.4)", text: "#eab308" }, "Deployed": { bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.4)", text: "#22c55e" } };
+    const METHOD_TYPES = ["Payin", "Payout", "Both"];
+    const METHOD_CHANNELS = ["Cards", "Non Cards"];
+    const PAYMENT_REGIONS = ["UK", "Europe", "Turkey", "Asia", "LATAM", "Africa", "Middle East", "North America", "Oceania", "CIS", "India", "Global"];
+    const PACE_OPTIONS = ["Behind Pace", "On Pace", "Ahead Of Pace"];
+    const GROUP_PLATFORMS = ["Signal", "Telegram", "WhatsApp", "Lark", "Teams", "Other"];
+    const inputStyle2 = { fontSize: 12, padding: "7px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" };
+    const labelStyle2 = { display: "block", fontSize: 10, fontWeight: 600, color: c.textMuted, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.05em" };
+
+    const updateIntegration = (id, field, val) => setIntegrations(integrations.map(ig => ig.id === id ? { ...ig, [field]: val } : ig));
+
+    const getEstimatedDeployDate = (ig) => {
+      if (!ig.startDate || !ig.weeksToDeployment) return null;
+      const d = new Date(ig.startDate);
+      let weeks = parseInt(ig.weeksToDeployment) || 0;
+      if (ig.pace === "Behind Pace" && ig.behindDelayWeeks) weeks += parseInt(ig.behindDelayWeeks) || 0;
+      if (ig.pace === "Ahead Of Pace" && ig.aheadWeeks) weeks -= parseInt(ig.aheadWeeks) || 0;
+      d.setDate(d.getDate() + weeks * 7);
+      return d;
+    };
+
+    // ===== DETAIL VIEW =====
+    if (selectedIntegration) {
+      const ig = integrations.find(i => i.id === selectedIntegration);
+      if (!ig) { setSelectedIntegration(null); return null; }
+      const stageIdx = STAGES.indexOf(ig.stage);
+      const deployDate = getEstimatedDeployDate(ig);
+      const isEarlyStage = ig.stage === "Roadmap" || ig.stage === "Planning";
+
+      return (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+            <button onClick={() => setSelectedIntegration(null)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>← Back to List</button>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{ig.name}</h2>
+            <span style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, background: (STAGE_COLORS[ig.stage] || STAGE_COLORS.Roadmap).bg, color: (STAGE_COLORS[ig.stage] || STAGE_COLORS.Roadmap).text, border: `1px solid ${(STAGE_COLORS[ig.stage] || STAGE_COLORS.Roadmap).border}`, fontWeight: 700 }}>{ig.stage}</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ flex: 1, height: 6, background: c.surface, borderRadius: 3, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${item.progress}%`, background: item.progress >= 60 ? c.success : item.progress >= 30 ? c.warning : c.accent, borderRadius: 3 }} />
+
+          {/* Stage pipeline */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 24 }}>
+            {STAGES.map((st, i) => {
+              const sc = STAGE_COLORS[st];
+              const isActive = i <= stageIdx;
+              const isCurrent = st === ig.stage;
+              return (
+                <div key={st} onClick={() => {
+                  const updates = { stage: st };
+                  if (st === "Testing") updates.testStarted = true;
+                  if (st === "Deployed") { updates.deployedSuccessfully = true; updates.testStarted = true; }
+                  if (st === "Roadmap" || st === "Planning") { updates.testStarted = false; updates.deployedSuccessfully = false; updates.pace = ""; }
+                  setIntegrations(integrations.map(x => x.id === ig.id ? { ...x, ...updates } : x));
+                }} style={{ flex: 1, padding: "10px 8px", borderRadius: 8, textAlign: "center", cursor: "pointer", background: isActive ? sc.bg : c.surface, border: `2px solid ${isCurrent ? sc.text : isActive ? sc.border : c.border}`, transition: "all 0.15s" }}>
+                  <div style={{ fontSize: 12, fontWeight: isCurrent ? 700 : 500, color: isActive ? sc.text : c.textMuted }}>{st}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            {/* Left column */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Provider & Method */}
+              <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Provider & Method</h3>
+                <div style={{ marginBottom: 10 }}><label style={labelStyle2}>Provider</label><input value={ig.provider || ""} onChange={e => updateIntegration(ig.id, "provider", e.target.value)} placeholder="Provider name..." style={{ ...inputStyle2, width: "100%" }} /></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div><label style={labelStyle2}>Type</label><select value={ig.methodType || ""} onChange={e => updateIntegration(ig.id, "methodType", e.target.value)} style={{ ...inputStyle2, width: "100%" }}><option value="">— Select —</option>{METHOD_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                  <div><label style={labelStyle2}>Channel</label><select value={ig.methodChannel || ""} onChange={e => updateIntegration(ig.id, "methodChannel", e.target.value)} style={{ ...inputStyle2, width: "100%" }}><option value="">— Select —</option>{METHOD_CHANNELS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle2}>Regions</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {PAYMENT_REGIONS.map(r => {
+                      const sel = (ig.regions || []).includes(r);
+                      return <button key={r} onClick={() => { const regs = ig.regions || []; updateIntegration(ig.id, "regions", sel ? regs.filter(x => x !== r) : [...regs, r]); }} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? c.accentBg : c.surface, color: sel ? c.accent : c.textMuted, border: `1px solid ${sel ? c.accent + "40" : c.border}`, transition: "all 0.15s" }}>{r}</button>;
+                    })}
+                  </div>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle2}>API Docs URL</label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input value={ig.apiDocs || ""} onChange={e => updateIntegration(ig.id, "apiDocs", e.target.value)} placeholder="https://docs.provider.com/api" style={{ ...inputStyle2, flex: 1 }} />
+                    {ig.apiDocs && <button onClick={() => { navigator.clipboard.writeText(ig.apiDocs); setCopiedText(true); setTimeout(() => setCopiedText(null), 1500); }} style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>Copy</button>}
+                  </div>
+                </div>
+                <div><label style={labelStyle2}>Main Contact</label><input value={ig.mainContact || ""} onChange={e => updateIntegration(ig.id, "mainContact", e.target.value)} placeholder="Contact name / email" style={{ ...inputStyle2, width: "100%" }} /></div>
+              </div>
+
+              {/* Integration Group */}
+              <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Integration Group</h3>
+                <div style={{ marginBottom: 10 }}><label style={labelStyle2}>Group Name</label><input value={ig.groupName || ""} onChange={e => updateIntegration(ig.id, "groupName", e.target.value)} placeholder="Group name..." style={{ ...inputStyle2, width: "100%" }} /></div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={labelStyle2}>Platform</label>
+                  <select value={ig.groupPlatform || ""} onChange={e => updateIntegration(ig.id, "groupPlatform", e.target.value)} style={{ ...inputStyle2, width: "100%" }}>
+                    <option value="">— Select —</option>
+                    {GROUP_PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                {ig.groupPlatform === "Other" && (
+                  <div><label style={labelStyle2}>Platform Name</label><input value={ig.groupPlatformOther || ""} onChange={e => updateIntegration(ig.id, "groupPlatformOther", e.target.value)} placeholder="Specify platform..." style={{ ...inputStyle2, width: "100%" }} /></div>
+                )}
+              </div>
             </div>
-            <span style={{ fontSize: 11, color: c.textMuted }}>{item.progress}%</span>
-            {item.dueDate && <span style={{ fontSize: 11, color: c.textMuted }}>{item.dueDate}</span>}
+
+            {/* Right column */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Timeline */}
+              <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Timeline</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div><label style={labelStyle2}>{isEarlyStage ? "Estimated Start Date" : "Integration Start Date"}</label><input type="date" value={ig.startDate || ""} onChange={e => updateIntegration(ig.id, "startDate", e.target.value)} style={{ ...inputStyle2, width: "100%" }} /></div>
+                  <div><label style={labelStyle2}>Est. Time to Deployment</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input type="number" min="1" value={ig.weeksToDeployment || ""} onChange={e => updateIntegration(ig.id, "weeksToDeployment", e.target.value)} placeholder="#" style={{ ...inputStyle2, width: 60 }} />
+                      <span style={{ fontSize: 12, color: c.textMuted }}>weeks</span>
+                    </div>
+                  </div>
+                </div>
+                {deployDate && (
+                  <div style={{ background: c.surface, borderRadius: 8, padding: "10px 14px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: c.textMuted }}>Estimated Deployment</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: ig.deployedSuccessfully ? c.success : c.text }}>{deployDate.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+                  </div>
+                )}
+
+                {/* Execution pace — only show for Execution stage */}
+                {ig.stage === "Execution" && (<>
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={labelStyle2}>Progress</label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {PACE_OPTIONS.map(p => {
+                        const sel = ig.pace === p;
+                        const paceColor = p === "Behind Pace" ? "#ef4444" : p === "On Pace" ? "#22c55e" : "#3b82f6";
+                        return <button key={p} onClick={() => updateIntegration(ig.id, "pace", p)} style={{ flex: 1, padding: "8px 6px", borderRadius: 8, fontSize: 11, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? paceColor + "18" : c.surface, color: sel ? paceColor : c.textMuted, border: `2px solid ${sel ? paceColor : c.border}`, transition: "all 0.15s" }}>{p}</button>;
+                      })}
+                    </div>
+                  </div>
+                  {ig.pace === "Behind Pace" && (
+                    <div style={{ background: "rgba(239,68,68,0.08)", borderRadius: 8, padding: 12, border: "1px solid rgba(239,68,68,0.2)", marginBottom: 10 }}>
+                      <div style={{ marginBottom: 8 }}><label style={{ ...labelStyle2, color: "#ef4444" }}>Reason for Delay</label><textarea value={ig.behindReason || ""} onChange={e => updateIntegration(ig.id, "behindReason", e.target.value)} placeholder="What's causing the delay..." rows={2} style={{ ...inputStyle2, width: "100%", resize: "vertical" }} /></div>
+                      <div><label style={{ ...labelStyle2, color: "#ef4444" }}>Estimated Delay</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <input type="number" min="1" value={ig.behindDelayWeeks || ""} onChange={e => updateIntegration(ig.id, "behindDelayWeeks", e.target.value)} placeholder="#" style={{ ...inputStyle2, width: 60 }} />
+                          <span style={{ fontSize: 12, color: c.textMuted }}>weeks</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {ig.pace === "Ahead Of Pace" && (
+                    <div style={{ background: "rgba(59,130,246,0.08)", borderRadius: 8, padding: 12, border: "1px solid rgba(59,130,246,0.2)", marginBottom: 10 }}>
+                      <div><label style={{ ...labelStyle2, color: "#3b82f6" }}>Weeks Ahead</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <input type="number" min="1" value={ig.aheadWeeks || ""} onChange={e => updateIntegration(ig.id, "aheadWeeks", e.target.value)} placeholder="#" style={{ ...inputStyle2, width: 60 }} />
+                          <span style={{ fontSize: 12, color: c.textMuted }}>weeks ahead of schedule</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>)}
+              </div>
+
+              {/* Status */}
+              <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Status</h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${c.border}` }}>
+                  <span style={{ fontSize: 13, color: c.text }}>Testing Started</span>
+                  <div onClick={() => { if (ig.stage !== "Testing" && ig.stage !== "Deployed") updateIntegration(ig.id, "testStarted", !ig.testStarted); }} style={{ width: 40, height: 22, borderRadius: 11, background: ig.testStarted ? c.success : c.surface, border: `1px solid ${ig.testStarted ? c.success : c.border}`, cursor: (ig.stage === "Testing" || ig.stage === "Deployed") ? "default" : "pointer", position: "relative", transition: "all 0.2s" }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 8, background: "#fff", position: "absolute", top: 2, left: ig.testStarted ? 21 : 2, transition: "left 0.2s" }} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0" }}>
+                  <span style={{ fontSize: 13, color: c.text }}>Deployed Successfully</span>
+                  <div onClick={() => {
+                    if (!ig.deployedSuccessfully) {
+                      setIntegrations(integrations.map(x => x.id === ig.id ? { ...x, deployedSuccessfully: true, stage: "Deployed", testStarted: true } : x));
+                    } else {
+                      updateIntegration(ig.id, "deployedSuccessfully", false);
+                    }
+                  }} style={{ width: 40, height: 22, borderRadius: 11, background: ig.deployedSuccessfully ? c.success : c.surface, border: `1px solid ${ig.deployedSuccessfully ? c.success : c.border}`, cursor: "pointer", position: "relative", transition: "all 0.2s" }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 8, background: "#fff", position: "absolute", top: 2, left: ig.deployedSuccessfully ? 21 : 2, transition: "left 0.2s" }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Delete */}
+          <div style={{ marginTop: 24, textAlign: "right" }}>
+            <button onClick={() => { if (confirm("Delete this integration?")) { setIntegrations(integrations.filter(x => x.id !== ig.id)); setSelectedIntegration(null); } }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 8, padding: "8px 20px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Delete Integration</button>
           </div>
         </div>
-      ))}
-    </div>
-  );
+      );
+    }
+
+    // ===== LIST VIEW =====
+    const stageCounts = {};
+    STAGES.forEach(s => { stageCounts[s] = integrations.filter(ig => ig.stage === s).length; });
+
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Integration Roadmap</h2>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{integrations.length} integration{integrations.length !== 1 ? "s" : ""}</p>
+          </div>
+          <button onClick={() => setShowAddIntegration(!showAddIntegration)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ New Integration</button>
+        </div>
+
+        {/* Add Integration Form */}
+        {showAddIntegration && (
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.accent}40`, padding: 16, marginBottom: 16, display: "flex", gap: 10, alignItems: "end" }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle2}>Integration Name</label>
+              <input value={newIntegrationName} onChange={e => setNewIntegrationName(e.target.value)} placeholder="Enter integration name..." style={{ ...inputStyle2, width: "100%" }} onKeyDown={e => {
+                if (e.key === "Enter" && newIntegrationName.trim()) {
+                  const newIg = { id: `ig-${Date.now()}`, name: newIntegrationName.trim(), stage: "Roadmap", provider: "", methodType: "", methodChannel: "", regions: [], apiDocs: "", mainContact: "", groupName: "", groupPlatform: "", groupPlatformOther: "", startDate: "", weeksToDeployment: "", pace: "", behindReason: "", behindDelayWeeks: "", aheadWeeks: "", testStarted: false, deployedSuccessfully: false };
+                  setIntegrations([...integrations, newIg]);
+                  setNewIntegrationName(""); setShowAddIntegration(false);
+                  setSelectedIntegration(newIg.id);
+                }
+              }} />
+            </div>
+            <button onClick={() => {
+              if (!newIntegrationName.trim()) return;
+              const newIg = { id: `ig-${Date.now()}`, name: newIntegrationName.trim(), stage: "Roadmap", provider: "", methodType: "", methodChannel: "", regions: [], apiDocs: "", mainContact: "", groupName: "", groupPlatform: "", groupPlatformOther: "", startDate: "", weeksToDeployment: "", pace: "", behindReason: "", behindDelayWeeks: "", aheadWeeks: "", testStarted: false, deployedSuccessfully: false };
+              setIntegrations([...integrations, newIg]);
+              setNewIntegrationName(""); setShowAddIntegration(false);
+              setSelectedIntegration(newIg.id);
+            }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>Create</button>
+          </div>
+        )}
+
+        {/* Stage summary bar */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          {STAGES.map(st => {
+            const sc = STAGE_COLORS[st];
+            const count = stageCounts[st];
+            return (
+              <div key={st} style={{ flex: 1, background: sc.bg, borderRadius: 10, padding: "12px 10px", textAlign: "center", border: `1px solid ${sc.border}` }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: sc.text }}>{count}</div>
+                <div style={{ fontSize: 10, color: sc.text, fontWeight: 600, marginTop: 2 }}>{st}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Integration list grouped by stage */}
+        {STAGES.map(stage => {
+          const stageItems = integrations.filter(ig => ig.stage === stage);
+          if (stageItems.length === 0) return null;
+          const sc = STAGE_COLORS[stage];
+          return (
+            <div key={stage} style={{ marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 10, height: 10, borderRadius: 3, background: sc.text }} />
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: c.text, margin: 0 }}>{stage}</h3>
+                <span style={{ fontSize: 11, color: c.textMuted }}>({stageItems.length})</span>
+              </div>
+              {stageItems.map(ig => {
+                const deployDate = getEstimatedDeployDate(ig);
+                return (
+                  <div key={ig.id} onClick={() => setSelectedIntegration(ig.id)}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = sc.text; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = c.border; }}
+                    style={{ background: c.card, border: `1px solid ${c.border}`, borderLeft: `4px solid ${sc.text}`, borderRadius: "0 10px 10px 0", padding: "14px 18px", marginBottom: 6, cursor: "pointer", transition: "border-color 0.15s" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{ig.name}</span>
+                        {ig.provider && <span style={{ fontSize: 11, color: c.textMuted }}>· {ig.provider}</span>}
+                        {ig.methodType && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: c.surface, color: c.textSecondary, fontWeight: 500 }}>{ig.methodType}{ig.methodChannel ? " · " + ig.methodChannel : ""}</span>}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                        {(ig.regions || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{ig.regions.slice(0, 3).join(", ")}{ig.regions.length > 3 ? ` +${ig.regions.length - 3}` : ""}</span>}
+                        {ig.stage === "Execution" && ig.pace && (
+                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 600, background: ig.pace === "Behind Pace" ? "rgba(239,68,68,0.12)" : ig.pace === "On Pace" ? "rgba(34,197,94,0.12)" : "rgba(59,130,246,0.12)", color: ig.pace === "Behind Pace" ? "#ef4444" : ig.pace === "On Pace" ? "#22c55e" : "#3b82f6" }}>{ig.pace}</span>
+                        )}
+                        {deployDate && <span style={{ fontSize: 11, color: c.textMuted }}>{deployDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
+                        <span style={{ fontSize: 12, color: c.accent }}>→</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+
+        {integrations.length === 0 && (
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 40, textAlign: "center" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🔌</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 4 }}>No integrations yet</div>
+            <div style={{ fontSize: 13, color: c.textMuted }}>Click "New Integration" to add your first integration to the roadmap</div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ===== ENTITY DETAIL =====
   const renderEntityDetail = (entity, category) => {
