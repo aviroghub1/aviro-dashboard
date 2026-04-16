@@ -2954,11 +2954,31 @@ function AviroDashboard() {
 
       return (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
             <button onClick={() => setSelectedIntegration(null)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>← Back to List</button>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{ig.name}</h2>
             <span style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, background: (STAGE_COLORS[ig.stage] || STAGE_COLORS.Roadmap).bg, color: (STAGE_COLORS[ig.stage] || STAGE_COLORS.Roadmap).text, border: `1px solid ${(STAGE_COLORS[ig.stage] || STAGE_COLORS.Roadmap).border}`, fontWeight: 700 }}>{ig.stage}</span>
           </div>
+
+          {/* Estimated Deployment Date banner */}
+          {deployDate ? (
+            <div style={{ background: ig.deployedSuccessfully ? "rgba(34,197,94,0.1)" : ig.pace === "Behind Pace" ? "rgba(239,68,68,0.08)" : ig.pace === "Ahead Of Pace" ? "rgba(59,130,246,0.08)" : c.card, border: `1px solid ${ig.deployedSuccessfully ? "rgba(34,197,94,0.3)" : ig.pace === "Behind Pace" ? "rgba(239,68,68,0.25)" : ig.pace === "Ahead Of Pace" ? "rgba(59,130,246,0.25)" : c.border}`, borderRadius: 12, padding: "16px 24px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>{ig.deployedSuccessfully ? "Deployed" : isEarlyStage ? "Estimated Deployment" : "Target Deployment Date"}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: ig.deployedSuccessfully ? c.success : ig.pace === "Behind Pace" ? "#ef4444" : ig.pace === "Ahead Of Pace" ? "#3b82f6" : c.text }}>{deployDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                {ig.pace === "Behind Pace" && ig.behindDelayWeeks && <div style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}>+{ig.behindDelayWeeks}w delay</div>}
+                {ig.pace === "Ahead Of Pace" && ig.aheadWeeks && <div style={{ fontSize: 12, fontWeight: 600, color: "#3b82f6" }}>{ig.aheadWeeks}w ahead</div>}
+                {ig.weeksToDeployment && <div style={{ fontSize: 11, color: c.textMuted }}>{ig.weeksToDeployment}w estimated{ig.pace === "Behind Pace" && ig.behindDelayWeeks ? ` + ${ig.behindDelayWeeks}w delay` : ig.pace === "Ahead Of Pace" && ig.aheadWeeks ? ` - ${ig.aheadWeeks}w ahead` : ""}</div>}
+              </div>
+            </div>
+          ) : (
+            <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "16px 24px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: c.textMuted, textTransform: "uppercase" }}>Estimated Deployment</span>
+              <span style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic" }}>Set a start date and estimated weeks below</span>
+            </div>
+          )}
 
           {/* Stage pipeline */}
           <div style={{ display: "flex", gap: 4, marginBottom: 24 }}>
@@ -3048,10 +3068,10 @@ function AviroDashboard() {
                   </div>
                 )}
 
-                {/* Execution pace — only show for Execution stage */}
-                {ig.stage === "Execution" && (<>
+                {/* Integration Progress — show for Execution and Testing stages */}
+                {(ig.stage === "Execution" || ig.stage === "Testing") && (<>
                   <div style={{ marginBottom: 10 }}>
-                    <label style={labelStyle2}>Progress</label>
+                    <label style={labelStyle2}>Integration Progress</label>
                     <div style={{ display: "flex", gap: 6 }}>
                       {PACE_OPTIONS.map(p => {
                         const sel = ig.pace === p;
