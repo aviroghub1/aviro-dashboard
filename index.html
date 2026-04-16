@@ -2314,7 +2314,7 @@ function AviroDashboard() {
 
           {/* Collapsible section helper */}
           {(() => {
-            const collapsed = cl.collapsedSections || {};
+            const collapsed = cl.collapsedSections || { entity: true };
             const toggleSection = (key) => updateClient(cl.id, "collapsedSections", { ...collapsed, [key]: !collapsed[key] });
             const SectionHeader = ({ sectionKey, title, extra, badge }) => (
               <div onClick={() => toggleSection(sectionKey)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: collapsed[sectionKey] ? 0 : 12, userSelect: "none" }}>
@@ -2329,28 +2329,58 @@ function AviroDashboard() {
 
             return (<>
 
-            {/* Entity Details (combined: details + licensed + UBO + director + add entity) */}
+            {/* Entity Details (combined: details + licensed + UBO + director + KYB per entity) */}
             <div style={sectionCard}>
               <SectionHeader sectionKey="entity" title="Entity Details" badge={`${(cl.entities || [{ id: "primary" }]).length} ${(cl.entities || [{ id: "primary" }]).length === 1 ? "entity" : "entities"}`} extra={
-                !collapsed.entity && <button onClick={() => updateClient(cl.id, "entities", [...(cl.entities || [{ id: "primary", jurisdiction: cl.jurisdiction || "", companyNumber: cl.companyNumber || "", registeredAddress: cl.registeredAddress || "", isLicensed: cl.isLicensed || false, licenseJurisdiction: cl.licenseJurisdiction || "", licenseNumber: cl.licenseNumber || "", licenseExpiry: cl.licenseExpiry || "", uboIsEntity: cl.uboIsEntity || false, uboEntityName: cl.uboEntityName || "", ubo: cl.ubo || "", director: cl.director || "" }]), { id: `ent-${Date.now()}`, jurisdiction: "", companyNumber: "", registeredAddress: "", isLicensed: false, licenseJurisdiction: "", licenseNumber: "", licenseExpiry: "", uboIsEntity: false, uboEntityName: "", ubo: "", director: "" }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Entity</button>
+                !collapsed.entity && <button onClick={() => updateClient(cl.id, "entities", [...(cl.entities || [{ id: "primary", jurisdiction: cl.jurisdiction || "", companyNumber: cl.companyNumber || "", registeredAddress: cl.registeredAddress || "", isLicensed: cl.isLicensed || false, licenseJurisdiction: cl.licenseJurisdiction || "", licenseNumber: cl.licenseNumber || "", licenseExpiry: cl.licenseExpiry || "", uboIsEntity: cl.uboIsEntity || false, uboEntityName: cl.uboEntityName || "", ubo: cl.ubo || "", director: cl.director || "", kybDocuments: cl.kybDocuments || [] }]), { id: `ent-${Date.now()}`, entityName: "", jurisdiction: "", companyNumber: "", registeredAddress: "", isLicensed: false, licenseJurisdiction: "", licenseNumber: "", licenseExpiry: "", uboIsEntity: false, uboEntityName: "", uboEntity: null, ubo: "", director: "", kybDocuments: [] }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Entity</button>
               } />
               {!collapsed.entity && (() => {
-                // Migrate: if cl.entities doesn't exist yet, create from flat fields
-                const ents = cl.entities || [{ id: "primary", jurisdiction: cl.jurisdiction || "", companyNumber: cl.companyNumber || "", registeredAddress: cl.registeredAddress || "", isLicensed: cl.isLicensed || false, licenseJurisdiction: cl.licenseJurisdiction || "", licenseNumber: cl.licenseNumber || "", licenseExpiry: cl.licenseExpiry || "", uboIsEntity: cl.uboIsEntity || false, uboEntityName: cl.uboEntityName || "", ubo: cl.ubo || "", director: cl.director || "" }];
+                const ents = cl.entities || [{ id: "primary", entityName: "", jurisdiction: cl.jurisdiction || "", companyNumber: cl.companyNumber || "", registeredAddress: cl.registeredAddress || "", isLicensed: cl.isLicensed || false, licenseJurisdiction: cl.licenseJurisdiction || "", licenseNumber: cl.licenseNumber || "", licenseExpiry: cl.licenseExpiry || "", uboIsEntity: cl.uboIsEntity || false, uboEntityName: cl.uboEntityName || "", uboEntity: null, ubo: cl.ubo || "", director: cl.director || "", kybDocuments: cl.kybDocuments || [] }];
                 const updateEnt = (entId, field, val) => {
                   const updated = ents.map(e => e.id === entId ? { ...e, [field]: val } : e);
                   updateClient(cl.id, "entities", updated);
                 };
-                return ents.map((ent, idx) => (
-                  <div key={ent.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 14, marginBottom: idx < ents.length - 1 ? 10 : 0 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Entity {idx + 1}</span>
-                      {ents.length > 1 && <button onClick={() => updateClient(cl.id, "entities", ents.filter(e => e.id !== ent.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10 }}>Remove</button>}
-                    </div>
+
+                // KYB upload handler for a specific entity
+                const handleEntKybUpload = async (entId, docId, file) => {
+                  if (!file) return;
+                  if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first"); return; }
+                  const ent = ents.find(e => e.id === entId);
+                  const docs = ent?.kybDocuments || [];
+                  const safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
+                  const filePath = "clients/" + safeName + "/" + entId + "/kyb/" + docId + "_" + Date.now() + "_" + file.name;
+                  updateEnt(entId, "kybDocuments", docs.map(d => d.id === docId ? { ...d, uploadStatus: "uploading" } : d));
+                  try {
+                    const resp = await fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+                      method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file,
+                    });
+                    if (!resp.ok) throw new Error("Upload failed: " + resp.status);
+                    const publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+                    const updatedDocs = docs.map(d => d.id === docId ? { ...d, fileName: file.name, fileSize: file.size, fileUrl: publicUrl, uploadedAt: new Date().toISOString(), uploadStatus: null } : d);
+                    updateEnt(entId, "kybDocuments", updatedDocs);
+                  } catch (e) {
+                    alert("Upload error: " + e.message);
+                    updateEnt(entId, "kybDocuments", docs.map(d => d.id === docId ? { ...d, uploadStatus: null } : d));
+                  }
+                };
+
+                const KYB_STD = ["Certificate of Incorporation/Registration", "Articles of Association/Memorandum of Association", "Certificate of Incumbency", "Corporate Structure Chart", "Register of Shareholders", "Register of Directors", "ID Documents for UBOs/Directors", "Proof of Address for UBOs/Directors"];
+                const formatFileSize = (bytes) => { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
+
+                // Reusable entity fields block (used for main entity AND for UBO-owned-by-entity sub-entity)
+                const renderEntityFields = (ent, entId, isSubEntity) => {
+                  const docs = ent.kybDocuments || [];
+                  const existingNames = new Set(docs.map(d => d.name));
+                  const missingDocs = KYB_STD.filter(d => !existingNames.has(d));
+                  const updateEntDoc = (docId, field, val) => updateEnt(entId, "kybDocuments", docs.map(d => d.id === docId ? { ...d, [field]: val } : d));
+
+                  return (<>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      <div><label style={labelStyle}>Jurisdiction</label><input value={ent.jurisdiction || ""} onChange={e => updateEnt(ent.id, "jurisdiction", e.target.value)} placeholder="Jurisdiction..." style={{ ...inputStyle, width: "100%" }} /></div>
-                      <div><label style={labelStyle}>Company Number</label><input value={ent.companyNumber || ""} onChange={e => updateEnt(ent.id, "companyNumber", e.target.value)} placeholder="Company number..." style={{ ...inputStyle, width: "100%" }} /></div>
-                      <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Registered Address</label><input value={ent.registeredAddress || ""} onChange={e => updateEnt(ent.id, "registeredAddress", e.target.value)} placeholder="Registered address..." style={{ ...inputStyle, width: "100%" }} /></div>
+                      {isSubEntity && <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Entity Name</label><input value={ent.uboEntityName || ""} onChange={e => updateEnt(entId, "uboEntityName", e.target.value)} placeholder="Entity name..." style={{ ...inputStyle, width: "100%" }} /></div>}
+                      {!isSubEntity && <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Entity Name</label><input value={ent.entityName || ""} onChange={e => updateEnt(entId, "entityName", e.target.value)} placeholder="Entity name..." style={{ ...inputStyle, width: "100%" }} /></div>}
+                      <div><label style={labelStyle}>Jurisdiction</label><input value={ent.jurisdiction || ""} onChange={e => updateEnt(entId, "jurisdiction", e.target.value)} placeholder="Jurisdiction..." style={{ ...inputStyle, width: "100%" }} /></div>
+                      <div><label style={labelStyle}>Company Number</label><input value={ent.companyNumber || ""} onChange={e => updateEnt(entId, "companyNumber", e.target.value)} placeholder="Company number..." style={{ ...inputStyle, width: "100%" }} /></div>
+                      <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Registered Address</label><input value={ent.registeredAddress || ""} onChange={e => updateEnt(entId, "registeredAddress", e.target.value)} placeholder="Registered address..." style={{ ...inputStyle, width: "100%" }} /></div>
 
                       {/* Licensed */}
                       <div style={{ gridColumn: "1 / -1" }}>
@@ -2358,7 +2388,7 @@ function AviroDashboard() {
                           <label style={labelStyle}>Licensed</label>
                           <div style={{ display: "flex", gap: 4 }}>
                             {["Yes", "No"].map(opt => (
-                              <button key={opt} onClick={() => updateEnt(ent.id, "isLicensed", opt === "Yes")} style={{
+                              <button key={opt} onClick={() => updateEnt(entId, "isLicensed", opt === "Yes")} style={{
                                 background: (ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No") ? `${c.accent}20` : "transparent",
                                 border: `1px solid ${(ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No") ? c.accent : c.border}`,
                                 color: (ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No") ? c.accent : c.textMuted,
@@ -2369,11 +2399,11 @@ function AviroDashboard() {
                         </div>
                         {ent.isLicensed && (
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                            <div><label style={labelStyle}>License Jurisdiction</label><input value={ent.licenseJurisdiction || ""} onChange={e => updateEnt(ent.id, "licenseJurisdiction", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div><label style={labelStyle}>License Number</label><input value={ent.licenseNumber || ""} onChange={e => updateEnt(ent.id, "licenseNumber", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
+                            <div><label style={labelStyle}>License Jurisdiction</label><input value={ent.licenseJurisdiction || ""} onChange={e => updateEnt(entId, "licenseJurisdiction", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
+                            <div><label style={labelStyle}>License Number</label><input value={ent.licenseNumber || ""} onChange={e => updateEnt(entId, "licenseNumber", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
                             <div>
                               <label style={labelStyle}>License Expiry</label>
-                              <input type="date" value={ent.licenseExpiry || ""} onChange={e => updateEnt(ent.id, "licenseExpiry", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                              <input type="date" value={ent.licenseExpiry || ""} onChange={e => updateEnt(entId, "licenseExpiry", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
                               {ent.licenseExpiry && (() => {
                                 const exp = new Date(ent.licenseExpiry); const now = new Date(); const daysLeft = Math.ceil((exp - now) / (1000*60*60*24));
                                 const ac = daysLeft <= 0 ? "#ef4444" : daysLeft <= 30 ? "#f59e0b" : daysLeft <= 90 ? "#eab308" : "#22c55e";
@@ -2390,19 +2420,141 @@ function AviroDashboard() {
                         <label style={labelStyle}>UBO</label>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                           <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: c.textMuted, cursor: "pointer" }}>
-                            <input type="checkbox" checked={ent.uboIsEntity || false} onChange={e => updateEnt(ent.id, "uboIsEntity", e.target.checked)} style={{ accentColor: c.accent }} /> Owned by entity
+                            <input type="checkbox" checked={ent.uboIsEntity || false} onChange={e => updateEnt(entId, "uboIsEntity", e.target.checked)} style={{ accentColor: c.accent }} /> Owned by entity
                           </label>
                         </div>
-                        {ent.uboIsEntity ? (
-                          <input value={ent.uboEntityName || ""} onChange={e => updateEnt(ent.id, "uboEntityName", e.target.value)} placeholder="Owner entity name..." style={{ ...inputStyle, width: "100%" }} />
-                        ) : (
-                          <input value={ent.ubo || ""} onChange={e => updateEnt(ent.id, "ubo", e.target.value)} placeholder="UBO name..." style={{ ...inputStyle, width: "100%" }} />
-                        )}
+                        {!ent.uboIsEntity && <input value={ent.ubo || ""} onChange={e => updateEnt(entId, "ubo", e.target.value)} placeholder="UBO name..." style={{ ...inputStyle, width: "100%" }} />}
                       </div>
 
                       {/* Director */}
-                      <div><label style={labelStyle}>Director</label><input value={ent.director || ""} onChange={e => updateEnt(ent.id, "director", e.target.value)} placeholder="Director name..." style={{ ...inputStyle, width: "100%" }} /></div>
+                      <div><label style={labelStyle}>Director</label><input value={ent.director || ""} onChange={e => updateEnt(entId, "director", e.target.value)} placeholder="Director name..." style={{ ...inputStyle, width: "100%" }} /></div>
                     </div>
+
+                    {/* UBO owned by entity — show full nested entity fields */}
+                    {ent.uboIsEntity && (
+                      <div style={{ marginTop: 10, background: `${c.accent}08`, border: `1px solid ${c.accent}25`, borderRadius: 8, padding: 14 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" }}>UBO Entity Details</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          {[["uboEntityName", "Entity Name"], ["uboEntJurisdiction", "Jurisdiction"], ["uboEntCompanyNumber", "Company Number"]].map(([key, label]) => (
+                            <div key={key}><label style={labelStyle}>{label}</label><input value={ent[key] || ""} onChange={e => updateEnt(entId, key, e.target.value)} placeholder={`${label}...`} style={{ ...inputStyle, width: "100%" }} /></div>
+                          ))}
+                          <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Registered Address</label><input value={ent.uboEntAddress || ""} onChange={e => updateEnt(entId, "uboEntAddress", e.target.value)} placeholder="Address..." style={{ ...inputStyle, width: "100%" }} /></div>
+                          <div><label style={labelStyle}>UBO</label><input value={ent.uboEntUbo || ""} onChange={e => updateEnt(entId, "uboEntUbo", e.target.value)} placeholder="UBO of parent entity..." style={{ ...inputStyle, width: "100%" }} /></div>
+                          <div><label style={labelStyle}>Director</label><input value={ent.uboEntDirector || ""} onChange={e => updateEnt(entId, "uboEntDirector", e.target.value)} placeholder="Director..." style={{ ...inputStyle, width: "100%" }} /></div>
+                        </div>
+                        {/* UBO Entity KYB Documents */}
+                        <div style={{ marginTop: 10, borderTop: `1px solid ${c.border}`, paddingTop: 10 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: c.accent, marginBottom: 6, textTransform: "uppercase" }}>UBO Entity — KYB Documents</div>
+                          {(ent.uboEntKybDocs || []).map(doc => (
+                            <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: `1px solid ${c.border}` }}>
+                              <span style={{ fontSize: 12, color: c.text, flex: 1 }}>{doc.name || "Untitled"}</span>
+                              {doc.fileUrl ? <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {doc.fileName}</a> : <span style={{ fontSize: 10, color: c.textMuted }}>No file</span>}
+                              <label style={{ cursor: "pointer" }}><input type="file" style={{ display: "none" }} onChange={ev => {
+                                if (!ev.target.files[0] || !supabaseUrl || !supabaseKey) return;
+                                const file = ev.target.files[0];
+                                const safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
+                                const filePath = "clients/" + safeName + "/ubo_ent/" + doc.id + "_" + Date.now() + "_" + file.name;
+                                fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, { method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file }).then(r => {
+                                  if (r.ok) { const url = supabaseUrl + "/storage/v1/object/public/documents/" + filePath; updateEnt(entId, "uboEntKybDocs", (ent.uboEntKybDocs || []).map(d => d.id === doc.id ? { ...d, fileName: file.name, fileUrl: url } : d)); }
+                                });
+                              }} /><span style={{ fontSize: 10, color: c.accent, border: `1px solid ${c.accent}`, borderRadius: 4, padding: "2px 6px" }}>Upload</span></label>
+                              <button onClick={() => updateEnt(entId, "uboEntKybDocs", (ent.uboEntKybDocs || []).filter(d => d.id !== doc.id))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                            </div>
+                          ))}
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                            {KYB_STD.filter(d => !(ent.uboEntKybDocs || []).some(x => x.name === d)).slice(0, 4).map(d => (
+                              <button key={d} onClick={() => updateEnt(entId, "uboEntKybDocs", [...(ent.uboEntKybDocs || []), { id: `ukd-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, name: d, fileName: "", fileUrl: "" }])} style={{ background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer", fontSize: 9 }}>+ {d.length > 30 ? d.slice(0,28) + "..." : d}</button>
+                            ))}
+                            <button onClick={() => updateEnt(entId, "uboEntKybDocs", [...(ent.uboEntKybDocs || []), { id: `ukd-${Date.now()}`, name: "", fileName: "", fileUrl: "" }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 9, fontWeight: 600 }}>+ Add</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* KYB Documents for this entity */}
+                    <div style={{ marginTop: 12, borderTop: `1px solid ${c.border}`, paddingTop: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>KYB Documents <span style={{ fontWeight: 400, color: c.textMuted, textTransform: "none" }}>{docs.filter(d => d.fileUrl).length}/{docs.length} uploaded</span></div>
+                        <button onClick={async () => {
+                          if (!window.JSZip) { alert("JSZip not loaded"); return; }
+                          const zip = new window.JSZip();
+                          const withFiles = docs.filter(d => d.fileUrl);
+                          if (withFiles.length === 0) { alert("No documents uploaded yet"); return; }
+                          for (const doc of withFiles) { try { const r = await fetch(doc.fileUrl); if (r.ok) zip.file(doc.fileName || doc.name + ".pdf", await r.blob()); } catch(e){} }
+                          const blob = await zip.generateAsync({ type: "blob" });
+                          window.saveAs(blob, cl.name.replace(/[^a-zA-Z0-9]/g, "_") + "_Entity" + (isSubEntity ? "_UBO" : "") + "_KYB.zip");
+                        }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>↓ Download KYB Pack</button>
+                      </div>
+                      {/* Missing docs quick-add */}
+                      {missingDocs.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                          {missingDocs.map(d => (
+                            <button key={d} onClick={() => updateEnt(entId, "kybDocuments", [...docs, { id: `kd-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, name: d, startDate: "", renewalMonths: "", fileName: "", fileSize: 0, fileUrl: "", uploadStatus: null }])} style={{ background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer", fontSize: 9 }}>+ {d.length > 35 ? d.slice(0,33) + "..." : d}</button>
+                          ))}
+                        </div>
+                      )}
+                      {docs.length === 0 && <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 6 }}>No KYB documents — use buttons above to add standard docs</div>}
+                      {docs.map(doc => {
+                        const isEd = editingClientField === `kd-${doc.id}`;
+                        const renewal = doc.startDate && doc.renewalMonths ? (() => { const d = new Date(doc.startDate); d.setMonth(d.getMonth() + parseInt(doc.renewalMonths)); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })() : null;
+                        const sc = doc.fileUrl ? "#22c55e" : "#f59e0b";
+                        return (
+                          <div key={doc.id}
+                            onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = `2px solid ${c.accent}`; }}
+                            onDragLeave={e => { e.currentTarget.style.outline = "none"; }}
+                            onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = "none"; if (e.dataTransfer.files[0]) handleEntKybUpload(entId, doc.id, e.dataTransfer.files[0]); }}
+                            style={{ borderLeft: `3px solid ${sc}`, padding: "8px 12px", marginBottom: 6, background: `${sc}08`, borderRadius: "0 6px 6px 0", border: `1px solid ${sc}25` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: c.text }}>{doc.name || "Untitled"}</div>
+                                {!isEd && <div style={{ fontSize: 10, color: c.textMuted }}>
+                                  {doc.startDate && <span>{doc.startDate}</span>}{renewal && <span> · Renews {renewal}</span>}
+                                  {doc.fileName && <span> · <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ color: c.accent, textDecoration: "none" }}>↓ {doc.fileName}</a> {formatFileSize(doc.fileSize)}</span>}
+                                </div>}
+                              </div>
+                              <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                                {doc.fileUrl && <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 9, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "2px 6px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>↓</a>}
+                                <button onClick={() => setEditingClientField(isEd ? null : `kd-${doc.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 9, borderRadius: 4, padding: "2px 6px" }}>{isEd ? "Done" : "Edit"}</button>
+                                <button onClick={() => updateEnt(entId, "kybDocuments", docs.filter(d => d.id !== doc.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "2px 5px", cursor: "pointer", fontSize: 9 }}>✕</button>
+                              </div>
+                            </div>
+                            {isEd && (
+                              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                                <div><label style={labelStyle}>Document Name</label><input value={doc.name || ""} onChange={e => updateEntDoc(doc.id, "name", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                  <div><label style={labelStyle}>Start Date</label><input type="date" value={doc.startDate || ""} onChange={e => updateEntDoc(doc.id, "startDate", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
+                                  <div><label style={labelStyle}>Renewal (months)</label><input type="number" min="0" value={doc.renewalMonths || ""} onChange={e => updateEntDoc(doc.id, "renewalMonths", e.target.value)} placeholder="No renewal" style={{ ...inputStyle, width: "100%" }} />{renewal && <div style={{ fontSize: 9, color: c.accent, marginTop: 2 }}>Renews: {renewal}</div>}</div>
+                                </div>
+                                <div
+                                  onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                                  onDragLeave={e => { e.currentTarget.style.borderColor = c.border; }}
+                                  onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; if (e.dataTransfer.files[0]) handleEntKybUpload(entId, doc.id, e.dataTransfer.files[0]); }}
+                                  style={{ border: `2px dashed ${c.border}`, borderRadius: 6, padding: "10px 12px", textAlign: "center", cursor: "pointer" }}
+                                  onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = ev => { if (ev.target.files[0]) handleEntKybUpload(entId, doc.id, ev.target.files[0]); }; inp.click(); }}
+                                >
+                                  {doc.uploadStatus === "uploading" ? <span style={{ fontSize: 11, color: c.accent }}>Uploading...</span> : doc.fileName ? <span style={{ fontSize: 11, color: "#22c55e" }}>{doc.fileName} — click to replace</span> : <span style={{ fontSize: 11, color: c.textMuted }}>Drop file or click to upload</span>}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <button onClick={() => {
+                        const newDoc = { id: `kd-${Date.now()}`, name: "", startDate: "", renewalMonths: "", fileName: "", fileSize: 0, fileUrl: "", uploadStatus: null };
+                        updateEnt(entId, "kybDocuments", [...docs, newDoc]);
+                        setEditingClientField(`kd-${newDoc.id}`);
+                      }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 10, fontWeight: 600, marginTop: 4 }}>+ Add Document</button>
+                    </div>
+                  </>);
+                };
+
+                return ents.map((ent, idx) => (
+                  <div key={ent.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 14, marginBottom: idx < ents.length - 1 ? 10 : 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Entity {idx + 1}{ent.entityName ? ` — ${ent.entityName}` : ""}</span>
+                      {ents.length > 1 && <button onClick={() => updateClient(cl.id, "entities", ents.filter(e => e.id !== ent.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10 }}>Remove</button>}
+                    </div>
+                    {renderEntityFields(ent, ent.id, false)}
                   </div>
                 ));
               })()}
@@ -2597,186 +2749,6 @@ function AviroDashboard() {
               </div>
             ))}
           </div>
-
-          {/* KYB Documents */}
-          {(() => {
-            const collapsed = cl.collapsedSections || {};
-            const KYB_STANDARD_DOCS = ["Certificate of Incorporation/Registration", "Articles of Association/Memorandum of Association", "Certificate of Incumbency", "Corporate Structure Chart", "Register of Shareholders", "Register of Directors", "ID Documents for UBOs/Directors", "Proof of Address for UBOs/Directors"];
-            const clientDocs = cl.kybDocuments || [];
-            const existingNames = new Set(clientDocs.map(d => d.name));
-            const missingDocs = KYB_STANDARD_DOCS.filter(d => !existingNames.has(d));
-
-            const updateDoc = (docId, field, val) => {
-              const updated = clientDocs.map(d => d.id === docId ? { ...d, [field]: val } : d);
-              updateClient(cl.id, "kybDocuments", updated);
-            };
-
-            const handleKybUpload = async (docId, file) => {
-              if (!file) return;
-              if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first"); return; }
-              const safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
-              const filePath = "clients/" + safeName + "/kyb/" + docId + "_" + Date.now() + "_" + file.name;
-              updateDoc(docId, "uploadStatus", "uploading");
-              try {
-                const resp = await fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
-                  method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file,
-                });
-                if (!resp.ok) throw new Error("Upload failed: " + resp.status);
-                const publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
-                const updated = clientDocs.map(d => d.id === docId ? { ...d, fileName: file.name, fileSize: file.size, fileUrl: publicUrl, uploadedAt: new Date().toISOString(), uploadStatus: null } : d);
-                updateClient(cl.id, "kybDocuments", updated);
-              } catch (e) {
-                alert("Upload error: " + e.message);
-                updateDoc(docId, "uploadStatus", null);
-              }
-            };
-
-            const downloadKybPack = async () => {
-              if (!window.JSZip) { alert("JSZip not loaded"); return; }
-              const zip = new window.JSZip();
-              const docsWithFiles = clientDocs.filter(d => d.fileUrl);
-              if (docsWithFiles.length === 0) { alert("No documents uploaded yet"); return; }
-              for (const doc of docsWithFiles) {
-                try {
-                  const resp = await fetch(doc.fileUrl);
-                  if (resp.ok) { const blob = await resp.blob(); zip.file(doc.fileName || doc.name + ".pdf", blob); }
-                } catch (e) { console.warn("Skip download:", doc.name, e); }
-              }
-              const blob = await zip.generateAsync({ type: "blob" });
-              window.saveAs(blob, cl.name.replace(/[^a-zA-Z0-9]/g, "_") + "_KYB_Pack.zip");
-            };
-
-            const formatFileSize = (bytes) => { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
-
-            return (
-              <div style={sectionCard}>
-                <div onClick={() => updateClient(cl.id, "collapsedSections", { ...collapsed, kyb: !collapsed.kyb })} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: collapsed.kyb ? 0 : 12, userSelect: "none" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 11, color: c.textMuted, transition: "transform 0.15s", display: "inline-block", transform: collapsed.kyb ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
-                    <h3 style={sectionTitle}>KYB Documents</h3>
-                    <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 400, textTransform: "none" }}>{clientDocs.filter(d => d.fileUrl).length}/{clientDocs.length} uploaded</span>
-                  </div>
-                  <div onClick={e => e.stopPropagation()}><button onClick={downloadKybPack} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>↓ Download Full KYB Pack</button></div>
-                </div>
-                {collapsed.kyb ? null : (<>
-
-                {/* Summary bar */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 12 }}>
-                  {[
-                    { label: "Uploaded", value: clientDocs.filter(d => d.fileUrl).length, color: "#22c55e" },
-                    { label: "Pending", value: clientDocs.filter(d => !d.fileUrl).length, color: "#f59e0b" },
-                    { label: "Missing", value: missingDocs.length, color: "#8b5cf6" },
-                  ].map(s => (
-                    <div key={s.label} style={{ background: c.surface, borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
-                      <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Missing docs suggestions */}
-                {missingDocs.length > 0 && (
-                  <div style={{ background: `${c.accent}15`, border: `1px solid ${c.accent}40`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: c.accent, marginBottom: 6 }}>Missing KYB Documents</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {missingDocs.map(d => (
-                        <button key={d} onClick={() => {
-                          const newDoc = { id: `kd-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, name: d, startDate: "", renewalMonths: "", fileName: "", fileSize: 0, fileUrl: "", uploadStatus: null };
-                          updateClient(cl.id, "kybDocuments", [...clientDocs, newDoc]);
-                        }} style={{ background: "transparent", border: `1px solid ${c.accent}`, color: c.accent, borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 10 }}>+ {d}</button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Document list */}
-                {clientDocs.length === 0 && <div style={{ background: c.surface, borderRadius: 8, padding: 20, textAlign: "center", marginBottom: 12, fontSize: 12, color: c.textMuted }}>No KYB documents added yet. Use the suggestions above or click "Add Document" below.</div>}
-                {clientDocs.map(doc => {
-                  const isEd = editingClientField === `kd-${doc.id}`;
-                  const renewal = doc.startDate && doc.renewalMonths ? (() => {
-                    const d = new Date(doc.startDate); d.setMonth(d.getMonth() + parseInt(doc.renewalMonths));
-                    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-                  })() : null;
-                  const hasFile = !!doc.fileUrl;
-                  const statusColor = hasFile ? "#22c55e" : "#f59e0b";
-
-                  return (
-                    <div key={doc.id}
-                      onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = `2px solid ${c.accent}`; }}
-                      onDragLeave={e => { e.currentTarget.style.outline = "none"; }}
-                      onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = "none"; if (e.dataTransfer.files[0]) handleKybUpload(doc.id, e.dataTransfer.files[0]); }}
-                      style={{ borderLeft: `4px solid ${statusColor}`, padding: "12px 16px", marginBottom: 8, background: `${statusColor}08`, borderRadius: "0 8px 8px 0", border: `1px solid ${statusColor}30` }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 4 }}>{doc.name || "Untitled Document"}</div>
-                          {!isEd && (
-                            <div style={{ fontSize: 11, color: c.textMuted }}>
-                              {doc.startDate && <span>Started {doc.startDate}</span>}
-                              {renewal && <span> · Renews {renewal}</span>}
-                              {doc.startDate && !doc.renewalMonths && <span> · No renewal</span>}
-                              {doc.fileName && (
-                                <span> · <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ color: c.accent, textDecoration: "none", fontWeight: 500 }}>↓ {doc.fileName}</a> <span style={{ fontSize: 10 }}>{formatFileSize(doc.fileSize)}</span></span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                          {doc.fileUrl && <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>↓</a>}
-                          <button onClick={() => setEditingClientField(isEd ? null : `kd-${doc.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 8px" }}>{isEd ? "Done" : "Edit"}</button>
-                          <button onClick={() => updateClient(cl.id, "kybDocuments", clientDocs.filter(d => d.id !== doc.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
-                        </div>
-                      </div>
-
-                      {isEd && (
-                        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                          <div><label style={labelStyle}>Document Name</label><input value={doc.name || ""} onChange={e => updateDoc(doc.id, "name", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                            <div><label style={labelStyle}>Start Date</label><input type="date" value={doc.startDate || ""} onChange={e => updateDoc(doc.id, "startDate", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div>
-                              <label style={labelStyle}>Renewal (months)</label>
-                              <input type="number" min="0" value={doc.renewalMonths || ""} onChange={e => updateDoc(doc.id, "renewalMonths", e.target.value)} placeholder="No renewal" style={{ ...inputStyle, width: "100%" }} />
-                              {renewal && <div style={{ fontSize: 10, color: c.accent, marginTop: 3 }}>Renews: {renewal}</div>}
-                            </div>
-                          </div>
-                          {/* Upload zone */}
-                          <div
-                            onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
-                            onDragLeave={e => { e.currentTarget.style.borderColor = c.border; }}
-                            onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; if (e.dataTransfer.files[0]) handleKybUpload(doc.id, e.dataTransfer.files[0]); }}
-                            style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: doc.fileName ? "8px 12px" : "16px 12px", textAlign: "center", cursor: "pointer", transition: "border-color 0.15s" }}
-                            onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = ev => { if (ev.target.files[0]) handleKybUpload(doc.id, ev.target.files[0]); }; inp.click(); }}
-                          >
-                            {doc.uploadStatus === "uploading" ? (
-                              <span style={{ fontSize: 11, color: c.accent }}>Uploading...</span>
-                            ) : doc.fileName ? (
-                              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                                <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 500 }}>{doc.fileName}</span>
-                                <span style={{ fontSize: 10, color: c.textMuted }}>{formatFileSize(doc.fileSize)}</span>
-                                <span style={{ fontSize: 10, color: c.textMuted }}>— click or drag to replace</span>
-                              </div>
-                            ) : (
-                              <div>
-                                <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 2 }}>Drop file here or click to upload</div>
-                                <div style={{ fontSize: 10, color: c.textMuted }}>PDF, Word, image, or any document</div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* Add document button */}
-                <button onClick={() => {
-                  const newDoc = { id: `kd-${Date.now()}`, name: "", startDate: "", renewalMonths: "", fileName: "", fileSize: 0, fileUrl: "", uploadStatus: null };
-                  updateClient(cl.id, "kybDocuments", [...clientDocs, newDoc]);
-                  setEditingClientField(`kd-${newDoc.id}`);
-                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, marginTop: 8 }}>+ Add Document</button>
-                </>)}
-              </div>
-            );
-          })()}
 
           </>);
           })()}
