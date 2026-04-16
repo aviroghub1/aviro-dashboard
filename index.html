@@ -201,7 +201,7 @@ const motionFetch = async (endpoint, opts = {}) => {
 };
 
 function AviroDashboard() {
-  const [section, setSection] = useState("calendar");
+  const [section, setSection] = useState("home");
   const [collapsed, setCollapsed] = useState(false);
 
   // Calendar state
@@ -4647,39 +4647,108 @@ function AviroDashboard() {
     );
   };
 
-  const navItems = [
-    { section: "david", label: "DAVID", isHeader: true },
-    { section: "calendar", icon: "calendar", label: "David Calendar" },
-    { section: "quickjobs", icon: "zap", label: "Quick Jobs" },
-    { section: "signal", icon: "signal", label: "Signal Tasks" },
-    { section: "sophie", icon: "delegate", label: "Sophie Tasks" },
-    { section: "personal", icon: "list", label: "Personal Jobs" },
-    { section: "notes", icon: "list", label: "Notes" },
-    { section: "progress", icon: "signal", label: "Daily Progress" },
-    { section: "gateway", label: "GATEWAY.IO", isHeader: true },
-    { section: "clients", icon: "gateway", label: "Client Portal" },
-    { section: "roadmap", icon: "roadmap", label: "Integration Roadmap" },
-    { section: "corporate", label: "CORPORATE MATRIX", isHeader: true },
-    { section: "entities", icon: "building", label: "Entity Matrix" },
-    { section: "moneyflow", icon: "flow", label: "Corporate Flow" },
-    { section: "banks", icon: "bank", label: "Bank Accounts" },
-    { section: "brands", icon: "grid", label: "Gaming Brands" },
+  // ===== HOMEPAGE =====
+  const renderHome = () => {
+    const homeCards = [
+      { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #6366f1, #8b5cf6)", defaultSection: "clients" },
+      { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #f59e0b, #ef4444)", defaultSection: null },
+      { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #10b981, #059669)", defaultSection: "entities" },
+      { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)", defaultSection: "calendar" },
+    ];
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 64px)" }}>
+        {/* Branding */}
+        <div style={{ textAlign: "center", marginBottom: 48 }}>
+          <div style={{ width: 80, height: 80, borderRadius: 20, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 36, color: "#fff", margin: "0 auto 20px", boxShadow: "0 8px 32px rgba(99,102,241,0.3)" }}>A</div>
+          <h1 style={{ fontSize: 36, fontWeight: 800, color: c.text, margin: "0 0 6px 0", letterSpacing: "-0.5px" }}>The Aviro Group</h1>
+          <p style={{ fontSize: 16, color: c.textMuted, margin: "0 0 8px 0", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 500 }}>Global Enterprise</p>
+          <div style={{ width: 60, height: 3, background: "linear-gradient(90deg, #6366f1, #8b5cf6)", borderRadius: 2, margin: "16px auto 0" }} />
+        </div>
+
+        {/* Section title */}
+        <h2 style={{ fontSize: 14, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 24 }}>Company Dashboard</h2>
+
+        {/* Cards grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20, width: "100%", maxWidth: 700 }}>
+          {homeCards.map(card => (
+            <div key={card.key}
+              onClick={() => { if (card.defaultSection) setSection(card.defaultSection); }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.15)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.06)"; }}
+              style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 28, cursor: card.defaultSection ? "pointer" : "default", transition: "all 0.2s ease", boxShadow: "0 4px 16px rgba(0,0,0,0.06)", position: "relative", overflow: "hidden", opacity: card.defaultSection ? 1 : 0.6 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: card.gradient, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, boxShadow: `0 4px 12px ${card.gradient.includes("6366f1") ? "rgba(99,102,241,0.3)" : card.gradient.includes("f59e0b") ? "rgba(245,158,11,0.3)" : card.gradient.includes("10b981") ? "rgba(16,185,129,0.3)" : "rgba(59,130,246,0.3)"}` }}>
+                <Icon type={card.icon} size={22} color="#fff" />
+              </div>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: c.text, margin: "0 0 6px 0" }}>{card.title}</h3>
+              <p style={{ fontSize: 13, color: c.textMuted, margin: 0, lineHeight: 1.4 }}>{card.desc}</p>
+              {!card.defaultSection && <div style={{ position: "absolute", top: 12, right: 12, background: c.surface, borderRadius: 6, padding: "3px 8px", fontSize: 10, color: c.textMuted, fontWeight: 600 }}>Coming Soon</div>}
+              {card.defaultSection && <div style={{ marginTop: 12, fontSize: 12, color: c.accent, fontWeight: 600 }}>Open →</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ===== NAVIGATION GROUPS =====
+  const sectionGroups = {
+    david: { label: "DAVID CALENDAR", sections: ["calendar", "quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
+    gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap"] },
+    corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
+  };
+
+  const getSectionGroup = (s) => {
+    for (const [key, group] of Object.entries(sectionGroups)) {
+      if (group.sections.includes(s)) return key;
+    }
+    return null;
+  };
+
+  const activeGroup = getSectionGroup(section);
+
+  const allNavItems = [
+    { section: "david", label: "DAVID", isHeader: true, group: "david" },
+    { section: "calendar", icon: "calendar", label: "David Calendar", group: "david" },
+    { section: "quickjobs", icon: "zap", label: "Quick Jobs", group: "david" },
+    { section: "signal", icon: "signal", label: "Signal Tasks", group: "david" },
+    { section: "sophie", icon: "delegate", label: "Sophie Tasks", group: "david" },
+    { section: "personal", icon: "list", label: "Personal Jobs", group: "david" },
+    { section: "notes", icon: "list", label: "Notes", group: "david" },
+    { section: "progress", icon: "signal", label: "Daily Progress", group: "david" },
+    { section: "gateway", label: "GATEWAY.IO", isHeader: true, group: "gateway" },
+    { section: "clients", icon: "gateway", label: "Client Portal", group: "gateway" },
+    { section: "roadmap", icon: "roadmap", label: "Integration Roadmap", group: "gateway" },
+    { section: "corporate", label: "CORPORATE MATRIX", isHeader: true, group: "corporate" },
+    { section: "entities", icon: "building", label: "Entity Matrix", group: "corporate" },
+    { section: "moneyflow", icon: "flow", label: "Corporate Flow", group: "corporate" },
+    { section: "banks", icon: "bank", label: "Bank Accounts", group: "corporate" },
+    { section: "brands", icon: "grid", label: "Gaming Brands", group: "corporate" },
   ];
 
-  const sections = { calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands };
+  const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
+
+  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands };
 
   return (
     <div style={{ display: "flex", height: "100vh", background: c.bg, fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: c.text, overflow: "hidden" }}>
+      {section !== "home" && (
       <div style={{ width: collapsed ? 60 : 220, background: c.surface, borderRight: `1px solid ${c.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ padding: collapsed ? "20px 10px" : "20px 16px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setCollapsed(!collapsed)}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#fff", flexShrink: 0 }}>A</div>
           {!collapsed && <div style={{ fontWeight: 700, fontSize: 14, color: c.text, whiteSpace: "nowrap" }}>AVIRO GROUP</div>}
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+        {/* Back to Homepage */}
+        <div onClick={() => setSection("home")} style={{ display: "flex", alignItems: "center", gap: 8, padding: collapsed ? "10px 16px" : "10px 16px", margin: "8px 6px 2px", borderRadius: 6, cursor: "pointer", background: "transparent", color: c.textMuted, fontSize: 12, fontWeight: 500 }}
+          onMouseEnter={e => { e.currentTarget.style.background = c.surfaceHover; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+          <span style={{ fontSize: 14 }}>←</span>
+          {!collapsed && <span>Back to Homepage</span>}
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
           {navItems.map((item, i) => {
             if (item.isHeader) {
               if (collapsed) return <div key={i} style={{ height: 1, background: c.border, margin: "8px 10px" }} />;
-              return <div key={i} style={{ padding: "16px 16px 6px", fontSize: 10, fontWeight: 700, color: c.textMuted, letterSpacing: "0.1em" }}>{item.label}</div>;
+              return <div key={i} style={{ padding: "12px 16px 6px", fontSize: 10, fontWeight: 700, color: c.textMuted, letterSpacing: "0.1em" }}>{item.label}</div>;
             }
             const isAct = section === item.section;
             return (
@@ -4703,8 +4772,9 @@ function AviroDashboard() {
           </div>
         )}
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: 32 }}>
-        <div style={{ maxWidth: section === "signal" ? 1400 : 1100, margin: "0 auto" }}>{(sections[section] || renderCalendar)()}</div>
+      )}
+      <div style={{ flex: 1, overflowY: "auto", padding: section === "home" ? 0 : 32 }}>
+        <div style={{ maxWidth: section === "home" ? "100%" : section === "signal" ? 1400 : 1100, margin: "0 auto" }}>{(sections[section] || renderHome)()}</div>
       </div>
       {copiedText && (
         <div style={{ position: "fixed", bottom: 24, right: 24, background: c.success, color: "#fff", padding: "10px 20px", borderRadius: 8, fontSize: 12, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.3)", zIndex: 1000 }}>Copied to clipboard</div>
