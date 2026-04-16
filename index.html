@@ -2700,56 +2700,6 @@ function AviroDashboard() {
               </>)}
             </div>
 
-          {/* Row 7: Bank Accounts */}
-          <div style={sectionCard}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <h3 style={sectionTitle}>Bank Accounts</h3>
-              <button onClick={() => {
-                const newBA = { id: `clba-${Date.now()}`, bankName: "", accountType: "", feeIncoming: "", feeOutgoing: "" };
-                updateClient(cl.id, "bankAccounts", [...(cl.bankAccounts || []), newBA]);
-              }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
-            </div>
-            {(cl.bankAccounts || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No bank accounts</div>}
-            {(cl.bankAccounts || []).map(ba => (
-              <div key={ba.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: 10, alignItems: "end" }}>
-                  <div>
-                    <label style={labelStyle}>Bank Name</label>
-                    <input value={ba.bankName || ""} onChange={e => {
-                      const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, bankName: e.target.value } : b);
-                      updateClient(cl.id, "bankAccounts", upd);
-                    }} placeholder="Bank name" style={{ ...inputStyle, width: "100%" }} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Account Type</label>
-                    <select value={ba.accountType || ""} onChange={e => {
-                      const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, accountType: e.target.value } : b);
-                      updateClient(cl.id, "bankAccounts", upd);
-                    }} style={{ ...inputStyle, width: "100%" }}>
-                      <option value="">— Type —</option>
-                      {BANK_ACCT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Fee In (%)</label>
-                    <input value={ba.feeIncoming || ""} onChange={e => {
-                      const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, feeIncoming: e.target.value } : b);
-                      updateClient(cl.id, "bankAccounts", upd);
-                    }} placeholder="%" style={{ ...inputStyle, width: "100%" }} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Fee Out (%)</label>
-                    <input value={ba.feeOutgoing || ""} onChange={e => {
-                      const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, feeOutgoing: e.target.value } : b);
-                      updateClient(cl.id, "bankAccounts", upd);
-                    }} placeholder="%" style={{ ...inputStyle, width: "100%" }} />
-                  </div>
-                  <button onClick={() => updateClient(cl.id, "bankAccounts", (cl.bankAccounts || []).filter(b => b.id !== ba.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10, marginBottom: 2 }}>✕</button>
-                </div>
-              </div>
-            ))}
-          </div>
-
           </>);
           })()}
         </div>
