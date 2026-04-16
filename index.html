@@ -2284,7 +2284,26 @@ function AviroDashboard() {
         <div>
           <button onClick={() => { setSelectedClient(null); setEditingClientField(null); }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 16, padding: 0 }}>&larr; Back to Client Portal</button>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{cl.name}</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{cl.name}</h2>
+              {(() => {
+                const statuses = ["active", "onboarding", "inactive"];
+                const statusColors = { active: "#22c55e", onboarding: "#f59e0b", inactive: "#6b7280" };
+                const current = cl.status || "onboarding";
+                return (
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {statuses.map(s => (
+                      <button key={s} onClick={() => updateClient(cl.id, "status", s)} style={{
+                        background: current === s ? `${statusColors[s]}20` : "transparent",
+                        border: `1px solid ${current === s ? statusColors[s] : c.border}`,
+                        color: current === s ? statusColors[s] : c.textMuted,
+                        borderRadius: 6, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600, textTransform: "capitalize",
+                      }}>{s}</button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
             <button onClick={() => {
               if (confirm("Delete this client?")) {
                 setGatewayClients(gatewayClients.filter(x => x.id !== cl.id));
@@ -2509,7 +2528,7 @@ function AviroDashboard() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Gateway.io Client Portal</h2>
-            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gatewayClients.length} client{gatewayClients.length !== 1 ? "s" : ""}</p>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gatewayClients.filter(x => x.status === "active").length} active · {gatewayClients.filter(x => x.status === "onboarding" || !x.status).length} onboarding · {gatewayClients.filter(x => x.status === "inactive").length} inactive</p>
           </div>
           <button onClick={() => setShowAddClient(!showAddClient)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Client</button>
         </div>
@@ -2548,7 +2567,10 @@ function AviroDashboard() {
               <div key={cl.id} onClick={() => { setSelectedClient(cl.id); setEditingClientField(null); }}
                 style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 20, cursor: "pointer", borderLeft: `3px solid ${typeColor}`, transition: "background 0.15s" }}
                 onMouseEnter={e => e.currentTarget.style.background = c.cardHover} onMouseLeave={e => e.currentTarget.style.background = c.card}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: c.text, marginBottom: 6 }}>{cl.name}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: c.text }}>{cl.name}</div>
+                  {(() => { const sc = { active: "#22c55e", onboarding: "#f59e0b", inactive: "#6b7280" }; const st = cl.status || "onboarding"; return <span style={{ fontSize: 9, color: sc[st], background: `${sc[st]}15`, border: `1px solid ${sc[st]}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 700, textTransform: "uppercase" }}>{st}</span>; })()}
+                </div>
                 {cl.clientType && <span style={{ fontSize: 10, color: typeColor, background: `${typeColor}15`, border: `1px solid ${typeColor}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{cl.clientType}</span>}
                 <div style={{ marginTop: 8, fontSize: 11, color: c.textMuted }}>
                   {(cl.agreements || []).length > 0 && <span>{(cl.agreements || []).length} agreement{(cl.agreements || []).length !== 1 ? "s" : ""}</span>}
