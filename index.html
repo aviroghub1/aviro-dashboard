@@ -2312,240 +2312,241 @@ function AviroDashboard() {
             }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete Client</button>
           </div>
 
-          {/* Row 0: Entity Details + Licensed + UBO/Director */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-            <div style={sectionCard}>
-              <h3 style={sectionTitle}>Entity Details</h3>
-              {[["jurisdiction", "Jurisdiction"], ["companyNumber", "Company Number"], ["registeredAddress", "Registered Address"]].map(([key, label]) => (
-                <div key={key} style={{ marginBottom: 8 }}>
-                  <label style={labelStyle}>{label}</label>
-                  <input value={cl[key] || ""} onChange={e => updateClient(cl.id, key, e.target.value)} placeholder={`Enter ${label.toLowerCase()}...`} style={{ ...inputStyle, width: "100%" }} />
+          {/* Collapsible section helper */}
+          {(() => {
+            const collapsed = cl.collapsedSections || {};
+            const toggleSection = (key) => updateClient(cl.id, "collapsedSections", { ...collapsed, [key]: !collapsed[key] });
+            const SectionHeader = ({ sectionKey, title, extra, badge }) => (
+              <div onClick={() => toggleSection(sectionKey)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: collapsed[sectionKey] ? 0 : 12, userSelect: "none" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: c.textMuted, transition: "transform 0.15s", display: "inline-block", transform: collapsed[sectionKey] ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+                  <h3 style={sectionTitle}>{title}</h3>
+                  {badge && <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 400, textTransform: "none" }}>{badge}</span>}
                 </div>
-              ))}
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={e => e.stopPropagation()}>{extra}</div>
+              </div>
+            );
 
-              {/* Licensed toggle */}
-              <div style={{ marginTop: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  <label style={labelStyle}>Licensed</label>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    {["Yes", "No"].map(opt => (
-                      <button key={opt} onClick={() => updateClient(cl.id, "isLicensed", opt === "Yes")} style={{
-                        background: (cl.isLicensed === true && opt === "Yes") || (cl.isLicensed === false && opt === "No") ? `${c.accent}20` : "transparent",
-                        border: `1px solid ${(cl.isLicensed === true && opt === "Yes") || (cl.isLicensed === false && opt === "No") ? c.accent : c.border}`,
-                        color: (cl.isLicensed === true && opt === "Yes") || (cl.isLicensed === false && opt === "No") ? c.accent : c.textMuted,
-                        borderRadius: 5, padding: "3px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600,
-                      }}>{opt}</button>
-                    ))}
-                  </div>
-                </div>
-                {cl.isLicensed && (
-                  <div style={{ paddingLeft: 4, display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div><label style={labelStyle}>License Jurisdiction</label><input value={cl.licenseJurisdiction || ""} onChange={e => updateClient(cl.id, "licenseJurisdiction", e.target.value)} placeholder="License jurisdiction..." style={{ ...inputStyle, width: "100%" }} /></div>
-                    <div><label style={labelStyle}>License Number</label><input value={cl.licenseNumber || ""} onChange={e => updateClient(cl.id, "licenseNumber", e.target.value)} placeholder="License number..." style={{ ...inputStyle, width: "100%" }} /></div>
-                    <div>
-                      <label style={labelStyle}>License Expiry</label>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <input type="date" value={cl.licenseExpiry || ""} onChange={e => updateClient(cl.id, "licenseExpiry", e.target.value)} style={{ ...inputStyle }} />
-                        {cl.licenseExpiry && (() => {
-                          const exp = new Date(cl.licenseExpiry);
-                          const now = new Date();
-                          const daysLeft = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
-                          const alertColor = daysLeft <= 0 ? "#ef4444" : daysLeft <= 30 ? "#f59e0b" : daysLeft <= 90 ? "#eab308" : "#22c55e";
-                          const alertText = daysLeft <= 0 ? "EXPIRED" : daysLeft <= 30 ? `${daysLeft}d — EXPIRING SOON` : daysLeft <= 90 ? `${daysLeft}d — Review soon` : `${daysLeft}d remaining`;
-                          return <span style={{ fontSize: 10, color: alertColor, fontWeight: 700 }}>{alertText}</span>;
-                        })()}
+            return (<>
+
+            {/* Entity Details (combined: details + licensed + UBO + director + add entity) */}
+            <div style={sectionCard}>
+              <SectionHeader sectionKey="entity" title="Entity Details" badge={`${(cl.entities || [{ id: "primary" }]).length} ${(cl.entities || [{ id: "primary" }]).length === 1 ? "entity" : "entities"}`} extra={
+                !collapsed.entity && <button onClick={() => updateClient(cl.id, "entities", [...(cl.entities || [{ id: "primary", jurisdiction: cl.jurisdiction || "", companyNumber: cl.companyNumber || "", registeredAddress: cl.registeredAddress || "", isLicensed: cl.isLicensed || false, licenseJurisdiction: cl.licenseJurisdiction || "", licenseNumber: cl.licenseNumber || "", licenseExpiry: cl.licenseExpiry || "", uboIsEntity: cl.uboIsEntity || false, uboEntityName: cl.uboEntityName || "", ubo: cl.ubo || "", director: cl.director || "" }]), { id: `ent-${Date.now()}`, jurisdiction: "", companyNumber: "", registeredAddress: "", isLicensed: false, licenseJurisdiction: "", licenseNumber: "", licenseExpiry: "", uboIsEntity: false, uboEntityName: "", ubo: "", director: "" }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Entity</button>
+              } />
+              {!collapsed.entity && (() => {
+                // Migrate: if cl.entities doesn't exist yet, create from flat fields
+                const ents = cl.entities || [{ id: "primary", jurisdiction: cl.jurisdiction || "", companyNumber: cl.companyNumber || "", registeredAddress: cl.registeredAddress || "", isLicensed: cl.isLicensed || false, licenseJurisdiction: cl.licenseJurisdiction || "", licenseNumber: cl.licenseNumber || "", licenseExpiry: cl.licenseExpiry || "", uboIsEntity: cl.uboIsEntity || false, uboEntityName: cl.uboEntityName || "", ubo: cl.ubo || "", director: cl.director || "" }];
+                const updateEnt = (entId, field, val) => {
+                  const updated = ents.map(e => e.id === entId ? { ...e, [field]: val } : e);
+                  updateClient(cl.id, "entities", updated);
+                };
+                return ents.map((ent, idx) => (
+                  <div key={ent.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 14, marginBottom: idx < ents.length - 1 ? 10 : 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Entity {idx + 1}</span>
+                      {ents.length > 1 && <button onClick={() => updateClient(cl.id, "entities", ents.filter(e => e.id !== ent.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10 }}>Remove</button>}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div><label style={labelStyle}>Jurisdiction</label><input value={ent.jurisdiction || ""} onChange={e => updateEnt(ent.id, "jurisdiction", e.target.value)} placeholder="Jurisdiction..." style={{ ...inputStyle, width: "100%" }} /></div>
+                      <div><label style={labelStyle}>Company Number</label><input value={ent.companyNumber || ""} onChange={e => updateEnt(ent.id, "companyNumber", e.target.value)} placeholder="Company number..." style={{ ...inputStyle, width: "100%" }} /></div>
+                      <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Registered Address</label><input value={ent.registeredAddress || ""} onChange={e => updateEnt(ent.id, "registeredAddress", e.target.value)} placeholder="Registered address..." style={{ ...inputStyle, width: "100%" }} /></div>
+
+                      {/* Licensed */}
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                          <label style={labelStyle}>Licensed</label>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            {["Yes", "No"].map(opt => (
+                              <button key={opt} onClick={() => updateEnt(ent.id, "isLicensed", opt === "Yes")} style={{
+                                background: (ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No") ? `${c.accent}20` : "transparent",
+                                border: `1px solid ${(ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No") ? c.accent : c.border}`,
+                                color: (ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No") ? c.accent : c.textMuted,
+                                borderRadius: 5, padding: "2px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600,
+                              }}>{opt}</button>
+                            ))}
+                          </div>
+                        </div>
+                        {ent.isLicensed && (
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                            <div><label style={labelStyle}>License Jurisdiction</label><input value={ent.licenseJurisdiction || ""} onChange={e => updateEnt(ent.id, "licenseJurisdiction", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
+                            <div><label style={labelStyle}>License Number</label><input value={ent.licenseNumber || ""} onChange={e => updateEnt(ent.id, "licenseNumber", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
+                            <div>
+                              <label style={labelStyle}>License Expiry</label>
+                              <input type="date" value={ent.licenseExpiry || ""} onChange={e => updateEnt(ent.id, "licenseExpiry", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                              {ent.licenseExpiry && (() => {
+                                const exp = new Date(ent.licenseExpiry); const now = new Date(); const daysLeft = Math.ceil((exp - now) / (1000*60*60*24));
+                                const ac = daysLeft <= 0 ? "#ef4444" : daysLeft <= 30 ? "#f59e0b" : daysLeft <= 90 ? "#eab308" : "#22c55e";
+                                const at = daysLeft <= 0 ? "EXPIRED" : daysLeft <= 30 ? `${daysLeft}d — EXPIRING` : daysLeft <= 90 ? `${daysLeft}d — Review` : `${daysLeft}d`;
+                                return <span style={{ fontSize: 9, color: ac, fontWeight: 700, marginTop: 2, display: "block" }}>{at}</span>;
+                              })()}
+                            </div>
+                          </div>
+                        )}
                       </div>
+
+                      {/* UBO */}
+                      <div>
+                        <label style={labelStyle}>UBO</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: c.textMuted, cursor: "pointer" }}>
+                            <input type="checkbox" checked={ent.uboIsEntity || false} onChange={e => updateEnt(ent.id, "uboIsEntity", e.target.checked)} style={{ accentColor: c.accent }} /> Owned by entity
+                          </label>
+                        </div>
+                        {ent.uboIsEntity ? (
+                          <input value={ent.uboEntityName || ""} onChange={e => updateEnt(ent.id, "uboEntityName", e.target.value)} placeholder="Owner entity name..." style={{ ...inputStyle, width: "100%" }} />
+                        ) : (
+                          <input value={ent.ubo || ""} onChange={e => updateEnt(ent.id, "ubo", e.target.value)} placeholder="UBO name..." style={{ ...inputStyle, width: "100%" }} />
+                        )}
+                      </div>
+
+                      {/* Director */}
+                      <div><label style={labelStyle}>Director</label><input value={ent.director || ""} onChange={e => updateEnt(ent.id, "director", e.target.value)} placeholder="Director name..." style={{ ...inputStyle, width: "100%" }} /></div>
                     </div>
                   </div>
-                )}
-              </div>
+                ));
+              })()}
             </div>
 
-            {/* UBO + Director */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ ...sectionCard, flex: 1, marginBottom: 0 }}>
-                <h3 style={sectionTitle}>UBO (Ultimate Beneficial Owner)</h3>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: c.text, cursor: "pointer" }}>
-                    <input type="checkbox" checked={cl.uboIsEntity || false} onChange={e => updateClient(cl.id, "uboIsEntity", e.target.checked)} style={{ accentColor: c.accent }} />
-                    Owned by another entity
-                  </label>
-                </div>
-                {cl.uboIsEntity ? (
-                  <div>
-                    <label style={labelStyle}>Owner Entity</label>
-                    <input value={cl.uboEntityName || ""} onChange={e => updateClient(cl.id, "uboEntityName", e.target.value)} placeholder="Enter entity name..." style={{ ...inputStyle, width: "100%" }} />
-                  </div>
-                ) : (
-                  <div>
-                    <label style={labelStyle}>UBO Name</label>
-                    <input value={cl.ubo || ""} onChange={e => updateClient(cl.id, "ubo", e.target.value)} placeholder="Enter UBO name..." style={{ ...inputStyle, width: "100%" }} />
-                  </div>
-                )}
-              </div>
-              <div style={{ ...sectionCard, flex: 1, marginBottom: 0 }}>
-                <h3 style={sectionTitle}>Director</h3>
-                <input value={cl.director || ""} onChange={e => updateClient(cl.id, "director", e.target.value)} placeholder="Enter director name..." style={{ ...inputStyle, width: "100%" }} />
-              </div>
-            </div>
-          </div>
-
-          {/* Row 1: Client Type + Client Entities */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            {/* Client Type */}
             <div style={sectionCard}>
-              <h3 style={sectionTitle}>Client Type</h3>
-              <select value={cl.clientType || ""} onChange={e => updateClient(cl.id, "clientType", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
-                <option value="">— Select Type —</option>
-                {CLIENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div style={sectionCard}>
-              <h3 style={sectionTitle}>Client Entity(s)</h3>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-                {(cl.clientEntities || []).map((ent, i) => (
-                  <span key={i} style={{ fontSize: 11, background: `${c.accent}15`, color: c.accent, border: `1px solid ${c.accent}40`, padding: "3px 8px", borderRadius: 4, display: "flex", alignItems: "center", gap: 4 }}>
-                    {ent}
-                    <span onClick={() => updateClient(cl.id, "clientEntities", (cl.clientEntities || []).filter((_, idx) => idx !== i))} style={{ cursor: "pointer", fontWeight: 700, fontSize: 12 }}>×</span>
-                  </span>
-                ))}
-              </div>
-              {editingClientField === `entities-${cl.id}` ? (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input id={`ce-input-${cl.id}`} placeholder="Entity name..." style={{ ...inputStyle, flex: 1 }} onKeyDown={e => {
-                    if (e.key === "Enter" && e.target.value.trim()) {
-                      updateClient(cl.id, "clientEntities", [...(cl.clientEntities || []), e.target.value.trim()]);
-                      e.target.value = "";
-                    }
-                  }} />
-                  <button onClick={() => {
-                    const inp = document.getElementById(`ce-input-${cl.id}`);
-                    if (inp && inp.value.trim()) { updateClient(cl.id, "clientEntities", [...(cl.clientEntities || []), inp.value.trim()]); inp.value = ""; }
-                  }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Add</button>
-                  <button onClick={() => setEditingClientField(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}>Done</button>
-                </div>
-              ) : (
-                <button onClick={() => setEditingClientField(`entities-${cl.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}>+ Add Entity</button>
+              <SectionHeader sectionKey="type" title="Client Type" badge={cl.clientType || ""} />
+              {!collapsed.type && (
+                <select value={cl.clientType || ""} onChange={e => updateClient(cl.id, "clientType", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                  <option value="">— Select Type —</option>
+                  {CLIENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
               )}
             </div>
-          </div>
 
-          {/* Row 2: Agreements */}
-          <div style={sectionCard}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <h3 style={sectionTitle}>Agreements</h3>
-              <button onClick={() => {
-                const newAg = { id: `clag-${Date.now()}`, name: "", startDate: "", renewalMonths: "" };
-                updateClient(cl.id, "agreements", [...(cl.agreements || []), newAg]);
-                setEditingClientField(`ag-${newAg.id}`);
-              }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
+            {/* Agreements */}
+            <div style={sectionCard}>
+              <SectionHeader sectionKey="agreements" title="Agreements" badge={`${(cl.agreements || []).length}`} extra={
+                !collapsed.agreements && <button onClick={() => {
+                  const newAg = { id: `clag-${Date.now()}`, name: "", startDate: "", renewalMonths: "" };
+                  updateClient(cl.id, "agreements", [...(cl.agreements || []), newAg]);
+                  setEditingClientField(`ag-${newAg.id}`);
+                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
+              } />
+              {!collapsed.agreements && (<>
+                {(cl.agreements || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No agreements</div>}
+                {(cl.agreements || []).map(ag => {
+                  const isEd = editingClientField === `ag-${ag.id}`;
+                  const renewal = renewalCalc(ag.startDate, ag.renewalMonths);
+                  return (
+                    <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
+                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                            {ag.startDate && <span>Started {ag.startDate}</span>}
+                            {renewal && <span> · Renews {renewal}</span>}
+                            {ag.startDate && !ag.renewalMonths && <span> · No renewal</span>}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button onClick={() => setEditingClientField(isEd ? null : `ag-${ag.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 8px" }}>{isEd ? "Done" : "Edit"}</button>
+                          <button onClick={() => updateClient(cl.id, "agreements", (cl.agreements || []).filter(a => a.id !== ag.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                        </div>
+                      </div>
+                      {isEd && (
+                        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
+                          <div><label style={labelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => {
+                            const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, name: e.target.value } : a);
+                            updateClient(cl.id, "agreements", upd);
+                          }} style={{ ...inputStyle, width: "100%" }} /></div>
+                          <div><label style={labelStyle}>Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => {
+                            const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, startDate: e.target.value } : a);
+                            updateClient(cl.id, "agreements", upd);
+                          }} style={{ ...inputStyle, width: "100%" }} /></div>
+                          <div><label style={labelStyle}>Renewal (months)</label><input type="number" min="0" value={ag.renewalMonths || ""} onChange={e => {
+                            const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, renewalMonths: e.target.value } : a);
+                            updateClient(cl.id, "agreements", upd);
+                          }} placeholder="No renewal" style={{ ...inputStyle, width: "100%" }} /></div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>)}
             </div>
-            {(cl.agreements || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No agreements</div>}
-            {(cl.agreements || []).map(ag => {
-              const isEd = editingClientField === `ag-${ag.id}`;
-              const renewal = renewalCalc(ag.startDate, ag.renewalMonths);
-              return (
-                <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+
+            {/* Introduction + Deal */}
+            <div style={sectionCard}>
+              <SectionHeader sectionKey="deal" title="Introduction & Deal" badge={cl.monthlyFee ? `${cl.monthlyFeeCurrency || "USD"} ${cl.monthlyFee}/mo` : ""} />
+              {!collapsed.deal && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div><label style={labelStyle}>Introduction</label><input value={cl.introduction || ""} onChange={e => updateClient(cl.id, "introduction", e.target.value)} placeholder="Who introduced this client..." style={{ ...inputStyle, width: "100%" }} /></div>
+                    <div><label style={labelStyle}>Introduction Deal</label><input value={cl.introductionDeal || ""} onChange={e => updateClient(cl.id, "introductionDeal", e.target.value)} placeholder="Deal terms..." style={{ ...inputStyle, width: "100%" }} /></div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
-                      <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
-                        {ag.startDate && <span>Started {ag.startDate}</span>}
-                        {renewal && <span> · Renews {renewal}</span>}
-                        {ag.startDate && !ag.renewalMonths && <span> · No renewal</span>}
+                      <label style={labelStyle}>Monthly Fee</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <select value={cl.monthlyFeeCurrency || "USD"} onChange={e => updateClient(cl.id, "monthlyFeeCurrency", e.target.value)} style={{ ...inputStyle, width: 90 }}>
+                          {CLIENT_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                        </select>
+                        <input value={cl.monthlyFee || ""} onChange={e => updateClient(cl.id, "monthlyFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle, flex: 1 }} />
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button onClick={() => setEditingClientField(isEd ? null : `ag-${ag.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 8px" }}>{isEd ? "Done" : "Edit"}</button>
-                      <button onClick={() => updateClient(cl.id, "agreements", (cl.agreements || []).filter(a => a.id !== ag.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                    <div>
+                      <label style={labelStyle}>Revenue Share</label>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input value={cl.revenueSharePct || ""} onChange={e => updateClient(cl.id, "revenueSharePct", e.target.value)} placeholder="%" style={{ ...inputStyle, width: 70 }} />
+                        <span style={{ fontSize: 11, color: c.textMuted }}>% from</span>
+                        <select value={cl.revenueShareFrom || ""} onChange={e => updateClient(cl.id, "revenueShareFrom", e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                          <option value="">— Select —</option>
+                          {REVENUE_SHARE_FROM.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </div>
                     </div>
                   </div>
-                  {isEd && (
-                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
-                      <div><label style={labelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => {
-                        const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, name: e.target.value } : a);
-                        updateClient(cl.id, "agreements", upd);
-                      }} style={{ ...inputStyle, width: "100%" }} /></div>
-                      <div><label style={labelStyle}>Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => {
-                        const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, startDate: e.target.value } : a);
-                        updateClient(cl.id, "agreements", upd);
-                      }} style={{ ...inputStyle, width: "100%" }} /></div>
-                      <div><label style={labelStyle}>Renewal (months)</label><input type="number" min="0" value={ag.renewalMonths || ""} onChange={e => {
-                        const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, renewalMonths: e.target.value } : a);
-                        updateClient(cl.id, "agreements", upd);
-                      }} placeholder="No renewal" style={{ ...inputStyle, width: "100%" }} /></div>
+                </div>
+              )}
+            </div>
+
+            {/* Providers */}
+            <div style={sectionCard}>
+              <SectionHeader sectionKey="providers" title="Providers" />
+              {!collapsed.providers && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>Coming soon</div>}
+            </div>
+
+            {/* Settlement Agreement */}
+            <div style={sectionCard}>
+              <SectionHeader sectionKey="settlement" title="Settlement Agreement" badge={cl.settlementTerms || ""} />
+              {!collapsed.settlement && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                  <div><label style={labelStyle}>Settlement Group</label><input value={cl.settlementGroup || ""} onChange={e => updateClient(cl.id, "settlementGroup", e.target.value)} placeholder="Group name" style={{ ...inputStyle, width: "100%" }} /></div>
+                  <div><label style={labelStyle}>Settlement Terms</label><select value={cl.settlementTerms || ""} onChange={e => updateClient(cl.id, "settlementTerms", e.target.value)} style={{ ...inputStyle, width: "100%" }}><option value="">— Select —</option>{SETTLEMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                  <div><label style={labelStyle}>Settlement Fee (%)</label><input value={cl.settlementFee || ""} onChange={e => updateClient(cl.id, "settlementFee", e.target.value)} placeholder="e.g. 0.5" style={{ ...inputStyle, width: "100%" }} /></div>
+                </div>
+              )}
+            </div>
+
+            {/* Bank Accounts */}
+            <div style={sectionCard}>
+              <SectionHeader sectionKey="banks" title="Bank Accounts" badge={`${(cl.bankAccounts || []).length}`} extra={
+                !collapsed.banks && <button onClick={() => {
+                  const newBA = { id: `clba-${Date.now()}`, bankName: "", accountType: "", feeIncoming: "", feeOutgoing: "" };
+                  updateClient(cl.id, "bankAccounts", [...(cl.bankAccounts || []), newBA]);
+                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
+              } />
+              {!collapsed.banks && (<>
+                {(cl.bankAccounts || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No bank accounts</div>}
+                {(cl.bankAccounts || []).map(ba => (
+                  <div key={ba.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: 10, alignItems: "end" }}>
+                      <div><label style={labelStyle}>Bank Name</label><input value={ba.bankName || ""} onChange={e => { const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, bankName: e.target.value } : b); updateClient(cl.id, "bankAccounts", upd); }} placeholder="Bank name" style={{ ...inputStyle, width: "100%" }} /></div>
+                      <div><label style={labelStyle}>Account Type</label><select value={ba.accountType || ""} onChange={e => { const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, accountType: e.target.value } : b); updateClient(cl.id, "bankAccounts", upd); }} style={{ ...inputStyle, width: "100%" }}><option value="">— Type —</option>{BANK_ACCT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                      <div><label style={labelStyle}>Fee In (%)</label><input value={ba.feeIncoming || ""} onChange={e => { const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, feeIncoming: e.target.value } : b); updateClient(cl.id, "bankAccounts", upd); }} placeholder="%" style={{ ...inputStyle, width: "100%" }} /></div>
+                      <div><label style={labelStyle}>Fee Out (%)</label><input value={ba.feeOutgoing || ""} onChange={e => { const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, feeOutgoing: e.target.value } : b); updateClient(cl.id, "bankAccounts", upd); }} placeholder="%" style={{ ...inputStyle, width: "100%" }} /></div>
+                      <button onClick={() => updateClient(cl.id, "bankAccounts", (cl.bankAccounts || []).filter(b => b.id !== ba.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10, marginBottom: 2 }}>✕</button>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Row 3: Introduction + Introduction Deal */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-            <div style={sectionCard}>
-              <h3 style={sectionTitle}>Introduction</h3>
-              <input value={cl.introduction || ""} onChange={e => updateClient(cl.id, "introduction", e.target.value)} placeholder="Who introduced this client..." style={{ ...inputStyle, width: "100%" }} />
+                  </div>
+                ))}
+              </>)}
             </div>
-            <div style={sectionCard}>
-              <h3 style={sectionTitle}>Introduction Deal</h3>
-              <input value={cl.introductionDeal || ""} onChange={e => updateClient(cl.id, "introductionDeal", e.target.value)} placeholder="Deal terms for the introduction..." style={{ ...inputStyle, width: "100%" }} />
-            </div>
-          </div>
-
-          {/* Row 4: Deal */}
-          <div style={sectionCard}>
-            <h3 style={sectionTitle}>Deal</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              <div>
-                <label style={labelStyle}>Monthly Fee</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <select value={cl.monthlyFeeCurrency || "USD"} onChange={e => updateClient(cl.id, "monthlyFeeCurrency", e.target.value)} style={{ ...inputStyle, width: 90 }}>
-                    {CLIENT_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}
-                  </select>
-                  <input value={cl.monthlyFee || ""} onChange={e => updateClient(cl.id, "monthlyFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle, flex: 1 }} />
-                </div>
-              </div>
-              <div>
-                <label style={labelStyle}>Revenue Share</label>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input value={cl.revenueSharePct || ""} onChange={e => updateClient(cl.id, "revenueSharePct", e.target.value)} placeholder="%" style={{ ...inputStyle, width: 70 }} />
-                  <span style={{ fontSize: 11, color: c.textMuted }}>% from</span>
-                  <select value={cl.revenueShareFrom || ""} onChange={e => updateClient(cl.id, "revenueShareFrom", e.target.value)} style={{ ...inputStyle, flex: 1 }}>
-                    <option value="">— Select —</option>
-                    {REVENUE_SHARE_FROM.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Row 5: Providers (placeholder) */}
-          <div style={sectionCard}>
-            <h3 style={sectionTitle}>Providers</h3>
-            <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>Coming soon</div>
-          </div>
-
-          {/* Row 6: Settlement Agreement */}
-          <div style={sectionCard}>
-            <h3 style={sectionTitle}>Settlement Agreement</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-              <div>
-                <label style={labelStyle}>Settlement Group</label>
-                <input value={cl.settlementGroup || ""} onChange={e => updateClient(cl.id, "settlementGroup", e.target.value)} placeholder="Group name" style={{ ...inputStyle, width: "100%" }} />
-              </div>
-              <div>
-                <label style={labelStyle}>Settlement Terms</label>
-                <select value={cl.settlementTerms || ""} onChange={e => updateClient(cl.id, "settlementTerms", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
-                  <option value="">— Select —</option>
-                  {SETTLEMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>Settlement Fee (%)</label>
-                <input value={cl.settlementFee || ""} onChange={e => updateClient(cl.id, "settlementFee", e.target.value)} placeholder="e.g. 0.5" style={{ ...inputStyle, width: "100%" }} />
-              </div>
-            </div>
-          </div>
 
           {/* Row 7: Bank Accounts */}
           <div style={sectionCard}>
@@ -2597,8 +2598,9 @@ function AviroDashboard() {
             ))}
           </div>
 
-          {/* Row 8: KYB Documents */}
+          {/* KYB Documents */}
           {(() => {
+            const collapsed = cl.collapsedSections || {};
             const KYB_STANDARD_DOCS = ["Certificate of Incorporation/Registration", "Articles of Association/Memorandum of Association", "Certificate of Incumbency", "Corporate Structure Chart", "Register of Shareholders", "Register of Directors", "ID Documents for UBOs/Directors", "Proof of Address for UBOs/Directors"];
             const clientDocs = cl.kybDocuments || [];
             const existingNames = new Set(clientDocs.map(d => d.name));
@@ -2648,10 +2650,15 @@ function AviroDashboard() {
 
             return (
               <div style={sectionCard}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <h3 style={sectionTitle}>KYB Documents</h3>
-                  <button onClick={downloadKybPack} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>↓ Download Full KYB Pack</button>
+                <div onClick={() => updateClient(cl.id, "collapsedSections", { ...collapsed, kyb: !collapsed.kyb })} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: collapsed.kyb ? 0 : 12, userSelect: "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 11, color: c.textMuted, transition: "transform 0.15s", display: "inline-block", transform: collapsed.kyb ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+                    <h3 style={sectionTitle}>KYB Documents</h3>
+                    <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 400, textTransform: "none" }}>{clientDocs.filter(d => d.fileUrl).length}/{clientDocs.length} uploaded</span>
+                  </div>
+                  <div onClick={e => e.stopPropagation()}><button onClick={downloadKybPack} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>↓ Download Full KYB Pack</button></div>
                 </div>
+                {collapsed.kyb ? null : (<>
 
                 {/* Summary bar */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 12 }}>
@@ -2766,8 +2773,12 @@ function AviroDashboard() {
                   updateClient(cl.id, "kybDocuments", [...clientDocs, newDoc]);
                   setEditingClientField(`kd-${newDoc.id}`);
                 }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, marginTop: 8 }}>+ Add Document</button>
+                </>)}
               </div>
             );
+          })()}
+
+          </>);
           })()}
         </div>
       );
