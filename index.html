@@ -2965,7 +2965,7 @@ function AviroDashboard() {
             <div style={{ background: ig.deployedSuccessfully ? "rgba(34,197,94,0.1)" : ig.pace === "Behind Pace" ? "rgba(239,68,68,0.08)" : ig.pace === "Ahead Of Pace" ? "rgba(59,130,246,0.08)" : c.card, border: `1px solid ${ig.deployedSuccessfully ? "rgba(34,197,94,0.3)" : ig.pace === "Behind Pace" ? "rgba(239,68,68,0.25)" : ig.pace === "Ahead Of Pace" ? "rgba(59,130,246,0.25)" : c.border}`, borderRadius: 12, padding: "16px 24px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>{ig.deployedSuccessfully ? "Deployed" : isEarlyStage ? "Estimated Deployment" : "Target Deployment Date"}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: ig.deployedSuccessfully ? c.success : ig.pace === "Behind Pace" ? "#ef4444" : ig.pace === "Ahead Of Pace" ? "#3b82f6" : c.text }}>{deployDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: ig.deployedSuccessfully ? c.success : ig.pace === "Behind Pace" ? "#ef4444" : ig.pace === "Ahead Of Pace" ? "#3b82f6" : c.text }}>{ig.deployedSuccessfully && ig.deployedDate ? new Date(ig.deployedDate + "T00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : deployDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 {ig.pace === "Behind Pace" && ig.behindDelayWeeks && <div style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}>+{ig.behindDelayWeeks}w delay</div>}
@@ -2990,7 +2990,7 @@ function AviroDashboard() {
                 <div key={st} onClick={() => {
                   const updates = { stage: st };
                   if (st === "Testing") updates.testStarted = true;
-                  if (st === "Deployed") { updates.deployedSuccessfully = true; updates.testStarted = true; }
+                  if (st === "Deployed") { updates.deployedSuccessfully = true; updates.testStarted = true; updates.deployedDate = new Date().toISOString().split("T")[0]; }
                   if (st === "Roadmap" || st === "Planning") { updates.testStarted = false; updates.deployedSuccessfully = false; updates.pace = ""; }
                   setIntegrations(integrations.map(x => x.id === ig.id ? { ...x, ...updates } : x));
                 }} style={{ flex: 1, padding: "10px 8px", borderRadius: 8, textAlign: "center", cursor: "pointer", background: isActive ? sc.bg : c.surface, border: `2px solid ${isCurrent ? sc.text : isActive ? sc.border : c.border}`, transition: "all 0.15s" }}>
@@ -3117,7 +3117,7 @@ function AviroDashboard() {
                   <span style={{ fontSize: 13, color: c.text }}>Deployed Successfully</span>
                   <div onClick={() => {
                     if (!ig.deployedSuccessfully) {
-                      setIntegrations(integrations.map(x => x.id === ig.id ? { ...x, deployedSuccessfully: true, stage: "Deployed", testStarted: true } : x));
+                      setIntegrations(integrations.map(x => x.id === ig.id ? { ...x, deployedSuccessfully: true, stage: "Deployed", testStarted: true, deployedDate: x.deployedDate || new Date().toISOString().split("T")[0] } : x));
                     } else {
                       updateIntegration(ig.id, "deployedSuccessfully", false);
                     }
@@ -3125,6 +3125,12 @@ function AviroDashboard() {
                     <div style={{ width: 16, height: 16, borderRadius: 8, background: "#fff", position: "absolute", top: 2, left: ig.deployedSuccessfully ? 21 : 2, transition: "left 0.2s" }} />
                   </div>
                 </div>
+                {ig.deployedSuccessfully && (
+                  <div style={{ padding: "10px 0 0", borderTop: `1px solid ${c.border}`, marginTop: 10 }}>
+                    <label style={labelStyle2}>Deployment Date</label>
+                    <input type="date" value={ig.deployedDate || ""} onChange={e => updateIntegration(ig.id, "deployedDate", e.target.value)} style={{ ...inputStyle2, width: "100%" }} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
