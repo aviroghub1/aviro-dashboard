@@ -2773,35 +2773,40 @@ function AviroDashboard() {
               </>)}
             </div>
 
-            {/* Introduction + Deal */}
+            {/* Introduction */}
             <div style={sectionCard}>
-              <SectionHeader sectionKey="deal" title="Introduction & Deal" badge={cl.monthlyFee ? `${cl.monthlyFeeCurrency || "USD"} ${cl.monthlyFee}/mo` : ""} />
+              <SectionHeader sectionKey="intro" title="Introduction" badge={cl.introduction || ""} />
+              {!collapsed.intro && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div><label style={labelStyle}>Introduced By</label><input value={cl.introduction || ""} onChange={e => updateClient(cl.id, "introduction", e.target.value)} placeholder="Who introduced this client..." style={{ ...inputStyle, width: "100%" }} /></div>
+                  <div><label style={labelStyle}>Introduction Deal</label><input value={cl.introductionDeal || ""} onChange={e => updateClient(cl.id, "introductionDeal", e.target.value)} placeholder="Commission / referral terms..." style={{ ...inputStyle, width: "100%" }} /></div>
+                </div>
+              )}
+            </div>
+
+            {/* Deal */}
+            <div style={sectionCard}>
+              <SectionHeader sectionKey="deal" title="Deal" badge={cl.monthlyFee ? `${cl.monthlyFeeCurrency || "USD"} ${cl.monthlyFee}/mo` : ""} />
               {!collapsed.deal && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <div><label style={labelStyle}>Introduction</label><input value={cl.introduction || ""} onChange={e => updateClient(cl.id, "introduction", e.target.value)} placeholder="Who introduced this client..." style={{ ...inputStyle, width: "100%" }} /></div>
-                    <div><label style={labelStyle}>Introduction Deal</label><input value={cl.introductionDeal || ""} onChange={e => updateClient(cl.id, "introductionDeal", e.target.value)} placeholder="Deal terms..." style={{ ...inputStyle, width: "100%" }} /></div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <div>
-                      <label style={labelStyle}>Monthly Fee</label>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <select value={cl.monthlyFeeCurrency || "USD"} onChange={e => updateClient(cl.id, "monthlyFeeCurrency", e.target.value)} style={{ ...inputStyle, width: 90 }}>
-                          {CLIENT_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}
-                        </select>
-                        <input value={cl.monthlyFee || ""} onChange={e => updateClient(cl.id, "monthlyFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle, flex: 1 }} />
-                      </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <label style={labelStyle}>Monthly Fee</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <select value={cl.monthlyFeeCurrency || "USD"} onChange={e => updateClient(cl.id, "monthlyFeeCurrency", e.target.value)} style={{ ...inputStyle, width: 90 }}>
+                        {CLIENT_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                      </select>
+                      <input value={cl.monthlyFee || ""} onChange={e => updateClient(cl.id, "monthlyFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle, flex: 1 }} />
                     </div>
-                    <div>
-                      <label style={labelStyle}>Revenue Share</label>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input value={cl.revenueSharePct || ""} onChange={e => updateClient(cl.id, "revenueSharePct", e.target.value)} placeholder="%" style={{ ...inputStyle, width: 70 }} />
-                        <span style={{ fontSize: 11, color: c.textMuted }}>% from</span>
-                        <select value={cl.revenueShareFrom || ""} onChange={e => updateClient(cl.id, "revenueShareFrom", e.target.value)} style={{ ...inputStyle, flex: 1 }}>
-                          <option value="">— Select —</option>
-                          {REVENUE_SHARE_FROM.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                      </div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Revenue Share</label>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input value={cl.revenueSharePct || ""} onChange={e => updateClient(cl.id, "revenueSharePct", e.target.value)} placeholder="%" style={{ ...inputStyle, width: 70 }} />
+                      <span style={{ fontSize: 11, color: c.textMuted }}>% from</span>
+                      <select value={cl.revenueShareFrom || ""} onChange={e => updateClient(cl.id, "revenueShareFrom", e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                        <option value="">— Select —</option>
+                        {REVENUE_SHARE_FROM.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
                     </div>
                   </div>
                 </div>
