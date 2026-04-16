@@ -505,6 +505,22 @@ function AviroDashboard() {
   const [entityAlertsCollapsed, setEntityAlertsCollapsed] = useState(false);
   const [editingEntityField, setEditingEntityField] = useState(null); // "fieldName" being edited
 
+  // ===== AUTH STATE =====
+  const [authUser, setAuthUser] = useState(null); // { id, email, user_metadata }
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [showUserAdmin, setShowUserAdmin] = useState(false);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserName, setNewUserName] = useState("");
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [changePasswordVal, setChangePasswordVal] = useState("");
+  const [changePasswordMsg, setChangePasswordMsg] = useState("");
+
   // Supabase sync
   const [supabaseUrl, setSupabaseUrl] = useState(""); // Supabase project URL
   const [supabaseKey, setSupabaseKey] = useState(""); // Supabase anon key
@@ -610,6 +626,130 @@ function AviroDashboard() {
     if (!CORPORATE_ENTITIES[cat]) CORPORATE_ENTITIES[cat] = [];
     CORPORATE_ENTITIES[cat].push(e);
   });
+
+  // ===== SUPABASE AUTH =====
+  const SUPA_URL = supabaseUrl || "https://iosvevycvqviaonsxsnq.supabase.co";
+  const SUPA_KEY = supabaseKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvc3ZldnljdnF2aWFvbnN4c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA5NDMsImV4cCI6MjA5MTc0Njk0M30.IMpyt1CqwKUbM4aW0vyC0fxgNUvyNOSzk3aP9v_Iw-Q";
+
+  const supaAuth = useCallback(async (endpoint, body, token) => {
+    const headers = { "apikey": SUPA_KEY, "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(SUPA_URL + "/auth/v1/" + endpoint, { method: "POST", headers, body: body ? JSON.stringify(body) : undefined });
+    return res;
+  }, [SUPA_URL, SUPA_KEY]);
+
+  const supaAuthGet = useCallback(async (endpoint, token) => {
+    const headers = { "apikey": SUPA_KEY };
+    if (token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(SUPA_URL + "/auth/v1/" + endpoint, { method: "GET", headers });
+    return res;
+  }, [SUPA_URL, SUPA_KEY]);
+
+  // Check for existing session on mount
+  useEffect(() => {
+    const stored = localStorage.getItem("aviro_auth_token");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.access_token && parsed.expires_at > Date.now() / 1000) {
+          supaAuthGet("user", parsed.access_token).then(res => {
+            if (res.ok) return res.json();
+            throw new Error("expired");
+          }).then(user => {
+            setAuthUser(user);
+            setAuthLoading(false);
+          }).catch(() => {
+            // Try refresh
+            if (parsed.refresh_token) {
+              supaAuth("token?grant_type=refresh_token", { refresh_token: parsed.refresh_token }).then(r => r.ok ? r.json() : null).then(data => {
+                if (data && data.access_token) {
+                  localStorage.setItem("aviro_auth_token", JSON.stringify({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: Math.floor(Date.now() / 1000) + data.expires_in }));
+                  setAuthUser(data.user);
+                } else {
+                  localStorage.removeItem("aviro_auth_token");
+                }
+                setAuthLoading(false);
+              });
+            } else {
+              localStorage.removeItem("aviro_auth_token");
+              setAuthLoading(false);
+            }
+          });
+        } else if (parsed.refresh_token) {
+          supaAuth("token?grant_type=refresh_token", { refresh_token: parsed.refresh_token }).then(r => r.ok ? r.json() : null).then(data => {
+            if (data && data.access_token) {
+              localStorage.setItem("aviro_auth_token", JSON.stringify({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: Math.floor(Date.now() / 1000) + data.expires_in }));
+              setAuthUser(data.user);
+            } else {
+              localStorage.removeItem("aviro_auth_token");
+            }
+            setAuthLoading(false);
+          });
+        } else {
+          localStorage.removeItem("aviro_auth_token");
+          setAuthLoading(false);
+        }
+      } catch {
+        localStorage.removeItem("aviro_auth_token");
+        setAuthLoading(false);
+      }
+    } else {
+      setAuthLoading(false);
+    }
+  }, [supaAuth, supaAuthGet]);
+
+  const handleLogin = async () => {
+    if (!loginEmail || !loginPassword) { setLoginError("Please enter email and password"); return; }
+    setLoginLoading(true);
+    setLoginError("");
+    try {
+      const res = await supaAuth("token?grant_type=password", { email: loginEmail, password: loginPassword });
+      const data = await res.json();
+      if (!res.ok) { setLoginError(data.error_description || data.msg || "Login failed"); setLoginLoading(false); return; }
+      localStorage.setItem("aviro_auth_token", JSON.stringify({ access_token: data.access_token, refresh_token: data.refresh_token, expires_at: Math.floor(Date.now() / 1000) + data.expires_in }));
+      setAuthUser(data.user);
+      setLoginEmail("");
+      setLoginPassword("");
+    } catch (e) {
+      setLoginError("Connection error: " + e.message);
+    }
+    setLoginLoading(false);
+  };
+
+  const handleLogout = () => {
+    const stored = localStorage.getItem("aviro_auth_token");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        supaAuth("logout", null, parsed.access_token).catch(() => {});
+      } catch {}
+    }
+    localStorage.removeItem("aviro_auth_token");
+    setAuthUser(null);
+    setSection("home");
+  };
+
+  const handleChangePassword = async () => {
+    if (!changePasswordVal || changePasswordVal.length < 6) { setChangePasswordMsg("Password must be at least 6 characters"); return; }
+    const stored = localStorage.getItem("aviro_auth_token");
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored);
+      const res = await fetch(SUPA_URL + "/auth/v1/user", {
+        method: "PUT",
+        headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + parsed.access_token, "Content-Type": "application/json" },
+        body: JSON.stringify({ password: changePasswordVal }),
+      });
+      if (res.ok) { setChangePasswordMsg("Password updated!"); setChangePasswordVal(""); setTimeout(() => { setShowChangePassword(false); setChangePasswordMsg(""); }, 2000); }
+      else { const d = await res.json(); setChangePasswordMsg(d.error_description || "Failed to update password"); }
+    } catch (e) { setChangePasswordMsg("Error: " + e.message); }
+  };
+
+  const getAuthUserName = () => {
+    if (!authUser) return "";
+    const meta = authUser.user_metadata || {};
+    return meta.username || meta.full_name || meta.name || authUser.email?.split("@")[0] || "";
+  };
 
   // ===== SUPABASE DATABASE SYNC =====
   const getSupabaseHeaders = useCallback(() => ({
@@ -4731,6 +4871,51 @@ function AviroDashboard() {
 
   const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands };
 
+  // ===== AUTH LOADING =====
+  if (authLoading) {
+    return (
+      <div style={{ display: "flex", height: "100vh", background: c.bg, alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 60, height: 60, borderRadius: 16, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 28, color: "#fff", margin: "0 auto 16px", boxShadow: "0 8px 32px rgba(99,102,241,0.3)" }}>A</div>
+          <div style={{ fontSize: 14, color: c.textMuted }}>Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== LOGIN SCREEN =====
+  if (!authUser) {
+    return (
+      <div style={{ display: "flex", height: "100vh", background: c.bg, alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+        <div style={{ width: 400, textAlign: "center" }}>
+          <div style={{ width: 80, height: 80, borderRadius: 20, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 36, color: "#fff", margin: "0 auto 20px", boxShadow: "0 8px 32px rgba(99,102,241,0.3)" }}>A</div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: c.text, margin: "0 0 4px 0" }}>The Aviro Group</h1>
+          <p style={{ fontSize: 14, color: c.textMuted, margin: "0 0 32px 0", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 500 }}>Global Enterprise</p>
+
+          <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 32, textAlign: "left" }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: c.text, margin: "0 0 20px 0", textAlign: "center" }}>Sign In</h2>
+            {loginError && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#ef4444" }}>{loginError}</div>}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Email</label>
+              <input value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="you@aviro-group.com" type="email" onKeyDown={e => { if (e.key === "Enter") handleLogin(); }}
+                style={{ width: "100%", padding: "10px 14px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, color: c.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Password</label>
+              <input value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="Enter password" type="password" onKeyDown={e => { if (e.key === "Enter") handleLogin(); }}
+                style={{ width: "100%", padding: "10px 14px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, color: c.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <button onClick={handleLogin} disabled={loginLoading} style={{ width: "100%", padding: "12px", background: loginLoading ? c.textMuted : "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, cursor: loginLoading ? "wait" : "pointer", letterSpacing: "0.02em" }}>
+              {loginLoading ? "Signing in..." : "Sign In"}
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: c.textMuted, marginTop: 20 }}>Aviro Group Dashboard · Secure Login</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== MAIN AUTHENTICATED APP =====
   return (
     <div style={{ display: "flex", height: "100vh", background: c.bg, fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: c.text, overflow: "hidden" }}>
       {section !== "home" && (
@@ -4766,8 +4951,31 @@ function AviroDashboard() {
             );
           })}
         </div>
+        {/* User info + logout at bottom of sidebar */}
         {!collapsed && (
-          <div style={{ padding: 16, borderTop: `1px solid ${c.border}`, fontSize: 11, color: c.textMuted }}>
+          <div style={{ padding: 12, borderTop: `1px solid ${c.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 7, background: c.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: c.accent, flexShrink: 0 }}>{getAuthUserName().charAt(0).toUpperCase()}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{getAuthUserName()}</div>
+                <div style={{ fontSize: 10, color: c.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{authUser.email}</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => setShowChangePassword(!showChangePassword)} style={{ flex: 1, background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 10, fontWeight: 500 }}>Password</button>
+              <button onClick={handleLogout} style={{ flex: 1, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Sign Out</button>
+            </div>
+            {showChangePassword && (
+              <div style={{ marginTop: 8, padding: 8, background: c.surface, borderRadius: 6, border: `1px solid ${c.border}` }}>
+                <input value={changePasswordVal} onChange={e => setChangePasswordVal(e.target.value)} type="password" placeholder="New password (min 6 chars)" style={{ width: "100%", padding: "6px 8px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 4, color: c.text, fontSize: 11, boxSizing: "border-box", marginBottom: 6 }} onKeyDown={e => { if (e.key === "Enter") handleChangePassword(); }} />
+                <button onClick={handleChangePassword} style={{ width: "100%", background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "5px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Update Password</button>
+                {changePasswordMsg && <div style={{ fontSize: 10, color: changePasswordMsg.includes("updated") ? c.success : "#ef4444", marginTop: 4 }}>{changePasswordMsg}</div>}
+              </div>
+            )}
+          </div>
+        )}
+        {!collapsed && (
+          <div style={{ padding: "8px 16px 16px", fontSize: 11, color: c.textMuted }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: c.success }} /> ClickUp Synced</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: c.accent }} /> Gmail Connected</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: dbConnected ? c.success : supabaseUrl ? c.warning : c.textMuted }} /> {dbConnected ? "Database Synced" : supabaseUrl ? "DB Not Connected" : "No Database"}</div>
@@ -4776,6 +4984,76 @@ function AviroDashboard() {
       </div>
       )}
       <div style={{ flex: 1, overflowY: "auto", padding: section === "home" ? 0 : 32 }}>
+        {/* Top bar on homepage with user info */}
+        {section === "home" && (
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", padding: "16px 24px", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: c.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: c.accent }}>{getAuthUserName().charAt(0).toUpperCase()}</div>
+              <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{getAuthUserName()}</span>
+            </div>
+            <button onClick={() => setShowChangePassword(!showChangePassword)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 500 }}>Change Password</button>
+            {authUser.email === "david@aviro-group.com" && <button onClick={() => setShowUserAdmin(!showUserAdmin)} style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Manage Users</button>}
+            <button onClick={handleLogout} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Sign Out</button>
+          </div>
+        )}
+        {/* Change password modal on homepage */}
+        {section === "home" && showChangePassword && (
+          <div style={{ maxWidth: 400, margin: "-8px auto 0", padding: "0 24px" }}>
+            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: c.text, margin: "0 0 12px 0" }}>Change Password</h3>
+              <input value={changePasswordVal} onChange={e => setChangePasswordVal(e.target.value)} type="password" placeholder="New password (min 6 chars)" style={{ width: "100%", padding: "8px 12px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 6, color: c.text, fontSize: 13, boxSizing: "border-box", marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleChangePassword(); }} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={handleChangePassword} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Update</button>
+                <button onClick={() => { setShowChangePassword(false); setChangePasswordMsg(""); }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
+              </div>
+              {changePasswordMsg && <div style={{ fontSize: 11, color: changePasswordMsg.includes("updated") ? c.success : "#ef4444", marginTop: 8 }}>{changePasswordMsg}</div>}
+            </div>
+          </div>
+        )}
+        {/* User admin panel on homepage (David only) */}
+        {section === "home" && showUserAdmin && (
+          <div style={{ maxWidth: 600, margin: "0 auto", padding: "0 24px 16px" }}>
+            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 24 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: c.text, margin: 0 }}>User Management</h3>
+                <button onClick={() => setShowUserAdmin(false)} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 18 }}>✕</button>
+              </div>
+              <p style={{ fontSize: 12, color: c.textMuted, margin: "0 0 16px 0" }}>Manage users from your <a href="https://supabase.com/dashboard/project/iosvevycvqviaonsxsnq/auth/users" target="_blank" rel="noopener" style={{ color: c.accent, textDecoration: "none", fontWeight: 600 }}>Supabase Dashboard → Authentication → Users</a>. Add new users with "Add user" → "Create new user" and set their email + password.</p>
+              <div style={{ background: c.surface, borderRadius: 8, padding: 16, border: `1px solid ${c.border}` }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 10 }}>Team Directory</div>
+                {[
+                  { name: "davidaviro", email: "david@aviro-group.com", role: "Admin" },
+                  { name: "sophieaviro", email: "sophie@aviro-group.com", role: "User" },
+                  { name: "aleksandra", email: "aleksandra@aviro-group.com", role: "User" },
+                  { name: "charlieaviro", email: "charlie@aviro-group.com", role: "User" },
+                  { name: "chrisaviro", email: "chris.d@aviro-group.com", role: "User" },
+                  { name: "jamesaviro", email: "james@aviro-group.com", role: "User" },
+                  { name: "tomaviro", email: "tom@aviro-group.com", role: "User" },
+                  { name: "tommoaviro", email: "martin@aviro-group.com", role: "User" },
+                  { name: "russaviro", email: "russ@aviro-group.com", role: "User" },
+                ].map(u => (
+                  <div key={u.email} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${c.border}` }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: u.role === "Admin" ? "linear-gradient(135deg, #6366f1, #8b5cf6)" : c.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: u.role === "Admin" ? "#fff" : c.accent, flexShrink: 0 }}>{u.name.charAt(0).toUpperCase()}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{u.name}</div>
+                      <div style={{ fontSize: 11, color: c.textMuted }}>{u.email}</div>
+                    </div>
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: u.role === "Admin" ? c.accentBg : c.surface, color: u.role === "Admin" ? c.accent : c.textMuted, fontWeight: 600, border: `1px solid ${u.role === "Admin" ? c.accent + "40" : c.border}` }}>{u.role}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 16, padding: 12, background: `${c.accent}10`, borderRadius: 8, border: `1px solid ${c.accent}30` }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: c.accent, marginBottom: 4 }}>How to add/remove users:</div>
+                <ol style={{ fontSize: 11, color: c.textSecondary, margin: 0, paddingLeft: 16, lineHeight: 1.8 }}>
+                  <li>Go to your <a href="https://supabase.com/dashboard/project/iosvevycvqviaonsxsnq/auth/users" target="_blank" rel="noopener" style={{ color: c.accent }}>Supabase Auth Dashboard</a></li>
+                  <li>Click "Add user" → "Create new user"</li>
+                  <li>Enter the user's email and a temporary password</li>
+                  <li>The user can change their password after first login</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        )}
         <div style={{ maxWidth: section === "home" ? "100%" : section === "signal" ? 1400 : 1100, margin: "0 auto" }}>{(sections[section] || renderHome)()}</div>
       </div>
       {copiedText && (
