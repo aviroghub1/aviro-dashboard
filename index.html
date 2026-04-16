@@ -575,7 +575,20 @@ function AviroDashboard() {
         if (s.entityServiceProviders) setEntityServiceProviders(s.entityServiceProviders);
         if (s.entitySeals) setEntitySeals(s.entitySeals);
         if (s.entityFooters) setEntityFooters(s.entityFooters);
-        if (s.entityIntraAgreements) setEntityIntraAgreements(s.entityIntraAgreements);
+        if (s.entityIntraAgreements) {
+          // Migrate from old per-entity object format to flat array format
+          if (Array.isArray(s.entityIntraAgreements)) {
+            setEntityIntraAgreements(s.entityIntraAgreements);
+          } else if (typeof s.entityIntraAgreements === "object") {
+            const migrated = [];
+            Object.entries(s.entityIntraAgreements).forEach(([entityName, ags]) => {
+              if (Array.isArray(ags)) {
+                ags.forEach(ag => migrated.push({ ...ag, fromEntity: ag.fromEntity || entityName, toEntity: ag.toEntity || ag.counterpartyEntity || "" }));
+              }
+            });
+            setEntityIntraAgreements(migrated);
+          }
+        }
         if (s.entityCorpAgreements) setEntityCorpAgreements(s.entityCorpAgreements);
         if (s.bankRelationships) setBankRelationships(s.bankRelationships);
         if (s.bankAccountsList) setBankAccountsList(s.bankAccountsList);
