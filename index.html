@@ -514,7 +514,9 @@ function AviroDashboard() {
   const [showDbSetup, setShowDbSetup] = useState(false);
 
   // Gateway / Corporate
+  const [gatewayClients, setGatewayClients] = useState([]); // [{ id, name, clientType, clientEntities, agreements, introduction, introductionDeal, monthlyFee, monthlyFeeCurrency, revenueSharePct, revenueShareFrom, settlementGroup, settlementTerms, settlementFee, bankAccounts, providers }]
   const [selectedClient, setSelectedClient] = useState(null);
+  const [editingClientField, setEditingClientField] = useState(null);
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [expandedFlows, setExpandedFlows] = useState({});
@@ -532,12 +534,12 @@ function AviroDashboard() {
         calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
         corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
         entityIntraAgreements, entityCorpAgreements,
-        bankRelationships, bankAccountsList, gamingBrands,
+        bankRelationships, bankAccountsList, gamingBrands, gatewayClients,
         supabaseUrl, supabaseKey,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, supabaseUrl, supabaseKey]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, supabaseUrl, supabaseKey]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -593,6 +595,7 @@ function AviroDashboard() {
         if (s.bankRelationships) setBankRelationships(s.bankRelationships);
         if (s.bankAccountsList) setBankAccountsList(s.bankAccountsList);
         if (s.gamingBrands) setGamingBrands(s.gamingBrands);
+        if (s.gatewayClients) setGatewayClients(s.gatewayClients);
         if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
         if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
       }
@@ -2249,44 +2252,318 @@ function AviroDashboard() {
   };
 
   // ===== GATEWAY CLIENTS =====
+  const CLIENT_TYPES = ["Full Cashier Management", "VIP Gateway", "Gateway", "Tech Only", "Another PSP"];
+  const SETTLEMENT_TERMS = ["Daily", "3 Days", "4 Days", "5 Days", "Weekly", "Monthly"];
+  const BANK_ACCT_TYPES = ["B2B", "C2B", "B2C", "Treasury"];
+  const REVENUE_SHARE_FROM = ["Net Hold", "GGR", "NGR"];
+  const CLIENT_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "AED", "BTC", "USDT", "Other"];
+
+  const [newClientName, setNewClientName] = useState("");
+  const [showAddClient, setShowAddClient] = useState(false);
+
+  const updateClient = (id, field, val) => setGatewayClients(gatewayClients.map(cl => cl.id === id ? { ...cl, [field]: val } : cl));
+
   const renderClients = () => {
+    const inputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const labelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
+    const sectionCard = { background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 };
+    const sectionTitle = { fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" };
+
+    // ===== CLIENT DETAIL VIEW =====
     if (selectedClient) {
-      const client = GATEWAY_CLIENTS.find(cl => cl.name === selectedClient);
+      const cl = gatewayClients.find(x => x.id === selectedClient);
+      if (!cl) { setSelectedClient(null); return null; }
+
+      const renewalCalc = (startDate, months) => {
+        if (!startDate || !months) return null;
+        const d = new Date(startDate); d.setMonth(d.getMonth() + parseInt(months));
+        return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+      };
+
       return (
         <div>
-          <button onClick={() => setSelectedClient(null)} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 16, padding: 0 }}>&larr; Back</button>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 24px 0" }}>{client?.name}</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: c.text, margin: "0 0 12px 0" }}>Agreement Details</h3>
-              <div style={{ fontSize: 13, color: c.textSecondary, lineHeight: 1.8 }}>
-                <div>Status: <StatusBadge status={client?.status} /></div>
-                <div style={{ marginTop: 8 }}>Commercials: Payment processing via Gateway.io</div>
-                <div>Contract: Master Service Agreement</div>
+          <button onClick={() => { setSelectedClient(null); setEditingClientField(null); }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 16, padding: 0 }}>&larr; Back to Client Portal</button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{cl.name}</h2>
+            <button onClick={() => {
+              if (confirm("Delete this client?")) {
+                setGatewayClients(gatewayClients.filter(x => x.id !== cl.id));
+                setSelectedClient(null);
+              }
+            }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete Client</button>
+          </div>
+
+          {/* Row 1: Client Type + Client Entities */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div style={sectionCard}>
+              <h3 style={sectionTitle}>Client Type</h3>
+              <select value={cl.clientType || ""} onChange={e => updateClient(cl.id, "clientType", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                <option value="">— Select Type —</option>
+                {CLIENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div style={sectionCard}>
+              <h3 style={sectionTitle}>Client Entity(s)</h3>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                {(cl.clientEntities || []).map((ent, i) => (
+                  <span key={i} style={{ fontSize: 11, background: `${c.accent}15`, color: c.accent, border: `1px solid ${c.accent}40`, padding: "3px 8px", borderRadius: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                    {ent}
+                    <span onClick={() => updateClient(cl.id, "clientEntities", (cl.clientEntities || []).filter((_, idx) => idx !== i))} style={{ cursor: "pointer", fontWeight: 700, fontSize: 12 }}>×</span>
+                  </span>
+                ))}
+              </div>
+              {editingClientField === `entities-${cl.id}` ? (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input id={`ce-input-${cl.id}`} placeholder="Entity name..." style={{ ...inputStyle, flex: 1 }} onKeyDown={e => {
+                    if (e.key === "Enter" && e.target.value.trim()) {
+                      updateClient(cl.id, "clientEntities", [...(cl.clientEntities || []), e.target.value.trim()]);
+                      e.target.value = "";
+                    }
+                  }} />
+                  <button onClick={() => {
+                    const inp = document.getElementById(`ce-input-${cl.id}`);
+                    if (inp && inp.value.trim()) { updateClient(cl.id, "clientEntities", [...(cl.clientEntities || []), inp.value.trim()]); inp.value = ""; }
+                  }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Add</button>
+                  <button onClick={() => setEditingClientField(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}>Done</button>
+                </div>
+              ) : (
+                <button onClick={() => setEditingClientField(`entities-${cl.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11 }}>+ Add Entity</button>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: Agreements */}
+          <div style={sectionCard}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={sectionTitle}>Agreements</h3>
+              <button onClick={() => {
+                const newAg = { id: `clag-${Date.now()}`, name: "", startDate: "", renewalMonths: "" };
+                updateClient(cl.id, "agreements", [...(cl.agreements || []), newAg]);
+                setEditingClientField(`ag-${newAg.id}`);
+              }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
+            </div>
+            {(cl.agreements || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No agreements</div>}
+            {(cl.agreements || []).map(ag => {
+              const isEd = editingClientField === `ag-${ag.id}`;
+              const renewal = renewalCalc(ag.startDate, ag.renewalMonths);
+              return (
+                <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
+                      <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                        {ag.startDate && <span>Started {ag.startDate}</span>}
+                        {renewal && <span> · Renews {renewal}</span>}
+                        {ag.startDate && !ag.renewalMonths && <span> · No renewal</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button onClick={() => setEditingClientField(isEd ? null : `ag-${ag.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 8px" }}>{isEd ? "Done" : "Edit"}</button>
+                      <button onClick={() => updateClient(cl.id, "agreements", (cl.agreements || []).filter(a => a.id !== ag.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                    </div>
+                  </div>
+                  {isEd && (
+                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
+                      <div><label style={labelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => {
+                        const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, name: e.target.value } : a);
+                        updateClient(cl.id, "agreements", upd);
+                      }} style={{ ...inputStyle, width: "100%" }} /></div>
+                      <div><label style={labelStyle}>Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => {
+                        const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, startDate: e.target.value } : a);
+                        updateClient(cl.id, "agreements", upd);
+                      }} style={{ ...inputStyle, width: "100%" }} /></div>
+                      <div><label style={labelStyle}>Renewal (months)</label><input type="number" min="0" value={ag.renewalMonths || ""} onChange={e => {
+                        const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, renewalMonths: e.target.value } : a);
+                        updateClient(cl.id, "agreements", upd);
+                      }} placeholder="No renewal" style={{ ...inputStyle, width: "100%" }} /></div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Row 3: Introduction + Introduction Deal */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div style={sectionCard}>
+              <h3 style={sectionTitle}>Introduction</h3>
+              <input value={cl.introduction || ""} onChange={e => updateClient(cl.id, "introduction", e.target.value)} placeholder="Who introduced this client..." style={{ ...inputStyle, width: "100%" }} />
+            </div>
+            <div style={sectionCard}>
+              <h3 style={sectionTitle}>Introduction Deal</h3>
+              <input value={cl.introductionDeal || ""} onChange={e => updateClient(cl.id, "introductionDeal", e.target.value)} placeholder="Deal terms for the introduction..." style={{ ...inputStyle, width: "100%" }} />
+            </div>
+          </div>
+
+          {/* Row 4: Deal */}
+          <div style={sectionCard}>
+            <h3 style={sectionTitle}>Deal</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Monthly Fee</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select value={cl.monthlyFeeCurrency || "USD"} onChange={e => updateClient(cl.id, "monthlyFeeCurrency", e.target.value)} style={{ ...inputStyle, width: 90 }}>
+                    {CLIENT_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                  </select>
+                  <input value={cl.monthlyFee || ""} onChange={e => updateClient(cl.id, "monthlyFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle, flex: 1 }} />
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Revenue Share</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input value={cl.revenueSharePct || ""} onChange={e => updateClient(cl.id, "revenueSharePct", e.target.value)} placeholder="%" style={{ ...inputStyle, width: 70 }} />
+                  <span style={{ fontSize: 11, color: c.textMuted }}>% from</span>
+                  <select value={cl.revenueShareFrom || ""} onChange={e => updateClient(cl.id, "revenueShareFrom", e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                    <option value="">— Select —</option>
+                    {REVENUE_SHARE_FROM.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
-            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: c.text, margin: "0 0 12px 0" }}>Ongoing Management</h3>
-              {["Daily settlement reconciliation", "Weekly volume reporting", "Monthly invoice generation", "Quarterly compliance review"].map((t, i) => (
-                <div key={i} style={{ fontSize: 12, color: c.textSecondary, padding: "6px 0", borderBottom: `1px solid ${c.border}`, display: "flex", justifyContent: "space-between" }}><span>{t}</span><span style={{ color: c.accent, fontSize: 11 }}>Aleksandra</span></div>
-              ))}
+          </div>
+
+          {/* Row 5: Providers (placeholder) */}
+          <div style={sectionCard}>
+            <h3 style={sectionTitle}>Providers</h3>
+            <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>Coming soon</div>
+          </div>
+
+          {/* Row 6: Settlement Agreement */}
+          <div style={sectionCard}>
+            <h3 style={sectionTitle}>Settlement Agreement</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Settlement Group</label>
+                <input value={cl.settlementGroup || ""} onChange={e => updateClient(cl.id, "settlementGroup", e.target.value)} placeholder="Group name" style={{ ...inputStyle, width: "100%" }} />
+              </div>
+              <div>
+                <label style={labelStyle}>Settlement Terms</label>
+                <select value={cl.settlementTerms || ""} onChange={e => updateClient(cl.id, "settlementTerms", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                  <option value="">— Select —</option>
+                  {SETTLEMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Settlement Fee (%)</label>
+                <input value={cl.settlementFee || ""} onChange={e => updateClient(cl.id, "settlementFee", e.target.value)} placeholder="e.g. 0.5" style={{ ...inputStyle, width: "100%" }} />
+              </div>
             </div>
+          </div>
+
+          {/* Row 7: Bank Accounts */}
+          <div style={sectionCard}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={sectionTitle}>Bank Accounts</h3>
+              <button onClick={() => {
+                const newBA = { id: `clba-${Date.now()}`, bankName: "", accountType: "", feeIncoming: "", feeOutgoing: "" };
+                updateClient(cl.id, "bankAccounts", [...(cl.bankAccounts || []), newBA]);
+              }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
+            </div>
+            {(cl.bankAccounts || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No bank accounts</div>}
+            {(cl.bankAccounts || []).map(ba => (
+              <div key={ba.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: 10, alignItems: "end" }}>
+                  <div>
+                    <label style={labelStyle}>Bank Name</label>
+                    <input value={ba.bankName || ""} onChange={e => {
+                      const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, bankName: e.target.value } : b);
+                      updateClient(cl.id, "bankAccounts", upd);
+                    }} placeholder="Bank name" style={{ ...inputStyle, width: "100%" }} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Account Type</label>
+                    <select value={ba.accountType || ""} onChange={e => {
+                      const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, accountType: e.target.value } : b);
+                      updateClient(cl.id, "bankAccounts", upd);
+                    }} style={{ ...inputStyle, width: "100%" }}>
+                      <option value="">— Type —</option>
+                      {BANK_ACCT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Fee In (%)</label>
+                    <input value={ba.feeIncoming || ""} onChange={e => {
+                      const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, feeIncoming: e.target.value } : b);
+                      updateClient(cl.id, "bankAccounts", upd);
+                    }} placeholder="%" style={{ ...inputStyle, width: "100%" }} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Fee Out (%)</label>
+                    <input value={ba.feeOutgoing || ""} onChange={e => {
+                      const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, feeOutgoing: e.target.value } : b);
+                      updateClient(cl.id, "bankAccounts", upd);
+                    }} placeholder="%" style={{ ...inputStyle, width: "100%" }} />
+                  </div>
+                  <button onClick={() => updateClient(cl.id, "bankAccounts", (cl.bankAccounts || []).filter(b => b.id !== ba.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10, marginBottom: 2 }}>✕</button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       );
     }
+
+    // ===== CLIENT LIST VIEW =====
     return (
       <div>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 6px 0" }}>Gateway.io Client Portal</h2>
-        <p style={{ color: c.textSecondary, fontSize: 13, margin: "0 0 24px 0" }}>{GATEWAY_CLIENTS.filter(cl => cl.status === "active").length} active · {GATEWAY_CLIENTS.filter(cl => cl.status === "onboarding").length} onboarding</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          {GATEWAY_CLIENTS.map(client => (
-            <div key={client.name} onClick={() => setSelectedClient(client.name)} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 20, cursor: "pointer", borderLeft: `3px solid ${client.statusColor}` }}
-              onMouseEnter={e => e.currentTarget.style.background = c.cardHover} onMouseLeave={e => e.currentTarget.style.background = c.card}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: c.text, marginBottom: 8 }}>{client.name}</div>
-              <StatusBadge status={client.status} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Gateway.io Client Portal</h2>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gatewayClients.length} client{gatewayClients.length !== 1 ? "s" : ""}</p>
+          </div>
+          <button onClick={() => setShowAddClient(!showAddClient)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Client</button>
+        </div>
+
+        {/* Add Client Form */}
+        {showAddClient && (
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.accent}40`, padding: 16, marginBottom: 16, display: "flex", gap: 10, alignItems: "end" }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Client Name</label>
+              <input value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="Enter client name..." style={{ ...inputStyle, width: "100%" }} onKeyDown={e => {
+                if (e.key === "Enter" && newClientName.trim()) {
+                  const newCl = { id: `cl-${Date.now()}`, name: newClientName.trim(), clientType: "", clientEntities: [], agreements: [], introduction: "", introductionDeal: "", monthlyFee: "", monthlyFeeCurrency: "USD", revenueSharePct: "", revenueShareFrom: "", settlementGroup: "", settlementTerms: "", settlementFee: "", bankAccounts: [], providers: [] };
+                  setGatewayClients([...gatewayClients, newCl]);
+                  setNewClientName(""); setShowAddClient(false);
+                }
+              }} />
             </div>
-          ))}
+            <button onClick={() => {
+              if (!newClientName.trim()) return;
+              const newCl = { id: `cl-${Date.now()}`, name: newClientName.trim(), clientType: "", clientEntities: [], agreements: [], introduction: "", introductionDeal: "", monthlyFee: "", monthlyFeeCurrency: "USD", revenueSharePct: "", revenueShareFrom: "", settlementGroup: "", settlementTerms: "", settlementFee: "", bankAccounts: [], providers: [] };
+              setGatewayClients([...gatewayClients, newCl]);
+              setNewClientName(""); setShowAddClient(false);
+            }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>Create</button>
+            <button onClick={() => { setShowAddClient(false); setNewClientName(""); }} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
+          </div>
+        )}
+
+        {/* Client Grid */}
+        {gatewayClients.length === 0 && !showAddClient && (
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 40, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No clients yet. Click "+ Add Client" to get started.</div>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {gatewayClients.map(cl => {
+            const typeColor = cl.clientType === "Full Cashier Management" ? "#6366f1" : cl.clientType === "VIP Gateway" ? "#ec4899" : cl.clientType === "Gateway" ? "#22c55e" : cl.clientType === "Tech Only" ? "#06b6d4" : cl.clientType === "Another PSP" ? "#f59e0b" : c.accent;
+            return (
+              <div key={cl.id} onClick={() => { setSelectedClient(cl.id); setEditingClientField(null); }}
+                style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 20, cursor: "pointer", borderLeft: `3px solid ${typeColor}`, transition: "background 0.15s" }}
+                onMouseEnter={e => e.currentTarget.style.background = c.cardHover} onMouseLeave={e => e.currentTarget.style.background = c.card}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: c.text, marginBottom: 6 }}>{cl.name}</div>
+                {cl.clientType && <span style={{ fontSize: 10, color: typeColor, background: `${typeColor}15`, border: `1px solid ${typeColor}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{cl.clientType}</span>}
+                <div style={{ marginTop: 8, fontSize: 11, color: c.textMuted }}>
+                  {(cl.agreements || []).length > 0 && <span>{(cl.agreements || []).length} agreement{(cl.agreements || []).length !== 1 ? "s" : ""}</span>}
+                  {cl.monthlyFee && <span>{(cl.agreements || []).length > 0 ? " · " : ""}{cl.monthlyFeeCurrency || "USD"} {cl.monthlyFee}/mo</span>}
+                  {cl.revenueSharePct && <span> · {cl.revenueSharePct}% rev share</span>}
+                </div>
+                {(cl.clientEntities || []).length > 0 && (
+                  <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {(cl.clientEntities || []).slice(0, 3).map((ent, i) => <span key={i} style={{ fontSize: 9, color: c.textMuted, background: c.surface, padding: "1px 6px", borderRadius: 3 }}>{ent}</span>)}
+                    {(cl.clientEntities || []).length > 3 && <span style={{ fontSize: 9, color: c.textMuted }}>+{(cl.clientEntities || []).length - 3}</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
