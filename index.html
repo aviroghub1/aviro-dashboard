@@ -638,8 +638,8 @@ function AviroDashboard() {
   });
 
   // ===== SUPABASE AUTH =====
-  const SUPA_URL = supabaseUrl || "https://iosvevycvqviaonsxsnq.supabase.co";
-  const SUPA_KEY = supabaseKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvc3ZldnljdnF2aWFvbnN4c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA5NDMsImV4cCI6MjA5MTc0Njk0M30.IMpyt1CqwKUbM4aW0vyC0fxgNUvyNOSzk3aP9v_Iw-Q";
+  const SUPA_URL = supabaseUrl || "https://xecvmejccspujdtndysi.supabase.co";
+  const SUPA_KEY = supabaseKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhlY3ZtZWpjY3NwdWpkdG55ZHNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTAzNTAsImV4cCI6MjA5MDg4NjM1MH0.XeJQfjPOGo4vwEte0Ks4SySRaCe4uKYJLIZoCBnPRzo";
 
   const supaAuth = useCallback(async (endpoint, body, token) => {
     const headers = { "apikey": SUPA_KEY, "Content-Type": "application/json" };
@@ -5565,7 +5565,7 @@ function AviroDashboard() {
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: c.text, margin: 0 }}>User Management</h3>
                 <button onClick={() => setShowUserAdmin(false)} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 18 }}>✕</button>
               </div>
-              <p style={{ fontSize: 12, color: c.textMuted, margin: "0 0 16px 0" }}>Manage users from your <a href="https://supabase.com/dashboard/project/iosvevycvqviaonsxsnq/auth/users" target="_blank" rel="noopener" style={{ color: c.accent, textDecoration: "none", fontWeight: 600 }}>Supabase Dashboard → Authentication → Users</a>. Add new users with "Add user" → "Create new user" and set their email + password.</p>
+              <p style={{ fontSize: 12, color: c.textMuted, margin: "0 0 16px 0" }}>Manage users from your <a href="https://supabase.com/dashboard/project/xecvmejccspujdtndysi/auth/users" target="_blank" rel="noopener" style={{ color: c.accent, textDecoration: "none", fontWeight: 600 }}>Supabase Dashboard → Authentication → Users</a>. Add new users with "Add user" → "Create new user" and set their email + password.</p>
               <div style={{ background: c.surface, borderRadius: 8, padding: 16, border: `1px solid ${c.border}` }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 10 }}>Team Directory</div>
                 {[
@@ -5592,7 +5592,7 @@ function AviroDashboard() {
               <div style={{ marginTop: 16, padding: 12, background: `${c.accent}10`, borderRadius: 8, border: `1px solid ${c.accent}30` }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: c.accent, marginBottom: 4 }}>How to add/remove users:</div>
                 <ol style={{ fontSize: 11, color: c.textSecondary, margin: 0, paddingLeft: 16, lineHeight: 1.8 }}>
-                  <li>Go to your <a href="https://supabase.com/dashboard/project/iosvevycvqviaonsxsnq/auth/users" target="_blank" rel="noopener" style={{ color: c.accent }}>Supabase Auth Dashboard</a></li>
+                  <li>Go to your <a href="https://supabase.com/dashboard/project/xecvmejccspujdtndysi/auth/users" target="_blank" rel="noopener" style={{ color: c.accent }}>Supabase Auth Dashboard</a></li>
                   <li>Click "Add user" → "Create new user"</li>
                   <li>Enter the user's email and a temporary password</li>
                   <li>The user can change their password after first login</li>
