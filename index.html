@@ -4348,48 +4348,35 @@ function AviroDashboard() {
         </div>
 
         {showDbSetup && (
-          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 20, marginBottom: 20 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, color: c.text, margin: "0 0 12px 0" }}>Supabase Database Connection</h3>
-            <p style={{ fontSize: 12, color: c.textSecondary, margin: "0 0 16px 0" }}>
-              Documents are stored in a central Supabase database so all users can access them from anywhere.
-            </p>
-            <div style={{ marginBottom: 10 }}>
-              <label style={{ fontSize: 11, color: c.textMuted, display: "block", marginBottom: 4 }}>Project URL</label>
-              <input value={supabaseUrl} onChange={e => setSupabaseUrl(e.target.value.trim())}
-                placeholder="https://xxxxx.supabase.co"
-                style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, padding: "8px 12px", borderRadius: 6, fontSize: 12, outline: "none" }} />
+          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 16, marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 600, color: c.text, margin: 0 }}>Database Connection</h3>
+              <button onClick={() => setShowDbSetup(false)} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 16 }}>✕</button>
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 11, color: c.textMuted, display: "block", marginBottom: 4 }}>Anon Key (public)</label>
-              <input value={supabaseKey} onChange={e => setSupabaseKey(e.target.value.trim())}
-                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, padding: "8px 12px", borderRadius: 6, fontSize: 12, outline: "none", fontFamily: "monospace" }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 3 }}>Project URL</label>
+                <input value={supabaseUrl} onChange={e => setSupabaseUrl(e.target.value.trim())} placeholder="https://xxxxx.supabase.co" style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, padding: "6px 10px", borderRadius: 6, fontSize: 11, outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 3 }}>Anon Key</label>
+                <input value={supabaseKey} onChange={e => setSupabaseKey(e.target.value.trim())} placeholder="eyJhbGci..." style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, padding: "6px 10px", borderRadius: 6, fontSize: 11, outline: "none", fontFamily: "monospace", boxSizing: "border-box" }} />
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button onClick={async () => {
                 if (!supabaseUrl || !supabaseKey) { setDbSyncStatus("error"); setDbSyncMessage("Enter both URL and Key"); setTimeout(() => setDbSyncStatus("idle"), 3000); return; }
-                setDbSyncStatus("syncing"); setDbSyncMessage("Testing connection...");
+                setDbSyncStatus("syncing"); setDbSyncMessage("Testing...");
                 try {
                   const r = await fetch(supabaseUrl + "/rest/v1/entity_documents?select=count&limit=0", { headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey } });
-                  if (r.ok) { setDbConnected(true); setDbSyncStatus("success"); setDbSyncMessage("Connected to Supabase!"); }
-                  else { const t = await r.text(); setDbConnected(false); setDbSyncStatus("error"); setDbSyncMessage("Error " + r.status + ": " + (t.includes("does not exist") ? "Run the SQL schema first" : t.slice(0, 80))); }
-                } catch (err) { setDbConnected(false); setDbSyncStatus("error"); setDbSyncMessage("Connection failed: " + err.message); }
+                  if (r.ok) { setDbConnected(true); setDbSyncStatus("success"); setDbSyncMessage("Connected!"); }
+                  else { const t = await r.text(); setDbConnected(false); setDbSyncStatus("error"); setDbSyncMessage("Error " + r.status + ": " + (t.includes("does not exist") ? "Run the SQL schema first" : t.slice(0, 60))); }
+                } catch (err) { setDbConnected(false); setDbSyncStatus("error"); setDbSyncMessage("Failed: " + err.message); }
                 setTimeout(() => setDbSyncStatus("idle"), 5000);
-              }} style={{ background: c.accent, border: "none", color: "#fff", padding: "8px 16px", borderRadius: 6, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Test Connection</button>
-              {dbConnected && <button onClick={syncFromDb} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, padding: "8px 16px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>↓ Pull from DB</button>}
-              {dbConnected && <button onClick={syncToDb} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, padding: "8px 16px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>↑ Push to DB</button>}
-            </div>
-            {dbSyncStatus !== "idle" && (
-              <div style={{ fontSize: 12, color: dbSyncStatus === "success" ? c.success : dbSyncStatus === "error" ? c.danger : c.accent, marginBottom: 12 }}>
-                {dbSyncMessage}
-              </div>
-            )}
-            <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.8, background: c.surface, borderRadius: 8, padding: 12 }}>
-              <strong style={{ color: c.textSecondary }}>Quick setup:</strong><br />
-              1. Go to <span style={{ color: c.accent }}>supabase.com</span> → Create free account → New Project<br />
-              2. Go to <strong style={{ color: c.textSecondary }}>SQL Editor</strong> → paste and run the schema SQL provided<br />
-              3. Go to <strong style={{ color: c.textSecondary }}>Settings → API</strong> → copy Project URL and anon key<br />
-              4. Paste both above and Test Connection
+              }} style={{ background: c.accent, border: "none", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>Test Connection</button>
+              {dbConnected && <button onClick={syncFromDb} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, padding: "6px 14px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>↓ Pull</button>}
+              {dbConnected && <button onClick={syncToDb} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, padding: "6px 14px", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>↑ Push</button>}
+              {dbSyncStatus !== "idle" && <span style={{ fontSize: 11, color: dbSyncStatus === "success" ? c.success : dbSyncStatus === "error" ? c.danger : c.accent }}>{dbSyncMessage}</span>}
             </div>
           </div>
         )}
