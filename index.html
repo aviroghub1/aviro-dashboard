@@ -2473,9 +2473,9 @@ function AviroDashboard() {
           {/* AI Suggestions */}
           {missingDocs.length > 0 && (
             <div style={{ background: `${c.accent}15`, border: `1px solid ${c.accent}40`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: c.accent, marginBottom: 6 }}>Missing Standard Documents</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: c.accent, marginBottom: 6 }}>Missing Core Corporate Documents</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {missingDocs.slice(0, 5).map(d => (
+                {missingDocs.map(d => (
                   <button key={d} onClick={() => {
                     const newDoc = { id: `doc-${Date.now()}`, name: d, issueDate: "", noRenewal: false, notarised: false, notarisedDate: "", renewalMonths: 12, delayedUntil: null, fileName: "", fileSize: 0, fileUrl: "", previousVersions: [], renewalNotes: "" };
                     const updated = [...(entityDocs[entity.name] || []), newDoc];
