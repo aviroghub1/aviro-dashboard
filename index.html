@@ -31,22 +31,7 @@ const ENTITY_TYPES = ["Gaming License", "Payment Agent", "Technology Company", "
 
 // Gaming brands are now managed via editable state (gamingBrands)
 
-const MONEY_FLOWS = [
-  { from: "Astor Holdings Limited", to: "PT Wolven Services Ltd", type: "Payment Processing", description: "Player deposits/withdrawals via payment agent" },
-  { from: "Vesaro Ltd", to: "Areoncorp Ltd", type: "Payment Processing", description: "Player deposits/withdrawals via payment agent" },
-  { from: "Vesaro Ltd", to: "PT Wolven Services Ltd", type: "Payment Processing", description: "Secondary payment agent" },
-  { from: "R Bostock Enterprises BV", to: "PK Investitute Ltd", type: "Payment Processing", description: "Payment agent for Curacao operations" },
-  { from: "NexGen Entertainment Ltd", to: "JJ Emicorp Ltd", type: "Payment Processing", description: "Payment agent for Tobique operations" },
-  { from: "Astor Holdings Limited", to: "Aviro Technology Services LLC-FZ", type: "Software License", description: "Platform technology fees" },
-  { from: "Vesaro Ltd", to: "Aviro Technology Services LLC-FZ", type: "Software License", description: "Platform technology fees" },
-  { from: "Ultima Entertainment Ltd", to: "Aviro Technology Services LLC-FZ", type: "Software License", description: "Platform technology fees" },
-  { from: "Astor Holdings Limited", to: "Blue Orbit Management Inc.", type: "Management Fee", description: "Revenue share for management services" },
-  { from: "Vesaro Ltd", to: "Blue Orbit Management Inc.", type: "Management Fee", description: "Revenue share for management services" },
-  { from: "R Bostock Enterprises BV", to: "Blue Orbit Management Inc.", type: "Management Fee", description: "Management agreement" },
-  { from: "Cube Pay Inc.", to: "All Gaming Entities", type: "Payment Gateway", description: "Gateway.io payment processing services" },
-  { from: "Ultima Entertainment Ltd", to: "Cronus Global Foundation", type: "Revenue Distribution", description: "Foundation revenue allocation" },
-  { from: "Cronus Global Foundation", to: "Vesaro Ltd", type: "Subsidiary Distribution", description: "Foundation to subsidiary distribution" },
-];
+// Intra-company agreements are now managed via editable state (entityIntraAgreements)
 
 const CLICKUP_DAVID_TASKS = [
   { id: "86c978qrm", name: "Ukingbet - Cube/Gateway", priority: "urgent", status: "to do", dueDate: "2026-04-08", space: "Cube Pay", url: "https://app.clickup.com/t/86c978qrm" },
@@ -512,7 +497,7 @@ function AviroDashboard() {
   const [entityServiceProviders, setEntityServiceProviders] = useState({}); // { "Entity Name": [{ id, name, company, email, phone, notes }] }
   const [entitySeals, setEntitySeals] = useState({}); // { "Entity Name": [{ id, domainName, proofFileName, proofFileUrl, mirrorRangeStart, mirrorRangeEnd, licenseSeals: [{ id, name, sealCode }], collapsed }] }
   const [entityFooters, setEntityFooters] = useState({}); // { "Entity Name": "footer text" }
-  const [entityIntraAgreements, setEntityIntraAgreements] = useState({}); // { "Entity Name": [{ id, name, counterpartyEntity, notes, fileName, fileUrl, startDate, renewalMonths }] }
+  const [entityIntraAgreements, setEntityIntraAgreements] = useState([]); // [{ id, name, fromEntity, toEntity, agreementType, amount, currency, term, notes, fileName, fileUrl, startDate, renewalMonths }]
   const [entityCorpAgreements, setEntityCorpAgreements] = useState({}); // { "Entity Name": [{ id, name, counterparty, notes, fileName, fileUrl, startDate, renewalMonths }] }
   const [bankRelationships, setBankRelationships] = useState([]); // [{ id, bankName, mainContact, relationshipLevel, contactEmail, contactPhone, offeredServices:[], supportEmail, supportChannels:[], fees: { b2b: {pct,tx}, b2c: {pct,tx}, c2b: {pct,tx}, fx: {pct,tx} } }]
   const [bankAccountsList, setBankAccountsList] = useState([]); // [{ id, bankRelId, entityName, accountPurpose:[], dateOpened, feesOverride: null|{...}, collapsed }]
@@ -2940,62 +2925,84 @@ function AviroDashboard() {
           </div>
         </div>
 
-        {/* F: Agreements — Intra-Company + Corporate */}
+        {/* F: Agreements — Intra-Company (READ-ONLY from Corporate Flow) + Corporate (editable) */}
         {(() => {
-          const intraAgs = entityIntraAgreements[entity.name] || [];
+          // Intra-company: read-only from central flat array, filtered by this entity
+          const intraAgs = Array.isArray(entityIntraAgreements) ? entityIntraAgreements.filter(a => a.fromEntity === entity.name || a.toEntity === entity.name) : [];
           const corpAgs = entityCorpAgreements[entity.name] || [];
-          const otherEntities = corporateEntities.filter(ce => ce.name !== entity.name).map(ce => ce.name);
           const agInputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
           const agLabelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
 
-          const updateIntra = (id, field, val) => {
-            const updated = intraAgs.map(a => a.id === id ? { ...a, [field]: val } : a);
-            setEntityIntraAgreements({ ...entityIntraAgreements, [entity.name]: updated });
-          };
           const updateCorp = (id, field, val) => {
             const updated = corpAgs.map(a => a.id === id ? { ...a, [field]: val } : a);
             setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: updated });
           };
 
-          // File upload for agreements
-          const handleAgreementUpload = async (agId, file, agType) => {
+          // File upload for corporate agreements only
+          const handleAgreementUpload = async (agId, file) => {
             if (!file) return;
             if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first"); return; }
             const safeName = entity.name.replace(/[^a-zA-Z0-9]/g, "_");
             const filePath = safeName + "/agreements/" + agId + "_" + Date.now() + "_" + file.name;
-            const updater = agType === "intra" ? updateIntra : updateCorp;
-            updater(agId, "uploadStatus", "uploading");
+            updateCorp(agId, "uploadStatus", "uploading");
             try {
               const resp = await fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
                 method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file,
               });
               if (!resp.ok) throw new Error("Upload failed: " + resp.status);
               const publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
-              const list = agType === "intra" ? intraAgs : corpAgs;
-              const updatedList = list.map(a => a.id === agId ? { ...a, fileName: file.name, fileUrl: publicUrl, uploadStatus: null } : a);
-              if (agType === "intra") setEntityIntraAgreements({ ...entityIntraAgreements, [entity.name]: updatedList });
-              else setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: updatedList });
+              const updatedList = corpAgs.map(a => a.id === agId ? { ...a, fileName: file.name, fileUrl: publicUrl, uploadStatus: null } : a);
+              setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: updatedList });
             } catch (e) {
               alert("Upload error: " + e.message);
-              updater(agId, "uploadStatus", null);
+              updateCorp(agId, "uploadStatus", null);
             }
           };
 
-          // Render a single agreement card
-          const renderAgreementCard = (ag, agType) => {
-            const updater = agType === "intra" ? updateIntra : updateCorp;
+          // Render a read-only intra-company agreement card
+          const renderIntraReadOnly = (ag) => {
+            const otherEntity = ag.fromEntity === entity.name ? ag.toEntity : ag.fromEntity;
+            const renewalDate = ag.startDate && ag.renewalMonths ? (() => {
+              const d = new Date(ag.startDate); d.setMonth(d.getMonth() + parseInt(ag.renewalMonths)); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+            })() : null;
+            return (
+              <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 14, marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
+                    <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                      {ag.fromEntity} <span style={{ color: c.accent }}>→</span> {ag.toEntity}
+                      {ag.agreementType && <span> · <span style={{ color: c.accent, fontWeight: 500 }}>{ag.agreementType}</span></span>}
+                      {ag.amount && <span> · {ag.currency || "USD"} {ag.amount}{ag.term ? ` / ${ag.term}` : ""}</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
+                      {ag.startDate && <span>Started {ag.startDate}</span>}
+                      {renewalDate && <span> · Renews {renewalDate}</span>}
+                      {ag.startDate && !ag.renewalMonths && <span> · No renewal</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                    {ag.fileUrl && <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>↓ Download</a>}
+                  </div>
+                </div>
+                {ag.notes && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6, fontStyle: "italic" }}>{ag.notes}</div>}
+              </div>
+            );
+          };
+
+          // Render an editable corporate agreement card
+          const renderCorpCard = (ag) => {
             const isEditing = editingEntityField === `ag-${ag.id}`;
             const renewalDate = ag.startDate && ag.renewalMonths ? (() => {
               const d = new Date(ag.startDate); d.setMonth(d.getMonth() + parseInt(ag.renewalMonths)); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
             })() : null;
             return (
               <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 14, marginBottom: 8 }}>
-                {/* Header */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
                     <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
-                      {agType === "intra" ? (<>{entity.name} <span style={{ color: c.accent }}>↔</span> {ag.counterpartyEntity || "—"}</>) : (<>Counterparty: {ag.counterparty || "—"}</>)}
+                      Counterparty: {ag.counterparty || "—"}
                       {ag.startDate && <span> · Started {ag.startDate}</span>}
                       {renewalDate && <span> · Renews {renewalDate}</span>}
                       {ag.startDate && !ag.renewalMonths && <span> · No renewal</span>}
@@ -3005,60 +3012,39 @@ function AviroDashboard() {
                     {ag.fileUrl && <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>↓ Download</a>}
                     <button onClick={() => setEditingEntityField(isEditing ? null : `ag-${ag.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 8px" }}>{isEditing ? "Done" : "Edit"}</button>
                     <button onClick={() => {
-                      if (agType === "intra") setEntityIntraAgreements({ ...entityIntraAgreements, [entity.name]: intraAgs.filter(a => a.id !== ag.id) });
-                      else setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: corpAgs.filter(a => a.id !== ag.id) });
+                      setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: corpAgs.filter(a => a.id !== ag.id) });
                     }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
                   </div>
                 </div>
 
-                {/* Edit form */}
                 {isEditing && (
                   <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div><label style={agLabelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => updater(ag.id, "name", e.target.value)} placeholder="e.g. Payment Processing Agreement" style={{ ...agInputStyle, width: "100%" }} /></div>
-
-                    {agType === "intra" ? (
-                      <div>
-                        <label style={agLabelStyle}>Counterparty Entity</label>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 12, color: c.text, fontWeight: 500, whiteSpace: "nowrap" }}>{entity.name}</span>
-                          <span style={{ color: c.accent, fontSize: 12 }}>↔</span>
-                          <select value={ag.counterpartyEntity || ""} onChange={e => updater(ag.id, "counterpartyEntity", e.target.value)} style={{ ...agInputStyle, flex: 1 }}>
-                            <option value="">— Select Entity —</option>
-                            {otherEntities.map(en => <option key={en} value={en}>{en}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                    ) : (
-                      <div><label style={agLabelStyle}>Counterparty</label><input value={ag.counterparty || ""} onChange={e => updater(ag.id, "counterparty", e.target.value)} placeholder="e.g. External company name" style={{ ...agInputStyle, width: "100%" }} /></div>
-                    )}
-
-                    <div><label style={agLabelStyle}>Notes</label><textarea value={ag.notes || ""} onChange={e => updater(ag.id, "notes", e.target.value)} placeholder="Agreement notes..." style={{ ...agInputStyle, width: "100%", minHeight: 50, resize: "vertical", fontFamily: "system-ui" }} /></div>
-
+                    <div><label style={agLabelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => updateCorp(ag.id, "name", e.target.value)} placeholder="e.g. External Service Agreement" style={{ ...agInputStyle, width: "100%" }} /></div>
+                    <div><label style={agLabelStyle}>Counterparty</label><input value={ag.counterparty || ""} onChange={e => updateCorp(ag.id, "counterparty", e.target.value)} placeholder="e.g. External company name" style={{ ...agInputStyle, width: "100%" }} /></div>
+                    <div><label style={agLabelStyle}>Notes</label><textarea value={ag.notes || ""} onChange={e => updateCorp(ag.id, "notes", e.target.value)} placeholder="Agreement notes..." style={{ ...agInputStyle, width: "100%", minHeight: 50, resize: "vertical", fontFamily: "system-ui" }} /></div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      <div><label style={agLabelStyle}>Document Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => updater(ag.id, "startDate", e.target.value)} style={{ ...agInputStyle, width: "100%" }} /></div>
+                      <div><label style={agLabelStyle}>Document Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => updateCorp(ag.id, "startDate", e.target.value)} style={{ ...agInputStyle, width: "100%" }} /></div>
                       <div>
                         <label style={agLabelStyle}>Renewal (months)</label>
-                        <input type="number" min="0" value={ag.renewalMonths || ""} onChange={e => updater(ag.id, "renewalMonths", e.target.value)} placeholder="Leave blank = no renewal" style={{ ...agInputStyle, width: "100%" }} />
+                        <input type="number" min="0" value={ag.renewalMonths || ""} onChange={e => updateCorp(ag.id, "renewalMonths", e.target.value)} placeholder="Leave blank = no renewal" style={{ ...agInputStyle, width: "100%" }} />
                         {ag.startDate && ag.renewalMonths && renewalDate && <div style={{ fontSize: 10, color: c.accent, marginTop: 3 }}>Renews: {renewalDate}</div>}
                       </div>
                     </div>
-
-                    {/* Document upload */}
                     <div>
                       <label style={agLabelStyle}>Document</label>
                       {ag.fileUrl ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34,197,94,0.08)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.2)" }}>
                           <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, flex: 1 }}>📄 {ag.fileName || "document"}</span>
                           <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>Download</a>
-                          <button onClick={() => { updater(ag.id, "fileUrl", ""); updater(ag.id, "fileName", ""); }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                          <button onClick={() => { updateCorp(ag.id, "fileUrl", ""); updateCorp(ag.id, "fileName", ""); }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
                         </div>
                       ) : (
                         <div
                           onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
                           onDragLeave={e => { e.currentTarget.style.borderColor = c.border; }}
-                          onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; handleAgreementUpload(ag.id, e.dataTransfer.files[0], agType); }}
+                          onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; handleAgreementUpload(ag.id, e.dataTransfer.files[0]); }}
                           style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: "12px 16px", textAlign: "center", cursor: "pointer", transition: "border-color 0.15s" }}
-                          onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".doc,.docx,.pdf,.png,.jpg,.jpeg,.xlsx"; inp.onchange = (ev) => handleAgreementUpload(ag.id, ev.target.files[0], agType); inp.click(); }}
+                          onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".doc,.docx,.pdf,.png,.jpg,.jpeg,.xlsx"; inp.onchange = (ev) => handleAgreementUpload(ag.id, ev.target.files[0]); inp.click(); }}
                         >
                           {ag.uploadStatus === "uploading" ? (
                             <span style={{ fontSize: 11, color: c.accent }}>⟳ Uploading...</span>
@@ -3071,7 +3057,6 @@ function AviroDashboard() {
                   </div>
                 )}
 
-                {/* Notes preview when collapsed */}
                 {!isEditing && ag.notes && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 6, fontStyle: "italic" }}>{ag.notes}</div>}
               </div>
             );
@@ -3079,21 +3064,17 @@ function AviroDashboard() {
 
           return (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-            {/* Intra-Company Agreements */}
+            {/* Intra-Company Agreements — READ-ONLY, managed on Corporate Flow page */}
             <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: 0, textTransform: "uppercase" }}>Intra-Company Agreements</h3>
-                <button onClick={() => {
-                  const newAg = { id: `ia-${Date.now()}`, name: "", counterpartyEntity: "", notes: "", fileName: "", fileUrl: "", startDate: "", renewalMonths: "", uploadStatus: null };
-                  setEntityIntraAgreements({ ...entityIntraAgreements, [entity.name]: [...intraAgs, newAg] });
-                  setEditingEntityField(`ag-${newAg.id}`);
-                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
+                <button onClick={() => setActiveSection("moneyflow")} style={{ background: "transparent", border: `1px solid ${c.accent}`, color: c.accent, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Manage on Corporate Flow →</button>
               </div>
-              {intraAgs.length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No intra-company agreements</div>}
-              {intraAgs.map(ag => renderAgreementCard(ag, "intra"))}
+              {intraAgs.length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No intra-company agreements involving this entity</div>}
+              {intraAgs.map(ag => renderIntraReadOnly(ag))}
             </div>
 
-            {/* Corporate Agreements */}
+            {/* Corporate Agreements — fully editable */}
             <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: 0, textTransform: "uppercase" }}>Corporate Agreements</h3>
@@ -3104,7 +3085,7 @@ function AviroDashboard() {
                 }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
               </div>
               {corpAgs.length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No corporate agreements</div>}
-              {corpAgs.map(ag => renderAgreementCard(ag, "corp"))}
+              {corpAgs.map(ag => renderCorpCard(ag))}
             </div>
           </div>
           );
@@ -3325,26 +3306,241 @@ function AviroDashboard() {
 
   // ===== MONEY FLOW =====
   const typeColors = { "Payment Processing": "#6366f1", "Software License": "#22c55e", "Management Fee": "#f59e0b", "Payment Gateway": "#06b6d4", "Revenue Distribution": "#ec4899", "Subsidiary Distribution": "#8b5cf6" };
-  const renderMoneyFlow = () => (
+  const AGREEMENT_TYPES = ["Payment Processing", "Software License", "Management Fee", "Revenue Share", "Sub-License", "Service Agreement", "Payment Gateway", "Foundation Agreement", "Other"];
+  const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "AED", "BTC", "USDT", "Other"];
+  const TERMS = ["Weekly", "Monthly", "Quarterly", "6 Months", "Yearly"];
+  const agreementTypeColors = { "Payment Processing": "#6366f1", "Software License": "#22c55e", "Management Fee": "#f59e0b", "Revenue Share": "#ec4899", "Sub-License": "#8b5cf6", "Service Agreement": "#06b6d4", "Payment Gateway": "#14b8a6", "Foundation Agreement": "#f97316", "Other": "#6b7280" };
+
+  const renderMoneyFlow = () => {
+    const allNames = corporateEntities.map(e => e.name);
+    const updateAg = (id, field, val) => setEntityIntraAgreements(entityIntraAgreements.map(a => a.id === id ? { ...a, [field]: val } : a));
+
+    // Upload handler for agreement docs
+    const handleFlowDocUpload = async (agId, file) => {
+      if (!file) return;
+      if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first"); return; }
+      const filePath = "corporate_flow/" + agId + "_" + Date.now() + "_" + file.name;
+      updateAg(agId, "uploadStatus", "uploading");
+      try {
+        const resp = await fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+          method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file,
+        });
+        if (!resp.ok) throw new Error("Upload failed: " + resp.status);
+        const publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+        setEntityIntraAgreements(entityIntraAgreements.map(a => a.id === agId ? { ...a, fileName: file.name, fileUrl: publicUrl, uploadStatus: null } : a));
+      } catch (e) {
+        alert("Upload error: " + e.message);
+        updateAg(agId, "uploadStatus", null);
+      }
+    };
+
+    // Build flow chart data: unique entities involved + connections
+    const connectedEntities = new Set();
+    entityIntraAgreements.forEach(ag => { if (ag.fromEntity) connectedEntities.add(ag.fromEntity); if (ag.toEntity) connectedEntities.add(ag.toEntity); });
+    const nodes = [...connectedEntities];
+    const nodeCount = nodes.length;
+
+    // Circular layout for the flowchart
+    const chartW = 800, chartH = Math.max(400, nodeCount * 40);
+    const centerX = chartW / 2, centerY = chartH / 2;
+    const radius = Math.min(centerX, centerY) - 80;
+    const nodePositions = {};
+    nodes.forEach((name, i) => {
+      const angle = (2 * Math.PI * i / nodeCount) - Math.PI / 2;
+      nodePositions[name] = { x: centerX + radius * Math.cos(angle), y: centerY + radius * Math.sin(angle) };
+    });
+
+    const inputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const labelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
+
+    return (
     <div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 16px 0" }}>Money Flow Map</h2>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
-        {Object.entries(typeColors).map(([type, color]) => <span key={type} style={{ fontSize: 11, color, background: `${color}15`, border: `1px solid ${color}40`, padding: "3px 10px", borderRadius: 4 }}>{type}</span>)}
-      </div>
-      {MONEY_FLOWS.map((flow, idx) => (
-        <div key={idx} onClick={() => setExpandedFlows({...expandedFlows, [idx]: !expandedFlows[idx]})} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "14px 20px", marginBottom: 6, cursor: "pointer" }}
-          onMouseEnter={e => e.currentTarget.style.background = c.cardHover} onMouseLeave={e => e.currentTarget.style.background = c.card}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: c.text, flex: 1 }}>{flow.from}</span>
-            <span style={{ color: typeColors[flow.type] || c.accent }}><Icon type="arrowRight" size={16} /></span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: c.text, flex: 1 }}>{flow.to}</span>
-            <span style={{ fontSize: 10, color: typeColors[flow.type], background: `${typeColors[flow.type]}15`, padding: "3px 8px", borderRadius: 4, fontWeight: 600 }}>{flow.type}</span>
-          </div>
-          {expandedFlows[idx] && <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${c.border}`, fontSize: 12, color: c.textSecondary }}>{flow.description}</div>}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Corporate Flow</h2>
+          <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{entityIntraAgreements.length} intra-company agreement{entityIntraAgreements.length !== 1 ? "s" : ""} across {connectedEntities.size} entities</p>
         </div>
-      ))}
+        <button onClick={() => {
+          const newAg = { id: `cf-${Date.now()}`, name: "", fromEntity: "", toEntity: "", agreementType: "", amount: "", currency: "USD", term: "", notes: "", fileName: "", fileUrl: "", startDate: "", renewalMonths: "", collapsed: false, uploadStatus: null };
+          setEntityIntraAgreements([...entityIntraAgreements, newAg]);
+        }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Agreement</button>
+      </div>
+
+      {/* Visual Flow Chart */}
+      {nodeCount > 0 && (
+        <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 24, overflow: "auto" }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" }}>Entity Relationship Map</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {Object.entries(agreementTypeColors).filter(([type]) => entityIntraAgreements.some(a => a.agreementType === type)).map(([type, color]) => (
+              <span key={type} style={{ fontSize: 10, color, background: `${color}15`, border: `1px solid ${color}40`, padding: "2px 8px", borderRadius: 4 }}>{type}</span>
+            ))}
+          </div>
+          <svg width={chartW} height={chartH} style={{ display: "block", margin: "0 auto" }}>
+            {/* Connection lines */}
+            {entityIntraAgreements.filter(ag => ag.fromEntity && ag.toEntity && nodePositions[ag.fromEntity] && nodePositions[ag.toEntity]).map((ag, i) => {
+              const from = nodePositions[ag.fromEntity];
+              const to = nodePositions[ag.toEntity];
+              const color = agreementTypeColors[ag.agreementType] || "#6b7280";
+              const midX = (from.x + to.x) / 2;
+              const midY = (from.y + to.y) / 2;
+              // Offset curved lines slightly so multiple connections between same nodes don't overlap
+              const dx = to.x - from.x, dy = to.y - from.y;
+              const perpX = -dy * 0.1, perpY = dx * 0.1;
+              return (
+                <g key={ag.id + "-line"}>
+                  <path d={`M ${from.x} ${from.y} Q ${midX + perpX} ${midY + perpY} ${to.x} ${to.y}`} fill="none" stroke={color} strokeWidth="2" strokeOpacity="0.6" markerEnd={`url(#arrow-${ag.id})`} />
+                  <defs><marker id={`arrow-${ag.id}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill={color} fillOpacity="0.6" /></marker></defs>
+                  <text x={midX + perpX} y={midY + perpY - 6} textAnchor="middle" style={{ fontSize: 9, fill: color, fontWeight: 600 }}>{ag.agreementType || ""}</text>
+                </g>
+              );
+            })}
+            {/* Entity nodes */}
+            {nodes.map(name => {
+              const pos = nodePositions[name];
+              const entObj = corporateEntities.find(ce => ce.name === name);
+              const catColor = entObj?.category === "Gaming License" ? "#6366f1" : entObj?.category === "Payment Agent" ? "#22c55e" : entObj?.category === "Technology Company" ? "#06b6d4" : entObj?.category === "Management Company" ? "#f59e0b" : c.accent;
+              return (
+                <g key={name}>
+                  <circle cx={pos.x} cy={pos.y} r={28} fill={c.card} stroke={catColor} strokeWidth="2.5" />
+                  <text x={pos.x} y={pos.y - 34} textAnchor="middle" style={{ fontSize: 10, fill: c.text, fontWeight: 600 }}>{name.length > 25 ? name.slice(0, 22) + "..." : name}</text>
+                  <text x={pos.x} y={pos.y + 4} textAnchor="middle" style={{ fontSize: 8, fill: catColor, fontWeight: 600 }}>{entObj?.category?.split(" ")[0] || ""}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
+
+      {/* Agreements List */}
+      {entityIntraAgreements.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No intra-company agreements yet. Click "+ Add Agreement" to get started.</div>}
+
+      {entityIntraAgreements.map(ag => {
+        const isEditing = !ag.collapsed;
+        const renewalDate = ag.startDate && ag.renewalMonths ? (() => { const d = new Date(ag.startDate); d.setMonth(d.getMonth() + parseInt(ag.renewalMonths)); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })() : null;
+        const typeColor = agreementTypeColors[ag.agreementType] || "#6b7280";
+        return (
+        <div key={ag.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 10 }}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{ag.fromEntity || "?"}</span>
+              <span style={{ color: typeColor, fontSize: 14 }}>→</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{ag.toEntity || "?"}</span>
+              {ag.agreementType && <span style={{ fontSize: 10, color: typeColor, background: `${typeColor}15`, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{ag.agreementType}</span>}
+              {ag.amount && <span style={{ fontSize: 11, color: c.textMuted }}>{ag.currency || ""} {ag.amount}{ag.term ? ` / ${ag.term}` : ""}</span>}
+              {ag.fileUrl && <span style={{ fontSize: 9, color: "#22c55e", fontWeight: 600 }}>DOC ✓</span>}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {ag.fileUrl && <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>↓</a>}
+              <button onClick={() => updateAg(ag.id, "collapsed", !ag.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{ag.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
+              <button onClick={() => setEntityIntraAgreements(entityIntraAgreements.filter(a => a.id !== ag.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+            </div>
+          </div>
+
+          {/* Collapsed summary */}
+          {ag.collapsed && (ag.name || ag.notes || ag.startDate) && (
+            <div style={{ marginTop: 6, fontSize: 11, color: c.textMuted }}>
+              {ag.name && <span style={{ fontWeight: 500, color: c.textSecondary }}>{ag.name}</span>}
+              {ag.startDate && <span> · Started {ag.startDate}</span>}
+              {renewalDate && <span> · Renews {renewalDate}</span>}
+              {ag.notes && <span> · {ag.notes.slice(0, 60)}{ag.notes.length > 60 ? "..." : ""}</span>}
+            </div>
+          )}
+
+          {/* Edit form */}
+          {isEditing && (
+            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Row 1: From → To */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 10, alignItems: "end" }}>
+                <div>
+                  <label style={labelStyle}>From Entity</label>
+                  <select value={ag.fromEntity || ""} onChange={e => updateAg(ag.id, "fromEntity", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                    <option value="">— Select —</option>
+                    {allNames.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <span style={{ color: c.accent, fontSize: 18, paddingBottom: 6 }}>→</span>
+                <div>
+                  <label style={labelStyle}>To Entity</label>
+                  <select value={ag.toEntity || ""} onChange={e => updateAg(ag.id, "toEntity", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                    <option value="">— Select —</option>
+                    {allNames.filter(n => n !== ag.fromEntity).map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 2: Name + Type */}
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
+                <div><label style={labelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => updateAg(ag.id, "name", e.target.value)} placeholder="e.g. Payment Processing Agreement" style={{ ...inputStyle, width: "100%" }} /></div>
+                <div>
+                  <label style={labelStyle}>Agreement Type</label>
+                  <select value={ag.agreementType || ""} onChange={e => updateAg(ag.id, "agreementType", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                    <option value="">— Select Type —</option>
+                    {AGREEMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 3: Amount + Currency + Term */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 120px", gap: 10 }}>
+                <div><label style={labelStyle}>Amount</label><input value={ag.amount || ""} onChange={e => updateAg(ag.id, "amount", e.target.value)} placeholder="e.g. 5,000" style={{ ...inputStyle, width: "100%" }} /></div>
+                <div>
+                  <label style={labelStyle}>Currency</label>
+                  <select value={ag.currency || "USD"} onChange={e => updateAg(ag.id, "currency", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                    {CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Term</label>
+                  <select value={ag.term || ""} onChange={e => updateAg(ag.id, "term", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                    <option value="">— Select —</option>
+                    {TERMS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 4: Notes */}
+              <div><label style={labelStyle}>Notes</label><textarea value={ag.notes || ""} onChange={e => updateAg(ag.id, "notes", e.target.value)} placeholder="Agreement notes..." style={{ ...inputStyle, width: "100%", minHeight: 50, resize: "vertical", fontFamily: "system-ui" }} /></div>
+
+              {/* Row 5: Dates */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div><label style={labelStyle}>Document Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => updateAg(ag.id, "startDate", e.target.value)} style={{ ...inputStyle, width: "100%" }} /></div>
+                <div>
+                  <label style={labelStyle}>Renewal (months)</label>
+                  <input type="number" min="0" value={ag.renewalMonths || ""} onChange={e => updateAg(ag.id, "renewalMonths", e.target.value)} placeholder="Leave blank = no renewal" style={{ ...inputStyle, width: "100%" }} />
+                  {renewalDate && <div style={{ fontSize: 10, color: c.accent, marginTop: 3 }}>Renews: {renewalDate}</div>}
+                </div>
+              </div>
+
+              {/* Row 6: Document upload */}
+              <div>
+                <label style={labelStyle}>Document</label>
+                {ag.fileUrl ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34,197,94,0.08)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.2)" }}>
+                    <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, flex: 1 }}>📄 {ag.fileName || "document"}</span>
+                    <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>Download</a>
+                    <button onClick={() => { updateAg(ag.id, "fileUrl", ""); updateAg(ag.id, "fileName", ""); }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                    onDragLeave={e => { e.currentTarget.style.borderColor = c.border; }}
+                    onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; handleFlowDocUpload(ag.id, e.dataTransfer.files[0]); }}
+                    style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: "12px 16px", textAlign: "center", cursor: "pointer", transition: "border-color 0.15s" }}
+                    onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".doc,.docx,.pdf,.png,.jpg,.jpeg,.xlsx"; inp.onchange = (ev) => handleFlowDocUpload(ag.id, ev.target.files[0]); inp.click(); }}
+                  >
+                    {ag.uploadStatus === "uploading" ? <span style={{ fontSize: 11, color: c.accent }}>⟳ Uploading...</span> : <span style={{ fontSize: 11, color: c.textMuted }}>Drop document here or click to upload</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        );
+      })}
     </div>
-  );
+    );
+  };
 
   // ===== BANK ACCOUNTS =====
   const SERVICE_OPTIONS = ["C2B", "B2C", "B2B", "Treasury", "Internal"];
@@ -3969,7 +4165,7 @@ function AviroDashboard() {
     { section: "roadmap", icon: "roadmap", label: "Integration Roadmap" },
     { section: "corporate", label: "CORPORATE MATRIX", isHeader: true },
     { section: "entities", icon: "building", label: "Entity Matrix" },
-    { section: "moneyflow", icon: "flow", label: "Money Flow" },
+    { section: "moneyflow", icon: "flow", label: "Corporate Flow" },
     { section: "banks", icon: "bank", label: "Bank Accounts" },
     { section: "brands", icon: "grid", label: "Gaming Brands" },
   ];
