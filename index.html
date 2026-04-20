@@ -548,6 +548,16 @@ function AviroDashboard() {
   const [calSubSection, setCalSubSection] = useState("day"); // day, notes
   const [primaryTZ, setPrimaryTZ] = useState("GST"); // GST, BST, CEST - user's primary timezone
 
+  // ===== REVENUE STATE =====
+  const [revenueSubSection, setRevenueSubSection] = useState("overview"); // overview, cubepay, gatewayrev, bettingrev
+  const [cubePayDeals, setCubePayDeals] = useState({}); // { clientId: [{ id, type, ...dealConfig }] }
+  const [cubePayMonthlyData, setCubePayMonthlyData] = useState({}); // { clientId: { deposits, withdrawals, depositFees, withdrawalFees } } — placeholder until Metabase
+  const [cubePayOperatingCosts, setCubePayOperatingCosts] = useState({}); // { "YYYY-MM": { clientId: amount } }
+  const [cubePayPlaceholderCostPct, setCubePayPlaceholderCostPct] = useState({}); // { clientId: "15" } — rough % used during month
+  const [providerGroups, setProviderGroups] = useState([]); // [{ id, name, providerServiceIds: [] }]
+  const [gatewayRevFees, setGatewayRevFees] = useState({}); // { clientId: { monthlyFee, currency, hidden } }
+  const [selectedRevenueClient, setSelectedRevenueClient] = useState(null);
+
   // ===== LOCALSTORAGE PERSISTENCE =====
   const STORAGE_KEY = "aviro_dashboard_state";
   const saveState = useCallback(() => {
@@ -560,10 +570,11 @@ function AviroDashboard() {
         entityIntraAgreements, entityCorpAgreements,
         bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
         supabaseUrl, supabaseKey,
+        cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -624,6 +635,12 @@ function AviroDashboard() {
         if (s.providers) setProviders(s.providers);
         if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
         if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
+        if (s.cubePayDeals) setCubePayDeals(s.cubePayDeals);
+        if (s.cubePayMonthlyData) setCubePayMonthlyData(s.cubePayMonthlyData);
+        if (s.cubePayOperatingCosts) setCubePayOperatingCosts(s.cubePayOperatingCosts);
+        if (s.cubePayPlaceholderCostPct) setCubePayPlaceholderCostPct(s.cubePayPlaceholderCostPct);
+        if (s.providerGroups) setProviderGroups(s.providerGroups);
+        if (s.gatewayRevFees) setGatewayRevFees(s.gatewayRevFees);
       }
     } catch (e) { console.warn("Load state failed:", e); }
     setHasLoaded(true);
@@ -5413,7 +5430,7 @@ function AviroDashboard() {
       { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #6366f1, #8b5cf6)", defaultSection: "clients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #f59e0b, #ef4444)", defaultSection: null },
       { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #10b981, #059669)", defaultSection: "entities" },
-      { key: "revenue", title: "Revenue", desc: "Revenue Tracking & Analytics", icon: "signal", gradient: "linear-gradient(135deg, #ec4899, #be185d)", defaultSection: null },
+      { key: "revenue", title: "Revenue", desc: "Revenue Tracking & Analytics", icon: "signal", gradient: "linear-gradient(135deg, #ec4899, #be185d)", defaultSection: "revenue" },
       { key: "finance", title: "Finance", desc: "Financial Management & Reporting", icon: "flow", gradient: "linear-gradient(135deg, #14b8a6, #0d9488)", defaultSection: null },
       { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)", defaultSection: "calendar" },
     ];
@@ -5452,11 +5469,499 @@ function AviroDashboard() {
     );
   };
 
+  // ===== REVENUE =====
+  const renderRevenue = () => {
+    const sub = revenueSubSection;
+    const setSub = setRevenueSubSection;
+    const inputStyle4 = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const labelStyle4 = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
+    const DEAL_TYPES = ["Net Hold", "Provider Mark Up", "Profit Share"];
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    // Filter clients for Cube Pay — exclude Tech Only and Onboarding
+    const cubePayClients = gatewayClients.filter(cl => cl.clientType !== "Tech Only" && cl.status !== "Onboarding");
+    // All clients for Gateway.io revenue (including Tech Only)
+    const allGatewayRevClients = gatewayClients;
+
+    // Helper: get all provider services as flat list
+    const allProviderServices = [];
+    providers.forEach(p => (p.services || []).forEach(s => allProviderServices.push({ provId: p.id, provName: p.name, svcId: s.id, svcName: s.name || p.name, ...s })));
+
+    // Helper: calculate net hold for a client
+    const calcNetHold = (clientId) => {
+      const data = cubePayMonthlyData[clientId] || {};
+      const deps = parseFloat(data.deposits) || 0;
+      const wds = parseFloat(data.withdrawals) || 0;
+      const depFees = parseFloat(data.depositFees) || 0;
+      const wdFees = parseFloat(data.withdrawalFees) || 0;
+      return deps - wds - depFees - wdFees;
+    };
+
+    // Helper: calculate revenue for a deal
+    const calcDealRevenue = (deal, clientId) => {
+      if (deal.type === "Net Hold") {
+        const nh = calcNetHold(clientId);
+        const pct = parseFloat(deal.netHoldPct) || 0;
+        return nh * (pct / 100);
+      }
+      if (deal.type === "Provider Mark Up") {
+        // Sum markups across methods
+        return (deal.markups || []).reduce((sum, mu) => {
+          const vol = parseFloat(mu.volume) || 0;
+          const rate = parseFloat(mu.rate) || 0;
+          // Volume discount logic
+          if (mu.discountType === "Tiers" && (mu.tiers || []).length > 0) {
+            let remaining = vol;
+            let total = 0;
+            const sortedTiers = [...(mu.tiers || [])].sort((a, b) => (parseFloat(a.upTo) || Infinity) - (parseFloat(b.upTo) || Infinity));
+            let prevLimit = 0;
+            sortedTiers.forEach(tier => {
+              const limit = parseFloat(tier.upTo) || Infinity;
+              const tierRate = parseFloat(tier.rate) || 0;
+              const tierVol = Math.min(remaining, limit - prevLimit);
+              if (tierVol > 0) { total += tierVol * (tierRate / 100); remaining -= tierVol; }
+              prevLimit = limit;
+            });
+            if (remaining > 0) total += remaining * (rate / 100);
+            return sum + total;
+          }
+          if (mu.discountType === "Targets" && (mu.targets || []).length > 0) {
+            const sortedTargets = [...(mu.targets || [])].sort((a, b) => (parseFloat(b.threshold) || 0) - (parseFloat(a.threshold) || 0));
+            let appliedRate = rate;
+            for (const tgt of sortedTargets) {
+              if (vol >= (parseFloat(tgt.threshold) || 0)) { appliedRate = parseFloat(tgt.rate) || rate; break; }
+            }
+            return sum + vol * (appliedRate / 100);
+          }
+          return sum + vol * (rate / 100);
+        }, 0);
+      }
+      if (deal.type === "Profit Share") {
+        const nh = calcNetHold(clientId);
+        const costsPct = parseFloat(cubePayPlaceholderCostPct[clientId]) || 0;
+        const actualCosts = parseFloat((cubePayOperatingCosts[currentMonth] || {})[clientId]) || 0;
+        const costs = actualCosts > 0 ? actualCosts : nh * (costsPct / 100);
+        const sharePct = parseFloat(deal.profitSharePct) || 0;
+        return (nh - costs) * (sharePct / 100);
+      }
+      return 0;
+    };
+
+    // KPI calculations
+    const totalVolume = cubePayClients.reduce((sum, cl) => {
+      const d = cubePayMonthlyData[cl.id] || {};
+      return sum + (parseFloat(d.deposits) || 0) + (parseFloat(d.withdrawals) || 0);
+    }, 0);
+    const totalFees = cubePayClients.reduce((sum, cl) => {
+      const d = cubePayMonthlyData[cl.id] || {};
+      return sum + (parseFloat(d.depositFees) || 0) + (parseFloat(d.withdrawalFees) || 0);
+    }, 0);
+    const totalCubePayRevenue = cubePayClients.reduce((sum, cl) => {
+      return sum + (cubePayDeals[cl.id] || []).reduce((ds, deal) => ds + calcDealRevenue(deal, cl.id), 0);
+    }, 0);
+
+    const fmtCurrency = (v) => "$" + (v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Sub-tab nav
+    const subTabs = [
+      { key: "overview", label: "Overview" },
+      { key: "cubepay", label: "Cube Pay" },
+      { key: "gatewayrev", label: "Gateway.io" },
+      { key: "bettingrev", label: "Our Betting Brands" },
+    ];
+
+    // ===== CUBE PAY CLIENT DETAIL =====
+    const renderCubePayClient = (client) => {
+      const deals = cubePayDeals[client.id] || [];
+      const data = cubePayMonthlyData[client.id] || {};
+      const clientRevenue = deals.reduce((s, d) => s + calcDealRevenue(d, client.id), 0);
+
+      const addDeal = (type) => {
+        const base = { id: `deal-${Date.now()}`, type };
+        if (type === "Net Hold") base.netHoldPct = "";
+        if (type === "Provider Mark Up") base.markups = [];
+        if (type === "Profit Share") base.profitSharePct = "";
+        setCubePayDeals({ ...cubePayDeals, [client.id]: [...deals, base] });
+      };
+      const updateDeal = (dealId, field, val) => {
+        setCubePayDeals({ ...cubePayDeals, [client.id]: deals.map(d => d.id === dealId ? { ...d, [field]: val } : d) });
+      };
+      const removeDeal = (dealId) => {
+        setCubePayDeals({ ...cubePayDeals, [client.id]: deals.filter(d => d.id !== dealId) });
+      };
+      const updateData = (field, val) => {
+        setCubePayMonthlyData({ ...cubePayMonthlyData, [client.id]: { ...data, [field]: val } });
+      };
+
+      return (
+        <div>
+          <button onClick={() => setSelectedRevenueClient(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 12, marginBottom: 16 }}>← Back to Cube Pay</button>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: c.text, margin: 0 }}>{client.name}</h3>
+              <p style={{ color: c.textSecondary, fontSize: 12, margin: "4px 0 0" }}>{deals.length} deal{deals.length !== 1 ? "s" : ""} configured</p>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: clientRevenue >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(clientRevenue)}</div>
+          </div>
+
+          {/* Monthly Data — placeholder until Metabase */}
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 10, textTransform: "uppercase" }}>Current Month Data</div>
+            <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10, fontStyle: "italic" }}>Metabase integration pending — enter manually for now</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+              <div><label style={labelStyle4}>Deposits ($)</label><input value={data.deposits || ""} onChange={e => updateData("deposits", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+              <div><label style={labelStyle4}>Withdrawals ($)</label><input value={data.withdrawals || ""} onChange={e => updateData("withdrawals", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+              <div><label style={labelStyle4}>Deposit Fees ($)</label><input value={data.depositFees || ""} onChange={e => updateData("depositFees", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+              <div><label style={labelStyle4}>Withdrawal Fees ($)</label><input value={data.withdrawalFees || ""} onChange={e => updateData("withdrawalFees", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+            </div>
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>NET HOLD</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: calcNetHold(client.id) >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(calcNetHold(client.id))}</div>
+              </div>
+              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>VOLUME</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: c.accent }}>{fmtCurrency((parseFloat(data.deposits) || 0) + (parseFloat(data.withdrawals) || 0))}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Operating Costs (for Profit Share) */}
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 10, textTransform: "uppercase" }}>Operating Costs</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <label style={labelStyle4}>Placeholder Cost % (used during month)</label>
+                <input value={cubePayPlaceholderCostPct[client.id] || ""} onChange={e => setCubePayPlaceholderCostPct({ ...cubePayPlaceholderCostPct, [client.id]: e.target.value })} placeholder="e.g. 15" style={{ ...inputStyle4, width: "100%" }} />
+              </div>
+              <div>
+                <label style={labelStyle4}>Actual Costs for {currentMonth} ($)</label>
+                <input value={(cubePayOperatingCosts[currentMonth] || {})[client.id] || ""} onChange={e => setCubePayOperatingCosts({ ...cubePayOperatingCosts, [currentMonth]: { ...(cubePayOperatingCosts[currentMonth] || {}), [client.id]: e.target.value } })} placeholder="Enter after month ends" style={{ ...inputStyle4, width: "100%" }} />
+              </div>
+            </div>
+            {parseFloat((cubePayOperatingCosts[currentMonth] || {})[client.id]) > 0 && <div style={{ fontSize: 10, color: "#22c55e", marginTop: 6 }}>Using actual costs for this month</div>}
+            {!parseFloat((cubePayOperatingCosts[currentMonth] || {})[client.id]) && parseFloat(cubePayPlaceholderCostPct[client.id]) > 0 && <div style={{ fontSize: 10, color: c.warning, marginTop: 6 }}>Using placeholder {cubePayPlaceholderCostPct[client.id]}% estimate</div>}
+          </div>
+
+          {/* Deal Information */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>Deal Information</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {DEAL_TYPES.map(dt => (
+                <button key={dt} onClick={() => addDeal(dt)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent }}>+ {dt}</button>
+              ))}
+            </div>
+          </div>
+
+          {deals.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No deals configured. Add a deal type above.</div>}
+
+          {deals.map(deal => (
+            <div key={deal.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 4, background: deal.type === "Net Hold" ? "rgba(34,197,94,0.15)" : deal.type === "Provider Mark Up" ? "rgba(99,102,241,0.15)" : "rgba(245,158,11,0.15)", color: deal.type === "Net Hold" ? "#22c55e" : deal.type === "Provider Mark Up" ? c.accent : "#f59e0b" }}>{deal.type}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: calcDealRevenue(deal, client.id) >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(calcDealRevenue(deal, client.id))}</span>
+                </div>
+                <button onClick={() => removeDeal(deal.id)} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10 }}>Remove</button>
+              </div>
+
+              {/* Net Hold config */}
+              {deal.type === "Net Hold" && (
+                <div>
+                  <label style={labelStyle4}>Cube Pay % of Net Hold</label>
+                  <input value={deal.netHoldPct || ""} onChange={e => updateDeal(deal.id, "netHoldPct", e.target.value)} placeholder="e.g. 20" style={{ ...inputStyle4, width: 120 }} />
+                </div>
+              )}
+
+              {/* Provider Mark Up config */}
+              {deal.type === "Provider Mark Up" && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: c.textMuted }}>Configure markup per provider method</div>
+                    <button onClick={() => updateDeal(deal.id, "markups", [...(deal.markups || []), { id: `mu-${Date.now()}`, providerSvcId: "", rate: "", volume: "", discountType: "", tiers: [], targets: [] }])} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 4, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Add Method</button>
+                  </div>
+                  {(deal.markups || []).map((mu, mi) => {
+                    const updateMu = (field, val) => {
+                      const newMarkups = [...(deal.markups || [])];
+                      newMarkups[mi] = { ...newMarkups[mi], [field]: val };
+                      updateDeal(deal.id, "markups", newMarkups);
+                    };
+                    return (
+                      <div key={mu.id} style={{ background: c.surface, borderRadius: 8, padding: 12, marginBottom: 8, border: `1px solid ${c.border}` }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8, marginBottom: 8 }}>
+                          <div>
+                            <label style={labelStyle4}>Provider / Method</label>
+                            <select value={mu.providerSvcId || ""} onChange={e => updateMu("providerSvcId", e.target.value)} style={{ ...inputStyle4, width: "100%" }}>
+                              <option value="">— Select —</option>
+                              {allProviderServices.map(ps => <option key={ps.svcId} value={ps.svcId}>{ps.provName} — {ps.svcName}</option>)}
+                              {providerGroups.map(pg => <option key={`grp-${pg.id}`} value={`grp-${pg.id}`}>📦 {pg.name} (Group)</option>)}
+                            </select>
+                          </div>
+                          <div><label style={labelStyle4}>Mark Up (%)</label><input value={mu.rate || ""} onChange={e => updateMu("rate", e.target.value)} placeholder="%" style={{ ...inputStyle4, width: "100%" }} /></div>
+                          <div><label style={labelStyle4}>Volume ($)</label><input value={mu.volume || ""} onChange={e => updateMu("volume", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+                          <button onClick={() => updateDeal(deal.id, "markups", (deal.markups || []).filter((_, i) => i !== mi))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 14, alignSelf: "end", padding: "6px" }}>✕</button>
+                        </div>
+
+                        {/* Volume Discount */}
+                        <div style={{ marginTop: 6 }}>
+                          <label style={labelStyle4}>Volume Discount</label>
+                          <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                            {["None", "Tiers", "Targets"].map(dt => (
+                              <button key={dt} onClick={() => updateMu("discountType", dt === "None" ? "" : dt)} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 4, cursor: "pointer", fontWeight: 600, border: (mu.discountType || "") === (dt === "None" ? "" : dt) ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: (mu.discountType || "") === (dt === "None" ? "" : dt) ? `${c.accent}20` : "transparent", color: (mu.discountType || "") === (dt === "None" ? "" : dt) ? c.accent : c.textMuted }}>{dt}</button>
+                            ))}
+                          </div>
+
+                          {mu.discountType === "Tiers" && (
+                            <div>
+                              {(mu.tiers || []).map((tier, ti) => (
+                                <div key={ti} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 6, marginBottom: 4 }}>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Up To ($)</label><input value={tier.upTo || ""} onChange={e => { const t = [...(mu.tiers || [])]; t[ti] = { ...t[ti], upTo: e.target.value }; updateMu("tiers", t); }} placeholder="100000" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Rate (%)</label><input value={tier.rate || ""} onChange={e => { const t = [...(mu.tiers || [])]; t[ti] = { ...t[ti], rate: e.target.value }; updateMu("tiers", t); }} placeholder="2.0" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <button onClick={() => updateMu("tiers", (mu.tiers || []).filter((_, i) => i !== ti))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, alignSelf: "end", padding: "4px" }}>✕</button>
+                                </div>
+                              ))}
+                              <button onClick={() => updateMu("tiers", [...(mu.tiers || []), { upTo: "", rate: "" }])} style={{ fontSize: 10, color: c.accent, background: "transparent", border: `1px dashed ${c.accent}40`, borderRadius: 4, padding: "3px 10px", cursor: "pointer", marginTop: 4 }}>+ Add Tier</button>
+                            </div>
+                          )}
+
+                          {mu.discountType === "Targets" && (
+                            <div>
+                              {(mu.targets || []).map((tgt, tgi) => (
+                                <div key={tgi} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 6, marginBottom: 4 }}>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Threshold ($)</label><input value={tgt.threshold || ""} onChange={e => { const t = [...(mu.targets || [])]; t[tgi] = { ...t[tgi], threshold: e.target.value }; updateMu("targets", t); }} placeholder="100000" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Rate (%)</label><input value={tgt.rate || ""} onChange={e => { const t = [...(mu.targets || [])]; t[tgi] = { ...t[tgi], rate: e.target.value }; updateMu("targets", t); }} placeholder="1.5" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <button onClick={() => updateMu("targets", (mu.targets || []).filter((_, i) => i !== tgi))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, alignSelf: "end", padding: "4px" }}>✕</button>
+                                </div>
+                              ))}
+                              <button onClick={() => updateMu("targets", [...(mu.targets || []), { threshold: "", rate: "" }])} style={{ fontSize: 10, color: c.accent, background: "transparent", border: `1px dashed ${c.accent}40`, borderRadius: 4, padding: "3px 10px", cursor: "pointer", marginTop: 4 }}>+ Add Target</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Profit Share config */}
+              {deal.type === "Profit Share" && (
+                <div>
+                  <label style={labelStyle4}>Cube Pay Profit Share %</label>
+                  <input value={deal.profitSharePct || ""} onChange={e => updateDeal(deal.id, "profitSharePct", e.target.value)} placeholder="e.g. 20" style={{ ...inputStyle4, width: 120 }} />
+                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>Revenue = (Net Hold - Operating Costs) × {deal.profitSharePct || "0"}%</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    // ===== CUBE PAY LIST VIEW =====
+    const renderCubePay = () => {
+      if (selectedRevenueClient) {
+        const cl = cubePayClients.find(c2 => c2.id === selectedRevenueClient);
+        if (cl) return renderCubePayClient(cl);
+      }
+
+      return (
+        <div>
+          {/* KPI Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 24 }}>
+            {[
+              { label: "Volume Processed", value: fmtCurrency(totalVolume), color: c.accent },
+              { label: "Total Payment Fees", value: fmtCurrency(totalFees), color: "#f59e0b" },
+              { label: "Gross Cube Pay Revenue", value: fmtCurrency(totalCubePayRevenue), color: "#22c55e" },
+            ].map((kpi, i) => (
+              <div key={i} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center" }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
+                <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4, fontWeight: 600, textTransform: "uppercase" }}>{kpi.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Provider Breakdown — collapsible */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>Provider Groups</div>
+              <button onClick={() => setProviderGroups([...providerGroups, { id: `pg-${Date.now()}`, name: "", providerServiceIds: [] }])} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 4, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Create Group</button>
+            </div>
+            {providerGroups.map((pg, pgi) => (
+              <div key={pg.id} style={{ background: c.card, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 6 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                  <input value={pg.name} onChange={e => { const g = [...providerGroups]; g[pgi] = { ...g[pgi], name: e.target.value }; setProviderGroups(g); }} placeholder="Group name (e.g. Rapyd Combined)" style={{ ...inputStyle4, flex: 1 }} />
+                  <button onClick={() => setProviderGroups(providerGroups.filter(g => g.id !== pg.id))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                </div>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {allProviderServices.map(ps => {
+                    const sel = (pg.providerServiceIds || []).includes(ps.svcId);
+                    return <button key={ps.svcId} onClick={() => { const g = [...providerGroups]; const ids = sel ? (pg.providerServiceIds || []).filter(id => id !== ps.svcId) : [...(pg.providerServiceIds || []), ps.svcId]; g[pgi] = { ...g[pgi], providerServiceIds: ids }; setProviderGroups(g); }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer", border: sel ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: sel ? `${c.accent}20` : "transparent", color: sel ? c.accent : c.textMuted }}>{ps.provName} — {ps.svcName}</button>;
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Client List */}
+          <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 10 }}>Clients ({cubePayClients.length})</div>
+          {cubePayClients.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No eligible clients. Clients marked "Tech Only" or "Onboarding" are excluded.</div>}
+          {cubePayClients.map(cl => {
+            const deals = cubePayDeals[cl.id] || [];
+            const rev = deals.reduce((s, d) => s + calcDealRevenue(d, cl.id), 0);
+            const data = cubePayMonthlyData[cl.id] || {};
+            const vol = (parseFloat(data.deposits) || 0) + (parseFloat(data.withdrawals) || 0);
+            return (
+              <div key={cl.id} onClick={() => setSelectedRevenueClient(cl.id)} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 16, marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "border-color 0.15s" }} onMouseEnter={e => e.currentTarget.style.borderColor = c.accent} onMouseLeave={e => e.currentTarget.style.borderColor = c.border}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{cl.name}</div>
+                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{deals.length} deal{deals.length !== 1 ? "s" : ""} · Vol: {fmtCurrency(vol)}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: rev >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(rev)}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>revenue</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
+    // ===== GATEWAY.IO REVENUE =====
+    const renderGatewayRev = () => {
+      const totalGatewayFees = allGatewayRevClients.reduce((sum, cl) => {
+        const cfg = gatewayRevFees[cl.id] || {};
+        if (cfg.hidden) return sum;
+        return sum + (parseFloat(cfg.monthlyFee) || 0);
+      }, 0);
+
+      return (
+        <div>
+          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#22c55e" }}>{fmtCurrency(totalGatewayFees)}</div>
+            <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Total Monthly Gateway Fees</div>
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 10 }}>Client Monthly Fees ({allGatewayRevClients.length})</div>
+
+          {allGatewayRevClients.map(cl => {
+            const cfg = gatewayRevFees[cl.id] || {};
+            const updateFee = (field, val) => setGatewayRevFees({ ...gatewayRevFees, [cl.id]: { ...cfg, [field]: val } });
+            return (
+              <div key={cl.id} style={{ background: cfg.hidden ? `${c.card}80` : c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 14, marginBottom: 6, opacity: cfg.hidden ? 0.5 : 1, display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{cl.name}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{cl.clientType || "Standard"}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <select value={cfg.currency || "USD"} onChange={e => updateFee("currency", e.target.value)} style={{ ...inputStyle4, width: 70, fontSize: 11 }}>
+                    {["USD", "EUR", "GBP"].map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                  </select>
+                  <input value={cfg.monthlyFee || ""} onChange={e => updateFee("monthlyFee", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: 100, textAlign: "right" }} />
+                  <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontSize: 10, color: c.textMuted }}>
+                    <input type="checkbox" checked={!!cfg.hidden} onChange={e => updateFee("hidden", e.target.checked)} style={{ accentColor: c.accent }} />
+                    Hide
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
+    // ===== BETTING BRANDS REVENUE =====
+    const renderBettingRev = () => {
+      return (
+        <div>
+          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 40, textAlign: "center" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🎰</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: c.text, margin: "0 0 8px" }}>Our Betting Brands</h3>
+            <p style={{ color: c.textMuted, fontSize: 13, margin: "0 0 16px", lineHeight: 1.6 }}>This section will connect directly to back office systems to pull revenue data from our betting brands — the same approach as the Ledger project.</p>
+            <div style={{ display: "inline-block", background: c.surface, borderRadius: 8, padding: "8px 16px", fontSize: 11, color: c.accent, fontWeight: 600 }}>Back Office Integration — Coming Soon</div>
+          </div>
+        </div>
+      );
+    };
+
+    // ===== REVENUE OVERVIEW =====
+    const renderRevenueOverview = () => {
+      const totalGatewayFees = allGatewayRevClients.reduce((sum, cl) => {
+        const cfg = gatewayRevFees[cl.id] || {};
+        if (cfg.hidden) return sum;
+        return sum + (parseFloat(cfg.monthlyFee) || 0);
+      }, 0);
+      const totalRev = totalCubePayRevenue + totalGatewayFees;
+
+      return (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 24 }}>
+            <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#22c55e" }}>{fmtCurrency(totalRev)}</div>
+              <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Total Revenue</div>
+            </div>
+            <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: c.accent }}>{fmtCurrency(totalCubePayRevenue)}</div>
+              <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Cube Pay Revenue</div>
+            </div>
+            <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(totalGatewayFees)}</div>
+              <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Gateway.io Fees</div>
+            </div>
+          </div>
+
+          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 12 }}>Revenue Breakdown</div>
+            {cubePayClients.map(cl => {
+              const deals = cubePayDeals[cl.id] || [];
+              const rev = deals.reduce((s, d) => s + calcDealRevenue(d, cl.id), 0);
+              if (rev === 0 && deals.length === 0) return null;
+              return (
+                <div key={cl.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${c.border}` }}>
+                  <span style={{ fontSize: 12, color: c.text }}>{cl.name} <span style={{ color: c.textMuted, fontSize: 10 }}>(Cube Pay)</span></span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: rev >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(rev)}</span>
+                </div>
+              );
+            })}
+            {allGatewayRevClients.filter(cl => !((gatewayRevFees[cl.id] || {}).hidden) && parseFloat((gatewayRevFees[cl.id] || {}).monthlyFee) > 0).map(cl => (
+              <div key={`gw-${cl.id}`} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${c.border}` }}>
+                <span style={{ fontSize: 12, color: c.text }}>{cl.name} <span style={{ color: c.textMuted, fontSize: 10 }}>(Gateway Fee)</span></span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#f59e0b" }}>{fmtCurrency(parseFloat((gatewayRevFees[cl.id] || {}).monthlyFee) || 0)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 6px 0" }}>Revenue</h2>
+        <p style={{ color: c.textSecondary, fontSize: 13, margin: "0 0 20px 0" }}>Track revenue across Cube Pay, Gateway.io fees, and Betting Brands</p>
+
+        {/* Sub-tabs */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 24, background: c.surface, borderRadius: 10, padding: 4 }}>
+          {subTabs.map(tab => (
+            <button key={tab.key} onClick={() => { setSub(tab.key); setSelectedRevenueClient(null); }} style={{ flex: 1, padding: "10px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: sub === tab.key ? c.accent : "transparent", color: sub === tab.key ? "#fff" : c.textMuted, transition: "all 0.15s" }}>{tab.label}</button>
+          ))}
+        </div>
+
+        {sub === "overview" && renderRevenueOverview()}
+        {sub === "cubepay" && renderCubePay()}
+        {sub === "gatewayrev" && renderGatewayRev()}
+        {sub === "bettingrev" && renderBettingRev()}
+      </div>
+    );
+  };
+
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
     david: { label: "DAVID CALENDAR", sections: ["calendar", "quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
     gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
+    revenue: { label: "REVENUE", sections: ["revenue"] },
   };
 
   const getSectionGroup = (s) => {
@@ -5486,11 +5991,13 @@ function AviroDashboard() {
     { section: "moneyflow", icon: "flow", label: "Corporate Flow", group: "corporate" },
     { section: "banks", icon: "bank", label: "Bank Accounts", group: "corporate" },
     { section: "brands", icon: "grid", label: "Gaming Brands", group: "corporate" },
+    { section: "revenue_header", label: "REVENUE", isHeader: true, group: "revenue" },
+    { section: "revenue", icon: "signal", label: "Revenue Dashboard", group: "revenue" },
   ];
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands };
+  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, revenue: renderRevenue };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
