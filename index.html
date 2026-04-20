@@ -557,6 +557,7 @@ function AviroDashboard() {
   const [providerGroups, setProviderGroups] = useState([]); // [{ id, name, providerServiceIds: [] }]
   const [gatewayRevFees, setGatewayRevFees] = useState({}); // { clientId: { monthlyFee, currency, hidden } }
   const [selectedRevenueClient, setSelectedRevenueClient] = useState(null);
+  const [metabaseConfigs, setMetabaseConfigs] = useState({}); // { clientId: { url, username, password, sessionToken, cards: [], selectedDepositCard, selectedWithdrawalCard } }
 
   // ===== LOCALSTORAGE PERSISTENCE =====
   const STORAGE_KEY = "aviro_dashboard_state";
@@ -570,11 +571,11 @@ function AviroDashboard() {
         entityIntraAgreements, entityCorpAgreements,
         bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
         supabaseUrl, supabaseKey,
-        cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees,
+        cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -641,6 +642,7 @@ function AviroDashboard() {
         if (s.cubePayPlaceholderCostPct) setCubePayPlaceholderCostPct(s.cubePayPlaceholderCostPct);
         if (s.providerGroups) setProviderGroups(s.providerGroups);
         if (s.gatewayRevFees) setGatewayRevFees(s.gatewayRevFees);
+        if (s.metabaseConfigs) setMetabaseConfigs(s.metabaseConfigs);
       }
     } catch (e) { console.warn("Load state failed:", e); }
     setHasLoaded(true);
@@ -5673,25 +5675,153 @@ function AviroDashboard() {
             );
           })()}
 
-          {/* Monthly Data — placeholder until Metabase */}
-          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>Monthly Transaction Data</div>
-              <div style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic", background: c.surface, padding: "3px 8px", borderRadius: 4 }}>Metabase pending</div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
-              <div><label style={labelStyle4}>Deposits ($)</label><input value={data.deposits || ""} onChange={e => updateData("deposits", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
-              <div><label style={labelStyle4}>Withdrawals ($)</label><input value={data.withdrawals || ""} onChange={e => updateData("withdrawals", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
-              <div><label style={labelStyle4}>Deposit Fees ($)</label><input value={data.depositFees || ""} onChange={e => updateData("depositFees", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
-              <div><label style={labelStyle4}>Withdrawal Fees ($)</label><input value={data.withdrawalFees || ""} onChange={e => updateData("withdrawalFees", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
-            </div>
-            <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
-              <div style={{ flex: 1, background: "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(34,197,94,0.02))", borderRadius: 8, padding: 12, textAlign: "center", border: "1px solid rgba(34,197,94,0.15)" }}>
-                <div style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>Net Hold</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: netHold >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(netHold)}</div>
+          {/* Metabase Connection & Monthly Data */}
+          {(() => {
+            const mbConfig = metabaseConfigs[client.id] || {};
+            const mbConnected = !!mbConfig.sessionToken;
+            const [mbLoading, setMbLoading] = React.useState(false);
+            const [mbError, setMbError] = React.useState("");
+            const [mbShowSetup, setMbShowSetup] = React.useState(!mbConnected);
+            const [mbCards, setMbCards] = React.useState(mbConfig.cards || []);
+            const [mbFetchStatus, setMbFetchStatus] = React.useState("");
+
+            const updateMbConfig = (updates) => {
+              setMetabaseConfigs({ ...metabaseConfigs, [client.id]: { ...mbConfig, ...updates } });
+            };
+
+            const proxyCall = async (path, method, body, token) => {
+              const resp = await fetch("/.netlify/functions/metabase-proxy", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ metabaseUrl: mbConfig.url, path, method: method || "GET", body, sessionToken: token || mbConfig.sessionToken }),
+              });
+              return resp.json();
+            };
+
+            const connectMetabase = async () => {
+              setMbLoading(true); setMbError("");
+              try {
+                const authResp = await proxyCall("/api/session", "POST", { username: mbConfig.username, password: mbConfig.password });
+                if (!authResp.id) { setMbError(authResp.message || "Authentication failed"); setMbLoading(false); return; }
+                const token = authResp.id;
+                // Fetch available cards/questions
+                const cardsResp = await proxyCall("/api/card", "GET", null, token);
+                const cardsList = Array.isArray(cardsResp) ? cardsResp.map(cd => ({ id: cd.id, name: cd.name, collection: cd.collection ? cd.collection.name : "Root" })) : [];
+                setMbCards(cardsList);
+                updateMbConfig({ sessionToken: token, cards: cardsList });
+                setMbShowSetup(false);
+              } catch (e) { setMbError(e.message); }
+              setMbLoading(false);
+            };
+
+            const fetchCardData = async (cardId) => {
+              try {
+                const resp = await proxyCall(`/api/card/${cardId}/query/json`, "POST", {}, mbConfig.sessionToken);
+                return Array.isArray(resp) ? resp : [];
+              } catch { return []; }
+            };
+
+            const fetchMetabaseData = async () => {
+              setMbFetchStatus("Fetching...");
+              try {
+                let newData = { ...data };
+                if (mbConfig.selectedDepositCard) {
+                  const depRows = await fetchCardData(mbConfig.selectedDepositCard);
+                  if (depRows.length > 0) {
+                    // Try to find deposit amount — look for common column names
+                    const firstRow = depRows[0];
+                    const keys = Object.keys(firstRow);
+                    const amountKey = keys.find(k => /amount|total|sum|deposit|value/i.test(k)) || keys[keys.length - 1];
+                    const feeKey = keys.find(k => /fee|charge|commission/i.test(k));
+                    const totalAmount = depRows.reduce((s, r) => s + (parseFloat(r[amountKey]) || 0), 0);
+                    newData.deposits = totalAmount.toFixed(2);
+                    if (feeKey) { newData.depositFees = depRows.reduce((s, r) => s + (parseFloat(r[feeKey]) || 0), 0).toFixed(2); }
+                  }
+                }
+                if (mbConfig.selectedWithdrawalCard) {
+                  const wdRows = await fetchCardData(mbConfig.selectedWithdrawalCard);
+                  if (wdRows.length > 0) {
+                    const firstRow = wdRows[0];
+                    const keys = Object.keys(firstRow);
+                    const amountKey = keys.find(k => /amount|total|sum|withdrawal|payout|value/i.test(k)) || keys[keys.length - 1];
+                    const feeKey = keys.find(k => /fee|charge|commission/i.test(k));
+                    const totalAmount = wdRows.reduce((s, r) => s + (parseFloat(r[amountKey]) || 0), 0);
+                    newData.withdrawals = totalAmount.toFixed(2);
+                    if (feeKey) { newData.withdrawalFees = wdRows.reduce((s, r) => s + (parseFloat(r[feeKey]) || 0), 0).toFixed(2); }
+                  }
+                }
+                setCubePayMonthlyData({ ...cubePayMonthlyData, [client.id]: newData });
+                setMbFetchStatus("Data updated!");
+                setTimeout(() => setMbFetchStatus(""), 3000);
+              } catch (e) { setMbFetchStatus("Error: " + e.message); }
+            };
+
+            return (
+              <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${mbConnected ? "rgba(34,197,94,0.3)" : c.border}`, padding: 18, marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: mbShowSetup ? 12 : 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>Monthly Transaction Data</div>
+                    {mbConnected && <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(34,197,94,0.15)", color: "#22c55e", fontWeight: 700 }}>Metabase Connected</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {mbConnected && <button onClick={fetchMetabaseData} style={{ fontSize: 10, padding: "4px 12px", borderRadius: 6, cursor: "pointer", border: `1px solid rgba(34,197,94,0.3)`, background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Fetch Data</button>}
+                    <button onClick={() => setMbShowSetup(!mbShowSetup)} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted }}>{mbShowSetup ? "Hide Setup" : "Metabase Setup"}</button>
+                  </div>
+                </div>
+                {mbFetchStatus && <div style={{ fontSize: 10, color: mbFetchStatus.startsWith("Error") ? "#ef4444" : "#22c55e", marginBottom: 8 }}>{mbFetchStatus}</div>}
+
+                {/* Metabase Setup */}
+                {mbShowSetup && (
+                  <div style={{ background: c.surface, borderRadius: 10, padding: 14, marginBottom: 12, border: `1px solid ${c.border}` }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+                      <div><label style={labelStyle4}>Metabase URL</label><input value={mbConfig.url || ""} onChange={e => updateMbConfig({ url: e.target.value })} placeholder="https://your.metabase.com" style={{ ...inputStyle4, width: "100%" }} /></div>
+                      <div><label style={labelStyle4}>Username / Email</label><input value={mbConfig.username || ""} onChange={e => updateMbConfig({ username: e.target.value })} placeholder="email@company.com" style={{ ...inputStyle4, width: "100%" }} /></div>
+                      <div><label style={labelStyle4}>Password</label><input type="password" value={mbConfig.password || ""} onChange={e => updateMbConfig({ password: e.target.value })} placeholder="••••••••" style={{ ...inputStyle4, width: "100%" }} /></div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button onClick={connectMetabase} disabled={mbLoading} style={{ fontSize: 11, padding: "6px 16px", borderRadius: 6, cursor: mbLoading ? "wait" : "pointer", border: "none", background: c.accent, color: "#fff", fontWeight: 600 }}>{mbLoading ? "Connecting..." : mbConnected ? "Reconnect" : "Connect"}</button>
+                      {mbError && <span style={{ fontSize: 10, color: "#ef4444" }}>{mbError}</span>}
+                    </div>
+
+                    {/* Card Selection */}
+                    {mbConnected && mbCards.length > 0 && (
+                      <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div>
+                          <label style={labelStyle4}>Deposits Question/Card</label>
+                          <select value={mbConfig.selectedDepositCard || ""} onChange={e => updateMbConfig({ selectedDepositCard: e.target.value })} style={{ ...inputStyle4, width: "100%" }}>
+                            <option value="">— Select —</option>
+                            {mbCards.map(cd => <option key={cd.id} value={cd.id}>[{cd.collection}] {cd.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle4}>Withdrawals Question/Card</label>
+                          <select value={mbConfig.selectedWithdrawalCard || ""} onChange={e => updateMbConfig({ selectedWithdrawalCard: e.target.value })} style={{ ...inputStyle4, width: "100%" }}>
+                            <option value="">— Select —</option>
+                            {mbCards.map(cd => <option key={cd.id} value={cd.id}>[{cd.collection}] {cd.name}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    {mbConnected && mbCards.length === 0 && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 8 }}>No saved questions found in this Metabase instance.</div>}
+                  </div>
+                )}
+
+                {/* Manual Data Entry */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+                  <div><label style={labelStyle4}>Deposits ($)</label><input value={data.deposits || ""} onChange={e => updateData("deposits", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+                  <div><label style={labelStyle4}>Withdrawals ($)</label><input value={data.withdrawals || ""} onChange={e => updateData("withdrawals", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+                  <div><label style={labelStyle4}>Deposit Fees ($)</label><input value={data.depositFees || ""} onChange={e => updateData("depositFees", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+                  <div><label style={labelStyle4}>Withdrawal Fees ($)</label><input value={data.withdrawalFees || ""} onChange={e => updateData("withdrawalFees", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+                </div>
+                <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+                  <div style={{ flex: 1, background: "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(34,197,94,0.02))", borderRadius: 8, padding: 12, textAlign: "center", border: "1px solid rgba(34,197,94,0.15)" }}>
+                    <div style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>Net Hold</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: netHold >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(netHold)}</div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Deal Information */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
