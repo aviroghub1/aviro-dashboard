@@ -5576,6 +5576,23 @@ function AviroDashboard() {
       const deals = cubePayDeals[client.id] || [];
       const data = cubePayMonthlyData[client.id] || {};
       const clientRevenue = deals.reduce((s, d) => s + calcDealRevenue(d, client.id), 0);
+      const hasProfitShare = deals.some(d => d.type === "Profit Share");
+      const deps = parseFloat(data.deposits) || 0;
+      const wds = parseFloat(data.withdrawals) || 0;
+      const totalProcessed = deps + wds;
+      const netHold = calcNetHold(client.id);
+
+      // Provider volume breakdown from markup deals
+      const providerVolumes = {};
+      deals.filter(d => d.type === "Provider Mark Up").forEach(d => {
+        (d.markups || []).forEach(mu => {
+          const vol = parseFloat(mu.volume) || 0;
+          if (!mu.providerSvcId || vol === 0) return;
+          const isGroup = mu.providerSvcId.startsWith("grp-");
+          const label = isGroup ? (providerGroups.find(pg => `grp-${pg.id}` === mu.providerSvcId) || {}).name || "Group" : (() => { const ps = allProviderServices.find(s => s.svcId === mu.providerSvcId); return ps ? `${ps.provName} — ${ps.svcName}` : mu.providerSvcId; })();
+          providerVolumes[label] = (providerVolumes[label] || 0) + vol;
+        });
+      });
 
       const addDeal = (type) => {
         const base = { id: `deal-${Date.now()}`, type };
@@ -5598,59 +5615,92 @@ function AviroDashboard() {
         <div>
           <button onClick={() => setSelectedRevenueClient(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 12, marginBottom: 16 }}>← Back to Cube Pay</button>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <div>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: c.text, margin: 0 }}>{client.name}</h3>
-              <p style={{ color: c.textSecondary, fontSize: 12, margin: "4px 0 0" }}>{deals.length} deal{deals.length !== 1 ? "s" : ""} configured</p>
-            </div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: clientRevenue >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(clientRevenue)}</div>
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 4px" }}>{client.name}</h3>
+            <p style={{ color: c.textSecondary, fontSize: 12, margin: 0 }}>{deals.length} deal{deals.length !== 1 ? "s" : ""} configured · Current month</p>
           </div>
+
+          {/* KPI Cards — pretty gradient style */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+            <div style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(34,197,94,0.04))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Revenue</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#22c55e" }}>{fmtCurrency(clientRevenue)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04))", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 14, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: c.accent, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Deposits</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: c.accent }}>{fmtCurrency(deps)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 14, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Withdrawals</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(wds)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(236,72,153,0.12), rgba(236,72,153,0.04))", border: "1px solid rgba(236,72,153,0.25)", borderRadius: 14, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: "#ec4899", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Processed</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#ec4899" }}>{fmtCurrency(totalProcessed)}</div>
+            </div>
+          </div>
+
+          {/* Provider Volume Breakdown — collapsible */}
+          {Object.keys(providerVolumes).length > 0 && (() => {
+            const [pvOpen, setPvOpen] = React.useState(false);
+            const sortedPV = Object.entries(providerVolumes).sort((a, b) => b[1] - a[1]);
+            const maxVol = sortedPV.length > 0 ? sortedPV[0][1] : 1;
+            return (
+              <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, marginBottom: 16, overflow: "hidden" }}>
+                <div onClick={() => setPvOpen(!pvOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Provider Breakdown</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 11, color: c.textMuted }}>{sortedPV.length} provider{sortedPV.length !== 1 ? "s" : ""}</span>
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{pvOpen ? "▴" : "▾"}</span>
+                  </div>
+                </div>
+                {pvOpen && (
+                  <div style={{ padding: "0 18px 16px" }}>
+                    {sortedPV.map(([label, vol]) => (
+                      <div key={label} style={{ marginBottom: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, color: c.text }}>{label}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: c.accent }}>{fmtCurrency(vol)}</span>
+                        </div>
+                        <div style={{ height: 6, background: c.surface, borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${(vol / maxVol) * 100}%`, background: `linear-gradient(90deg, ${c.accent}, #8b5cf6)`, borderRadius: 3, transition: "width 0.3s" }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Monthly Data — placeholder until Metabase */}
           <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 10, textTransform: "uppercase" }}>Current Month Data</div>
-            <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10, fontStyle: "italic" }}>Metabase integration pending — enter manually for now</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>Monthly Transaction Data</div>
+              <div style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic", background: c.surface, padding: "3px 8px", borderRadius: 4 }}>Metabase pending</div>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
               <div><label style={labelStyle4}>Deposits ($)</label><input value={data.deposits || ""} onChange={e => updateData("deposits", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
               <div><label style={labelStyle4}>Withdrawals ($)</label><input value={data.withdrawals || ""} onChange={e => updateData("withdrawals", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
               <div><label style={labelStyle4}>Deposit Fees ($)</label><input value={data.depositFees || ""} onChange={e => updateData("depositFees", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
               <div><label style={labelStyle4}>Withdrawal Fees ($)</label><input value={data.withdrawalFees || ""} onChange={e => updateData("withdrawalFees", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
             </div>
-            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>NET HOLD</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: calcNetHold(client.id) >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(calcNetHold(client.id))}</div>
-              </div>
-              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>VOLUME</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: c.accent }}>{fmtCurrency((parseFloat(data.deposits) || 0) + (parseFloat(data.withdrawals) || 0))}</div>
+            <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
+              <div style={{ flex: 1, background: "linear-gradient(135deg, rgba(34,197,94,0.08), rgba(34,197,94,0.02))", borderRadius: 8, padding: 12, textAlign: "center", border: "1px solid rgba(34,197,94,0.15)" }}>
+                <div style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>Net Hold</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: netHold >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(netHold)}</div>
               </div>
             </div>
-          </div>
-
-          {/* Operating Costs (for Profit Share) */}
-          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 10, textTransform: "uppercase" }}>Operating Costs</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
-                <label style={labelStyle4}>Placeholder Cost % (used during month)</label>
-                <input value={cubePayPlaceholderCostPct[client.id] || ""} onChange={e => setCubePayPlaceholderCostPct({ ...cubePayPlaceholderCostPct, [client.id]: e.target.value })} placeholder="e.g. 15" style={{ ...inputStyle4, width: "100%" }} />
-              </div>
-              <div>
-                <label style={labelStyle4}>Actual Costs for {currentMonth} ($)</label>
-                <input value={(cubePayOperatingCosts[currentMonth] || {})[client.id] || ""} onChange={e => setCubePayOperatingCosts({ ...cubePayOperatingCosts, [currentMonth]: { ...(cubePayOperatingCosts[currentMonth] || {}), [client.id]: e.target.value } })} placeholder="Enter after month ends" style={{ ...inputStyle4, width: "100%" }} />
-              </div>
-            </div>
-            {parseFloat((cubePayOperatingCosts[currentMonth] || {})[client.id]) > 0 && <div style={{ fontSize: 10, color: "#22c55e", marginTop: 6 }}>Using actual costs for this month</div>}
-            {!parseFloat((cubePayOperatingCosts[currentMonth] || {})[client.id]) && parseFloat(cubePayPlaceholderCostPct[client.id]) > 0 && <div style={{ fontSize: 10, color: c.warning, marginTop: 6 }}>Using placeholder {cubePayPlaceholderCostPct[client.id]}% estimate</div>}
           </div>
 
           {/* Deal Information */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>Deal Information</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>Deal Information</div>
             <div style={{ display: "flex", gap: 6 }}>
               {DEAL_TYPES.map(dt => (
-                <button key={dt} onClick={() => addDeal(dt)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent }}>+ {dt}</button>
+                <button key={dt} onClick={() => addDeal(dt)} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontWeight: 600, border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, transition: "all 0.15s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = `${c.accent}25`; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = `${c.accent}10`; }}>+ {dt}</button>
               ))}
             </div>
           </div>
@@ -5658,20 +5708,23 @@ function AviroDashboard() {
           {deals.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No deals configured. Add a deal type above.</div>}
 
           {deals.map(deal => (
-            <div key={deal.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 4, background: deal.type === "Net Hold" ? "rgba(34,197,94,0.15)" : deal.type === "Provider Mark Up" ? "rgba(99,102,241,0.15)" : "rgba(245,158,11,0.15)", color: deal.type === "Net Hold" ? "#22c55e" : deal.type === "Provider Mark Up" ? c.accent : "#f59e0b" }}>{deal.type}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: calcDealRevenue(deal, client.id) >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(calcDealRevenue(deal, client.id))}</span>
+            <div key={deal.id} style={{ background: c.card, borderRadius: 14, border: `1px solid ${deal.type === "Net Hold" ? "rgba(34,197,94,0.2)" : deal.type === "Provider Mark Up" ? "rgba(99,102,241,0.2)" : "rgba(245,158,11,0.2)"}`, padding: 18, marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 6, background: deal.type === "Net Hold" ? "rgba(34,197,94,0.15)" : deal.type === "Provider Mark Up" ? "rgba(99,102,241,0.15)" : "rgba(245,158,11,0.15)", color: deal.type === "Net Hold" ? "#22c55e" : deal.type === "Provider Mark Up" ? c.accent : "#f59e0b" }}>{deal.type}</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: calcDealRevenue(deal, client.id) >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(calcDealRevenue(deal, client.id))}</span>
                 </div>
-                <button onClick={() => removeDeal(deal.id)} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10 }}>Remove</button>
+                <button onClick={() => removeDeal(deal.id)} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Remove</button>
               </div>
 
               {/* Net Hold config */}
               {deal.type === "Net Hold" && (
-                <div>
-                  <label style={labelStyle4}>Cube Pay % of Net Hold</label>
-                  <input value={deal.netHoldPct || ""} onChange={e => updateDeal(deal.id, "netHoldPct", e.target.value)} placeholder="e.g. 20" style={{ ...inputStyle4, width: 120 }} />
+                <div style={{ display: "flex", alignItems: "end", gap: 12 }}>
+                  <div>
+                    <label style={labelStyle4}>Cube Pay % of Net Hold</label>
+                    <input value={deal.netHoldPct || ""} onChange={e => updateDeal(deal.id, "netHoldPct", e.target.value)} placeholder="e.g. 20" style={{ ...inputStyle4, width: 120 }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: c.textMuted, paddingBottom: 6 }}>Net Hold {fmtCurrency(netHold)} × {deal.netHoldPct || "0"}% = <strong style={{ color: "#22c55e" }}>{fmtCurrency(calcDealRevenue(deal, client.id))}</strong></div>
                 </div>
               )}
 
@@ -5680,7 +5733,7 @@ function AviroDashboard() {
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <div style={{ fontSize: 11, color: c.textMuted }}>Configure markup per provider method</div>
-                    <button onClick={() => updateDeal(deal.id, "markups", [...(deal.markups || []), { id: `mu-${Date.now()}`, providerSvcId: "", rate: "", volume: "", discountType: "", tiers: [], targets: [] }])} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 4, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Add Method</button>
+                    <button onClick={() => updateDeal(deal.id, "markups", [...(deal.markups || []), { id: `mu-${Date.now()}`, providerSvcId: "", rate: "", volume: "", discountType: "", tiers: [], targets: [] }])} style={{ fontSize: 10, padding: "5px 12px", borderRadius: 6, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Add Method</button>
                   </div>
                   {(deal.markups || []).map((mu, mi) => {
                     const updateMu = (field, val) => {
@@ -5689,7 +5742,7 @@ function AviroDashboard() {
                       updateDeal(deal.id, "markups", newMarkups);
                     };
                     return (
-                      <div key={mu.id} style={{ background: c.surface, borderRadius: 8, padding: 12, marginBottom: 8, border: `1px solid ${c.border}` }}>
+                      <div key={mu.id} style={{ background: c.surface, borderRadius: 10, padding: 14, marginBottom: 8, border: `1px solid ${c.border}` }}>
                         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8, marginBottom: 8 }}>
                           <div>
                             <label style={labelStyle4}>Provider / Method</label>
@@ -5709,7 +5762,7 @@ function AviroDashboard() {
                           <label style={labelStyle4}>Volume Discount</label>
                           <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
                             {["None", "Tiers", "Targets"].map(dt => (
-                              <button key={dt} onClick={() => updateMu("discountType", dt === "None" ? "" : dt)} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 4, cursor: "pointer", fontWeight: 600, border: (mu.discountType || "") === (dt === "None" ? "" : dt) ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: (mu.discountType || "") === (dt === "None" ? "" : dt) ? `${c.accent}20` : "transparent", color: (mu.discountType || "") === (dt === "None" ? "" : dt) ? c.accent : c.textMuted }}>{dt}</button>
+                              <button key={dt} onClick={() => updateMu("discountType", dt === "None" ? "" : dt)} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: (mu.discountType || "") === (dt === "None" ? "" : dt) ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: (mu.discountType || "") === (dt === "None" ? "" : dt) ? `${c.accent}20` : "transparent", color: (mu.discountType || "") === (dt === "None" ? "" : dt) ? c.accent : c.textMuted }}>{dt}</button>
                             ))}
                           </div>
 
@@ -5745,12 +5798,42 @@ function AviroDashboard() {
                 </div>
               )}
 
-              {/* Profit Share config */}
+              {/* Profit Share config — includes operating costs inline */}
               {deal.type === "Profit Share" && (
                 <div>
-                  <label style={labelStyle4}>Cube Pay Profit Share %</label>
-                  <input value={deal.profitSharePct || ""} onChange={e => updateDeal(deal.id, "profitSharePct", e.target.value)} placeholder="e.g. 20" style={{ ...inputStyle4, width: 120 }} />
-                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>Revenue = (Net Hold - Operating Costs) × {deal.profitSharePct || "0"}%</div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "end", marginBottom: 14 }}>
+                    <div>
+                      <label style={labelStyle4}>Cube Pay Profit Share %</label>
+                      <input value={deal.profitSharePct || ""} onChange={e => updateDeal(deal.id, "profitSharePct", e.target.value)} placeholder="e.g. 20" style={{ ...inputStyle4, width: 120 }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: c.textMuted, paddingBottom: 6 }}>({fmtCurrency(netHold)} net hold - costs) × {deal.profitSharePct || "0"}%</div>
+                  </div>
+                  <div style={{ background: c.surface, borderRadius: 10, padding: 14, border: `1px solid ${c.border}` }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", marginBottom: 8 }}>Operating Costs</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div>
+                        <label style={labelStyle4}>Placeholder Cost % (used during month)</label>
+                        <input value={cubePayPlaceholderCostPct[client.id] || ""} onChange={e => setCubePayPlaceholderCostPct({ ...cubePayPlaceholderCostPct, [client.id]: e.target.value })} placeholder="e.g. 15" style={{ ...inputStyle4, width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={labelStyle4}>Actual Costs for {currentMonth} ($)</label>
+                        <input value={(cubePayOperatingCosts[currentMonth] || {})[client.id] || ""} onChange={e => setCubePayOperatingCosts({ ...cubePayOperatingCosts, [currentMonth]: { ...(cubePayOperatingCosts[currentMonth] || {}), [client.id]: e.target.value } })} placeholder="Enter after month ends" style={{ ...inputStyle4, width: "100%" }} />
+                      </div>
+                    </div>
+                    {(() => {
+                      const actualCost = parseFloat((cubePayOperatingCosts[currentMonth] || {})[client.id]) || 0;
+                      const placeholderPct = parseFloat(cubePayPlaceholderCostPct[client.id]) || 0;
+                      const estimatedCost = actualCost > 0 ? actualCost : netHold * (placeholderPct / 100);
+                      return (
+                        <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div style={{ fontSize: 10, color: actualCost > 0 ? "#22c55e" : placeholderPct > 0 ? "#f59e0b" : c.textMuted }}>
+                            {actualCost > 0 ? "Using actual costs" : placeholderPct > 0 ? `Using ${placeholderPct}% estimate` : "No costs configured"}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: c.text }}>Costs: {fmtCurrency(estimatedCost)} · Profit: <span style={{ color: "#22c55e" }}>{fmtCurrency(calcDealRevenue(deal, client.id))}</span></div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
               )}
             </div>
@@ -5766,43 +5849,108 @@ function AviroDashboard() {
         if (cl) return renderCubePayClient(cl);
       }
 
+      // Per-provider volume totals across all clients
+      const provTotals = {};
+      cubePayClients.forEach(cl => {
+        (cubePayDeals[cl.id] || []).filter(d => d.type === "Provider Mark Up").forEach(d => {
+          (d.markups || []).forEach(mu => {
+            const vol = parseFloat(mu.volume) || 0;
+            if (!mu.providerSvcId || vol === 0) return;
+            const isGroup = mu.providerSvcId.startsWith("grp-");
+            const label = isGroup ? (providerGroups.find(pg => `grp-${pg.id}` === mu.providerSvcId) || {}).name || "Group" : (() => { const ps = allProviderServices.find(s => s.svcId === mu.providerSvcId); return ps ? `${ps.provName} — ${ps.svcName}` : mu.providerSvcId; })();
+            provTotals[label] = (provTotals[label] || 0) + vol;
+          });
+        });
+      });
+      const sortedProvTotals = Object.entries(provTotals).sort((a, b) => b[1] - a[1]);
+      const maxProvVol = sortedProvTotals.length > 0 ? sortedProvTotals[0][1] : 1;
+
+      // Totals
+      const totalDeposits = cubePayClients.reduce((s, cl) => s + (parseFloat((cubePayMonthlyData[cl.id] || {}).deposits) || 0), 0);
+      const totalWithdrawals = cubePayClients.reduce((s, cl) => s + (parseFloat((cubePayMonthlyData[cl.id] || {}).withdrawals) || 0), 0);
+
       return (
         <div>
-          {/* KPI Cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 24 }}>
-            {[
-              { label: "Volume Processed", value: fmtCurrency(totalVolume), color: c.accent },
-              { label: "Total Payment Fees", value: fmtCurrency(totalFees), color: "#f59e0b" },
-              { label: "Gross Cube Pay Revenue", value: fmtCurrency(totalCubePayRevenue), color: "#22c55e" },
-            ].map((kpi, i) => (
-              <div key={i} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center" }}>
-                <div style={{ fontSize: 24, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
-                <div style={{ fontSize: 11, color: c.textMuted, marginTop: 4, fontWeight: 600, textTransform: "uppercase" }}>{kpi.label}</div>
-              </div>
-            ))}
+          {/* KPI Cards — gradient style */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 24 }}>
+            <div style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.04))", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Revenue</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#22c55e" }}>{fmtCurrency(totalCubePayRevenue)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04))", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: c.accent, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Deposits</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: c.accent }}>{fmtCurrency(totalDeposits)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Withdrawals</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(totalWithdrawals)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(236,72,153,0.12), rgba(236,72,153,0.04))", border: "1px solid rgba(236,72,153,0.25)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: "#ec4899", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Processed</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#ec4899" }}>{fmtCurrency(totalVolume)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(20,184,166,0.12), rgba(20,184,166,0.04))", border: "1px solid rgba(20,184,166,0.25)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: "#14b8a6", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Fees</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#14b8a6" }}>{fmtCurrency(totalFees)}</div>
+            </div>
           </div>
 
-          {/* Provider Breakdown — collapsible */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>Provider Groups</div>
-              <button onClick={() => setProviderGroups([...providerGroups, { id: `pg-${Date.now()}`, name: "", providerServiceIds: [] }])} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 4, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Create Group</button>
-            </div>
-            {providerGroups.map((pg, pgi) => (
-              <div key={pg.id} style={{ background: c.card, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 6 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
-                  <input value={pg.name} onChange={e => { const g = [...providerGroups]; g[pgi] = { ...g[pgi], name: e.target.value }; setProviderGroups(g); }} placeholder="Group name (e.g. Rapyd Combined)" style={{ ...inputStyle4, flex: 1 }} />
-                  <button onClick={() => setProviderGroups(providerGroups.filter(g => g.id !== pg.id))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+          {/* Provider Breakdown — collapsible bar chart */}
+          {(() => {
+            const [provOpen, setProvOpen] = React.useState(false);
+            return (
+              <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, marginBottom: 20, overflow: "hidden" }}>
+                <div onClick={() => setProvOpen(!provOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}
+                  onMouseEnter={e => e.currentTarget.style.background = c.surfaceHover} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>Provider Breakdown</div>
+                    {sortedProvTotals.length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 8px", borderRadius: 4 }}>{sortedProvTotals.length} provider{sortedProvTotals.length !== 1 ? "s" : ""}</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: c.accent }}>{fmtCurrency(sortedProvTotals.reduce((s, [, v]) => s + v, 0))} total</span>
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{provOpen ? "▴" : "▾"}</span>
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {allProviderServices.map(ps => {
-                    const sel = (pg.providerServiceIds || []).includes(ps.svcId);
-                    return <button key={ps.svcId} onClick={() => { const g = [...providerGroups]; const ids = sel ? (pg.providerServiceIds || []).filter(id => id !== ps.svcId) : [...(pg.providerServiceIds || []), ps.svcId]; g[pgi] = { ...g[pgi], providerServiceIds: ids }; setProviderGroups(g); }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer", border: sel ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: sel ? `${c.accent}20` : "transparent", color: sel ? c.accent : c.textMuted }}>{ps.provName} — {ps.svcName}</button>;
-                  })}
+                {provOpen && (
+                  <div style={{ padding: "0 18px 16px" }}>
+                    {sortedProvTotals.length === 0 && <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: 12 }}>No provider volume data yet. Configure Provider Mark Up deals on individual clients.</div>}
+                    {sortedProvTotals.map(([label, vol]) => (
+                      <div key={label} style={{ marginBottom: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, color: c.text, fontWeight: 500 }}>{label}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: c.accent }}>{fmtCurrency(vol)}</span>
+                        </div>
+                        <div style={{ height: 8, background: c.surface, borderRadius: 4, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${(vol / maxProvVol) * 100}%`, background: `linear-gradient(90deg, ${c.accent}, #8b5cf6)`, borderRadius: 4, transition: "width 0.4s" }} />
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Provider Groups management */}
+                    <div style={{ borderTop: `1px solid ${c.border}`, marginTop: 12, paddingTop: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: c.textMuted }}>MANAGE PROVIDER GROUPS</div>
+                        <button onClick={() => setProviderGroups([...providerGroups, { id: `pg-${Date.now()}`, name: "", providerServiceIds: [] }])} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 4, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Create Group</button>
+                      </div>
+                      {providerGroups.map((pg, pgi) => (
+                        <div key={pg.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 10, marginBottom: 6 }}>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                            <input value={pg.name} onChange={e => { const g = [...providerGroups]; g[pgi] = { ...g[pgi], name: e.target.value }; setProviderGroups(g); }} placeholder="Group name (e.g. Rapyd Combined)" style={{ ...inputStyle4, flex: 1 }} />
+                            <button onClick={() => setProviderGroups(providerGroups.filter(g => g.id !== pg.id))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                          </div>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {allProviderServices.map(ps => {
+                              const sel = (pg.providerServiceIds || []).includes(ps.svcId);
+                              return <button key={ps.svcId} onClick={() => { const g = [...providerGroups]; const ids = sel ? (pg.providerServiceIds || []).filter(id => id !== ps.svcId) : [...(pg.providerServiceIds || []), ps.svcId]; g[pgi] = { ...g[pgi], providerServiceIds: ids }; setProviderGroups(g); }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer", border: sel ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: sel ? `${c.accent}20` : "transparent", color: sel ? c.accent : c.textMuted }}>{ps.provName} — {ps.svcName}</button>;
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
-          </div>
+              );
+            })()}
 
           {/* Client List */}
           <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 10 }}>Clients ({cubePayClients.length})</div>
