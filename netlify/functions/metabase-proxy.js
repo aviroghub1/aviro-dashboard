@@ -2,6 +2,24 @@
 // Usage: POST /.netlify/functions/metabase-proxy
 // Body: { metabaseUrl, path, method, body, sessionToken }
 
+const https = require("https");
+const http = require("http");
+
+function makeRequest(url, options, postData) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith("https") ? https : http;
+    const req = lib.request(url, options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on("error", reject);
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error("Request timeout")); });
+    if (postData) req.write(postData);
+    req.end();
+  });
+}
+
 exports.handler = async (event) => {
   const headers = {
     "Access-Control-Allow-Origin": "*",
@@ -28,30 +46,34 @@ exports.handler = async (event) => {
     // Build the full URL
     const url = `${metabaseUrl.replace(/\/$/, "")}${path}`;
 
-    // Build fetch options
-    const fetchHeaders = { "Content-Type": "application/json" };
+    // Build request options
+    const parsedUrl = new URL(url);
+    const reqHeaders = { "Content-Type": "application/json" };
     if (sessionToken) {
-      fetchHeaders["X-Metabase-Session"] = sessionToken;
+      reqHeaders["X-Metabase-Session"] = sessionToken;
     }
 
-    const fetchOpts = {
+    const postData = (body && (method === "POST" || method === "PUT" || method === "PATCH")) ? JSON.stringify(body) : null;
+    if (postData) {
+      reqHeaders["Content-Length"] = Buffer.byteLength(postData);
+    }
+
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (parsedUrl.protocol === "https:" ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
       method: method || "GET",
-      headers: fetchHeaders,
+      headers: reqHeaders,
     };
 
-    if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
-      fetchOpts.body = JSON.stringify(body);
-    }
-
-    const response = await fetch(url, fetchOpts);
-    const responseText = await response.text();
+    const response = await makeRequest(url, options, postData);
 
     // Try to parse as JSON, otherwise return as text
     let responseBody;
     try {
-      responseBody = JSON.parse(responseText);
+      responseBody = JSON.parse(response.body);
     } catch {
-      responseBody = { raw: responseText };
+      responseBody = { raw: response.body };
     }
 
     return {
@@ -63,7 +85,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message }),
+      body: JSON.stringify({ error: error.message, stack: error.stack }),
     };
   }
 };
