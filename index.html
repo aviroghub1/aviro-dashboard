@@ -5733,7 +5733,7 @@ function AviroDashboard() {
               setMbLoading(true); setMbError("");
               try {
                 const authResp = await proxyCall("/api/session", "POST", { username: mbConfig.username, password: mbConfig.password });
-                if (!authResp.id) { setMbError(authResp.message || "Authentication failed"); setMbLoading(false); return; }
+                if (!authResp.id) { setMbError(authResp.message || authResp.error || authResp.raw || JSON.stringify(authResp)); setMbLoading(false); return; }
                 const token = authResp.id;
                 const cardsResp = await proxyCall("/api/card", "GET", null, token);
                 const cardsList = Array.isArray(cardsResp) ? cardsResp.map(cd => ({ id: cd.id, name: cd.name, collection: cd.collection ? cd.collection.name : "Root" })) : [];

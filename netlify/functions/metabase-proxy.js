@@ -4,17 +4,18 @@
 
 const https = require("https");
 const http = require("http");
+const { URL } = require("url");
 
-function makeRequest(url, options, postData) {
+function makeRequest(parsedUrl, options, postData) {
   return new Promise((resolve, reject) => {
-    const lib = url.startsWith("https") ? https : http;
-    const req = lib.request(url, options, (res) => {
+    const lib = parsedUrl.protocol === "https:" ? https : http;
+    const req = lib.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => { data += chunk; });
       res.on("end", () => resolve({ status: res.statusCode, body: data }));
     });
-    req.on("error", reject);
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error("Request timeout")); });
+    req.on("error", (e) => reject(new Error(`Request failed: ${e.message}`)));
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error("Request timeout after 30s")); });
     if (postData) req.write(postData);
     req.end();
   });
@@ -44,10 +45,10 @@ exports.handler = async (event) => {
     }
 
     // Build the full URL
-    const url = `${metabaseUrl.replace(/\/$/, "")}${path}`;
+    const fullUrl = `${metabaseUrl.replace(/\/$/, "")}${path}`;
+    const parsedUrl = new URL(fullUrl);
 
-    // Build request options
-    const parsedUrl = new URL(url);
+    // Build request headers
     const reqHeaders = { "Content-Type": "application/json" };
     if (sessionToken) {
       reqHeaders["X-Metabase-Session"] = sessionToken;
@@ -66,7 +67,7 @@ exports.handler = async (event) => {
       headers: reqHeaders,
     };
 
-    const response = await makeRequest(url, options, postData);
+    const response = await makeRequest(parsedUrl, options, postData);
 
     // Try to parse as JSON, otherwise return as text
     let responseBody;
@@ -85,7 +86,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message, stack: error.stack }),
+      body: JSON.stringify({ error: error.message }),
     };
   }
 };
