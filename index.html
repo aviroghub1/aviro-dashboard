@@ -671,34 +671,46 @@ function AviroDashboard() {
   useEffect(() => {
     if (!selectedRevenueClient || !hasLoaded) return;
     const client = gatewayClients.find(cl => cl.id === selectedRevenueClient);
-    if (!client) return;
+    if (!client) { console.log("[MB] No client found for id:", selectedRevenueClient); return; }
     const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
-    if (!defaults) return;
+    if (!defaults) { console.log("[MB] No defaults for:", client.name); return; }
+    // Clear any stale config with wrong URL and reset attempt tracker
     const existing = metabaseConfigs[client.id] || {};
-    // Already connected or already tried this session
-    if (existing.sessionToken || mbAutoConnectRef.current[client.id]) return;
+    if (existing.url && existing.url !== defaults.url) {
+      console.log("[MB] Stale config detected, clearing for:", client.name);
+      setMetabaseConfigs(prev => { const n = { ...prev }; delete n[client.id]; return n; });
+      mbAutoConnectRef.current[client.id] = false;
+      return;
+    }
+    if (existing.sessionToken || mbAutoConnectRef.current[client.id]) { console.log("[MB] Already connected or attempted:", client.name, !!existing.sessionToken); return; }
     mbAutoConnectRef.current[client.id] = true;
+    console.log("[MB] Auto-connecting:", client.name, "to", defaults.url);
     // Auto-connect
     (async () => {
       setMbLoading(true); setMbError(""); setMbFetchStatus("Auto-connecting to Metabase...");
       try {
         const proxyCall = async (path, method, body, token) => {
+          console.log("[MB] Proxy call:", defaults.url + path, method);
           const resp = await fetch("/.netlify/functions/metabase-proxy", {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ metabaseUrl: defaults.url, path, method: method || "GET", body, sessionToken: token }),
           });
-          return resp.json();
+          const data = await resp.json();
+          console.log("[MB] Response:", resp.status, data);
+          return data;
         };
         const authResp = await proxyCall("/api/session", "POST", { username: defaults.username, password: defaults.password });
         if (!authResp.id) { setMbError(authResp.message || authResp.error || JSON.stringify(authResp)); setMbLoading(false); setMbFetchStatus(""); return; }
         const token = authResp.id;
+        console.log("[MB] Auth success, token:", token.substring(0, 8) + "...");
         const cardsResp = await proxyCall("/api/card", "GET", null, token);
         const cardsList = Array.isArray(cardsResp) ? cardsResp.map(cd => ({ id: cd.id, name: cd.name, collection: cd.collection ? cd.collection.name : "Root" })) : [];
+        console.log("[MB] Cards found:", cardsList.length);
         setMbCards(cardsList);
         const newConfig = { ...defaults, sessionToken: token, cards: cardsList, selectedDepositCard: existing.selectedDepositCard || "", selectedWithdrawalCard: existing.selectedWithdrawalCard || "" };
         setMetabaseConfigs(prev => ({ ...prev, [client.id]: newConfig }));
         setMbFetchStatus("Connected! Select deposit & withdrawal cards to load data.");
-      } catch (e) { setMbError("Auto-connect failed: " + e.message); setMbFetchStatus(""); }
+      } catch (e) { console.error("[MB] Auto-connect error:", e); setMbError("Auto-connect failed: " + e.message); setMbFetchStatus(""); }
       setMbLoading(false);
     })();
   }, [selectedRevenueClient, hasLoaded]);
