@@ -91,8 +91,12 @@ const GATEWAY_CLIENTS = [
 
 // Metabase connection configs — keyed by client name (matched case-insensitive)
 const METABASE_DEFAULTS = {
-  "elite bet": { url: "https://reports.elitebet.bookiebase.ie", username: "David@aviro-group.com", password: "Elitebet1$" },
+  "elite bet": { url: "https://reports.elitebet.bookiebase.ie", username: "David@aviro-group.com", password: "Elitebet1$", depositCard: 57, withdrawalCard: 58 },
 };
+
+// Simple FX rates to EUR (update as needed)
+const FX_TO_EUR = { EUR: 1, GBP: 1.17, USD: 0.92, CAD: 0.67, AUD: 0.60, SEK: 0.087, NOK: 0.087, BRL: 0.17, BTC: 55000 };
+const toEUR = (amount, currency) => (parseFloat(amount) || 0) * (FX_TO_EUR[(currency || "EUR").toUpperCase()] || 1);
 
 const INTEGRATION_ROADMAP = [
   { name: "Hemenode Turkey", status: "integrating", priority: "high", brand: "Luna", dueDate: "2026-03-14", progress: 70 },
@@ -685,32 +689,77 @@ function AviroDashboard() {
     if (existing.sessionToken || mbAutoConnectRef.current[client.id]) { console.log("[MB] Already connected or attempted:", client.name, !!existing.sessionToken); return; }
     mbAutoConnectRef.current[client.id] = true;
     console.log("[MB] Auto-connecting:", client.name, "to", defaults.url);
-    // Auto-connect
+    // Auto-connect and auto-fetch
     (async () => {
-      setMbLoading(true); setMbError(""); setMbFetchStatus("Auto-connecting to Metabase...");
+      setMbLoading(true); setMbError(""); setMbFetchStatus("Connecting to Metabase...");
       try {
         const proxyCall = async (path, method, body, token) => {
-          console.log("[MB] Proxy call:", defaults.url + path, method);
           const resp = await fetch("/.netlify/functions/metabase-proxy", {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ metabaseUrl: defaults.url, path, method: method || "GET", body, sessionToken: token }),
           });
-          const data = await resp.json();
-          console.log("[MB] Response:", resp.status, data);
-          return data;
+          return resp.json();
         };
         const authResp = await proxyCall("/api/session", "POST", { username: defaults.username, password: defaults.password });
         if (!authResp.id) { setMbError(authResp.message || authResp.error || JSON.stringify(authResp)); setMbLoading(false); setMbFetchStatus(""); return; }
         const token = authResp.id;
-        console.log("[MB] Auth success, token:", token.substring(0, 8) + "...");
-        const cardsResp = await proxyCall("/api/card", "GET", null, token);
-        const cardsList = Array.isArray(cardsResp) ? cardsResp.map(cd => ({ id: cd.id, name: cd.name, collection: cd.collection ? cd.collection.name : "Root" })) : [];
-        console.log("[MB] Cards found:", cardsList.length);
-        setMbCards(cardsList);
-        const newConfig = { ...defaults, sessionToken: token, cards: cardsList, selectedDepositCard: existing.selectedDepositCard || "", selectedWithdrawalCard: existing.selectedWithdrawalCard || "" };
+        console.log("[MB] Auth success, fetching data...");
+
+        // Parse Metabase summary rows into structured data with FX conversion
+        const parseSummaryRows = (rows, isWithdrawal) => {
+          const methods = {};
+          let totalGross = 0;
+          let totalFees = 0;
+          (rows || []).forEach(r => {
+            const currency = r["Currency"] || "EUR";
+            const method = r["Core Account - Account → Account"] || "Unknown";
+            const grossRaw = Math.abs(parseFloat(r["Sum of Amount"]) || 0);
+            const feesRaw = Math.abs(parseFloat(r["Sum of Fee"]) || 0);
+            const count = parseInt(r["Count"]) || 0;
+            const grossEUR = toEUR(grossRaw, currency);
+            const feesEUR = toEUR(feesRaw, currency);
+            totalGross += grossEUR;
+            totalFees += feesEUR;
+            if (!methods[method]) methods[method] = { gross: 0, fees: 0, count: 0, currencies: {} };
+            methods[method].gross += grossEUR;
+            methods[method].fees += feesEUR;
+            methods[method].count += count;
+            if (!methods[method].currencies[currency]) methods[method].currencies[currency] = { gross: 0, fees: 0, count: 0 };
+            methods[method].currencies[currency].gross += grossRaw;
+            methods[method].currencies[currency].fees += feesRaw;
+            methods[method].currencies[currency].count += count;
+          });
+          return { totalGross, totalFees, methods };
+        };
+
+        // Fetch deposit and withdrawal data
+        setMbFetchStatus("Loading transaction data...");
+        const [depRows, wdRows] = await Promise.all([
+          defaults.depositCard ? proxyCall(`/api/card/${defaults.depositCard}/query/json`, "POST", {}, token) : [],
+          defaults.withdrawalCard ? proxyCall(`/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, token) : [],
+        ]);
+
+        const depData = parseSummaryRows(Array.isArray(depRows) ? depRows : [], false);
+        const wdData = parseSummaryRows(Array.isArray(wdRows) ? wdRows : [], true);
+
+        console.log("[MB] Deposits:", depData.totalGross.toFixed(2), "EUR, methods:", Object.keys(depData.methods).length);
+        console.log("[MB] Withdrawals:", wdData.totalGross.toFixed(2), "EUR, methods:", Object.keys(wdData.methods).length);
+
+        const result = {
+          deposits: depData.totalGross.toFixed(2),
+          withdrawals: wdData.totalGross.toFixed(2),
+          depositFees: depData.totalFees.toFixed(2),
+          withdrawalFees: wdData.totalFees.toFixed(2),
+          depositMethods: depData.methods,
+          withdrawalMethods: wdData.methods,
+        };
+
+        const newConfig = { ...defaults, sessionToken: token };
         setMetabaseConfigs(prev => ({ ...prev, [client.id]: newConfig }));
-        setMbFetchStatus("Connected! Select deposit & withdrawal cards to load data.");
-      } catch (e) { console.error("[MB] Auto-connect error:", e); setMbError("Auto-connect failed: " + e.message); setMbFetchStatus(""); }
+        setMbCurrentData(prev => ({ ...prev, [client.id]: result }));
+        setCubePayMonthlyData(prev => ({ ...prev, [client.id]: result }));
+        setMbFetchStatus("");
+      } catch (e) { console.error("[MB] Error:", e); setMbError("Failed: " + e.message); setMbFetchStatus(""); }
       setMbLoading(false);
     })();
   }, [selectedRevenueClient, hasLoaded]);
@@ -5741,341 +5790,170 @@ function AviroDashboard() {
             );
           })()}
 
-          {/* Metabase Connection & Transaction Data */}
+          {/* Transaction Data — Metabase powered */}
           {(() => {
             const mbConfig = metabaseConfigs[client.id] || {};
             const mbConnected = !!mbConfig.sessionToken;
             const hasNetHoldDeal = deals.some(d => d.type === "Net Hold" || d.type === "Profit Share");
-            const curData = mbCurrentData[client.id] || data;
-            const prevData = mbPrevData[client.id] || {};
-            const custData = mbCustomData[client.id] || {};
-            const viewData = mbViewMode === "previous" ? prevData : mbViewMode === "custom" ? custData : curData;
-            const viewDeps = parseFloat(viewData.deposits) || 0;
-            const viewWds = parseFloat(viewData.withdrawals) || 0;
-            const viewDepFees = parseFloat(viewData.depositFees) || 0;
-            const viewWdFees = parseFloat(viewData.withdrawalFees) || 0;
+            const txData = mbCurrentData[client.id] || data;
+            const viewDeps = parseFloat(txData.deposits) || 0;
+            const viewWds = parseFloat(txData.withdrawals) || 0;
+            const viewDepFees = parseFloat(txData.depositFees) || 0;
+            const viewWdFees = parseFloat(txData.withdrawalFees) || 0;
+            const depMethods = txData.depositMethods || {};
+            const wdMethods = txData.withdrawalMethods || {};
 
-            const curDeps = parseFloat(curData.deposits) || 0;
-            const curWds = parseFloat(curData.withdrawals) || 0;
-            const prevDeps = parseFloat(prevData.deposits) || 0;
-            const prevWds = parseFloat(prevData.withdrawals) || 0;
+            // Combine all methods for unified breakdown
+            const allMethodNames = [...new Set([...Object.keys(depMethods), ...Object.keys(wdMethods)])];
+            const methodBreakdown = allMethodNames.map(m => ({
+              name: m,
+              deposits: (depMethods[m] || {}).gross || 0,
+              withdrawals: (wdMethods[m] || {}).gross || 0,
+              depCount: (depMethods[m] || {}).count || 0,
+              wdCount: (wdMethods[m] || {}).count || 0,
+            })).sort((a, b) => (b.deposits + b.withdrawals) - (a.deposits + a.withdrawals));
+            const maxMethodVol = methodBreakdown.length > 0 ? Math.max(...methodBreakdown.map(m => m.deposits + m.withdrawals)) : 1;
 
-            const depChange = prevDeps > 0 ? ((curDeps - prevDeps) / prevDeps * 100) : 0;
-            const wdChange = prevWds > 0 ? ((curWds - prevWds) / prevWds * 100) : 0;
-            const volChange = (prevDeps + prevWds) > 0 ? (((curDeps + curWds) - (prevDeps + prevWds)) / (prevDeps + prevWds) * 100) : 0;
-
-            // Daily trend data for graph
-            const curDaily = (curData.dailyData || []);
-            const prevDaily = (prevData.dailyData || []);
-            const maxDays = Math.max(curDaily.length, prevDaily.length, 1);
-            const maxDailyVol = Math.max(...curDaily.map(d => (parseFloat(d.deposits) || 0) + (parseFloat(d.withdrawals) || 0)), ...prevDaily.map(d => (parseFloat(d.deposits) || 0) + (parseFloat(d.withdrawals) || 0)), 1);
-
-            const updateMbConfig = (updates) => {
-              setMetabaseConfigs({ ...metabaseConfigs, [client.id]: { ...mbConfig, ...updates } });
-            };
-
-            const proxyCall = async (path, method, body, token) => {
-              const resp = await fetch("/.netlify/functions/metabase-proxy", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ metabaseUrl: mbConfig.url, path, method: method || "GET", body, sessionToken: token || mbConfig.sessionToken }),
-              });
-              return resp.json();
-            };
-
-            const connectMetabase = async () => {
-              setMbLoading(true); setMbError("");
+            // Refresh handler
+            const refreshData = async () => {
+              const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
+              if (!defaults || !mbConfig.sessionToken) return;
+              setMbFetchStatus("Refreshing...");
               try {
-                const authResp = await proxyCall("/api/session", "POST", { username: mbConfig.username, password: mbConfig.password });
-                if (!authResp.id) { setMbError(authResp.message || authResp.error || authResp.raw || JSON.stringify(authResp)); setMbLoading(false); return; }
-                const token = authResp.id;
-                const cardsResp = await proxyCall("/api/card", "GET", null, token);
-                const cardsList = Array.isArray(cardsResp) ? cardsResp.map(cd => ({ id: cd.id, name: cd.name, collection: cd.collection ? cd.collection.name : "Root" })) : [];
-                setMbCards(cardsList);
-                updateMbConfig({ sessionToken: token, cards: cardsList });
-                setMbShowSetup(false);
-              } catch (e) { setMbError(e.message); }
-              setMbLoading(false);
-            };
-
-            const fetchCardData = async (cardId) => {
-              try {
-                const resp = await proxyCall(`/api/card/${cardId}/query/json`, "POST", {}, mbConfig.sessionToken);
-                return Array.isArray(resp) ? resp : [];
-              } catch { return []; }
-            };
-
-            // Parse Metabase rows into structured data
-            const parseRows = (rows, type) => {
-              if (!rows || rows.length === 0) return { total: 0, fees: 0, daily: [] };
-              const keys = Object.keys(rows[0]);
-              const amountKey = keys.find(k => /amount|total|sum|deposit|withdrawal|payout|value/i.test(k)) || keys[keys.length - 1];
-              const feeKey = keys.find(k => /fee|charge|commission/i.test(k));
-              const dateKey = keys.find(k => /date|day|created|time/i.test(k));
-              const total = rows.reduce((s, r) => s + (parseFloat(r[amountKey]) || 0), 0);
-              const fees = feeKey ? rows.reduce((s, r) => s + (parseFloat(r[feeKey]) || 0), 0) : 0;
-              const dailyMap = {};
-              if (dateKey) {
-                rows.forEach(r => {
-                  const d = (r[dateKey] || "").substring(0, 10);
-                  if (!d) return;
-                  if (!dailyMap[d]) dailyMap[d] = { date: d, deposits: 0, withdrawals: 0 };
-                  if (type === "dep") dailyMap[d].deposits += parseFloat(r[amountKey]) || 0;
-                  else dailyMap[d].withdrawals += parseFloat(r[amountKey]) || 0;
-                });
-              }
-              return { total, fees, daily: Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date)) };
-            };
-
-            const fetchAllData = async () => {
-              setMbFetchStatus("Fetching current & previous month...");
-              try {
-                const now = new Date();
-                const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-                const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
-
-                let curResult = { deposits: "0", withdrawals: "0", depositFees: "0", withdrawalFees: "0", dailyData: [] };
-                let prevResult = { ...curResult, dailyData: [] };
-
-                if (mbConfig.selectedDepositCard) {
-                  const allDepRows = await fetchCardData(mbConfig.selectedDepositCard);
-                  const dateKey = allDepRows.length > 0 ? Object.keys(allDepRows[0]).find(k => /date|day|created|time/i.test(k)) : null;
-                  const curRows = dateKey ? allDepRows.filter(r => (r[dateKey] || "").startsWith(curMonth)) : allDepRows;
-                  const prevRows = dateKey ? allDepRows.filter(r => (r[dateKey] || "").startsWith(prevMonth)) : [];
-                  const curParsed = parseRows(curRows, "dep");
-                  const prevParsed = parseRows(prevRows, "dep");
-                  curResult.deposits = curParsed.total.toFixed(2);
-                  curResult.depositFees = curParsed.fees.toFixed(2);
-                  curResult.dailyData = curParsed.daily;
-                  prevResult.deposits = prevParsed.total.toFixed(2);
-                  prevResult.depositFees = prevParsed.fees.toFixed(2);
-                  prevResult.dailyData = prevParsed.daily;
-                }
-                if (mbConfig.selectedWithdrawalCard) {
-                  const allWdRows = await fetchCardData(mbConfig.selectedWithdrawalCard);
-                  const dateKey = allWdRows.length > 0 ? Object.keys(allWdRows[0]).find(k => /date|day|created|time/i.test(k)) : null;
-                  const curRows = dateKey ? allWdRows.filter(r => (r[dateKey] || "").startsWith(curMonth)) : allWdRows;
-                  const prevRows = dateKey ? allWdRows.filter(r => (r[dateKey] || "").startsWith(prevMonth)) : [];
-                  const curParsed = parseRows(curRows, "wd");
-                  const prevParsed = parseRows(prevRows, "wd");
-                  curResult.withdrawals = curParsed.total.toFixed(2);
-                  curResult.withdrawalFees = curParsed.fees.toFixed(2);
-                  // Merge daily data
-                  curParsed.daily.forEach(d => { const ex = curResult.dailyData.find(e => e.date === d.date); if (ex) ex.withdrawals = d.withdrawals; else curResult.dailyData.push(d); });
-                  prevParsed.daily.forEach(d => { const ex = prevResult.dailyData.find(e => e.date === d.date); if (ex) ex.withdrawals = d.withdrawals; else prevResult.dailyData.push(d); });
-                  curResult.dailyData.sort((a, b) => a.date.localeCompare(b.date));
-                  prevResult.dailyData.sort((a, b) => a.date.localeCompare(b.date));
-                }
-
-                setMbCurrentData({ ...mbCurrentData, [client.id]: curResult });
-                setMbPrevData({ ...mbPrevData, [client.id]: prevResult });
-                // Also update cubePayMonthlyData so calculations work
-                setCubePayMonthlyData({ ...cubePayMonthlyData, [client.id]: curResult });
-                setMbFetchStatus("Data loaded!");
-                setTimeout(() => setMbFetchStatus(""), 3000);
-              } catch (e) { setMbFetchStatus("Error: " + e.message); }
-            };
-
-            const fetchCustomRange = async () => {
-              if (!mbDateFrom) return;
-              setMbFetchStatus("Fetching custom range...");
-              try {
-                let result = { deposits: "0", withdrawals: "0", depositFees: "0", withdrawalFees: "0" };
-                const filterByDate = (rows) => {
-                  const dateKey = rows.length > 0 ? Object.keys(rows[0]).find(k => /date|day|created|time/i.test(k)) : null;
-                  if (!dateKey) return rows;
-                  return rows.filter(r => {
-                    const d = (r[dateKey] || "").substring(0, 10);
-                    return d >= mbDateFrom && (!mbDateTo || d <= mbDateTo);
+                const proxyCall = async (path, method, body, token) => {
+                  const resp = await fetch("/.netlify/functions/metabase-proxy", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ metabaseUrl: defaults.url, path, method: method || "GET", body, sessionToken: token }),
                   });
+                  return resp.json();
                 };
-                if (mbConfig.selectedDepositCard) {
-                  const allRows = await fetchCardData(mbConfig.selectedDepositCard);
-                  const parsed = parseRows(filterByDate(allRows), "dep");
-                  result.deposits = parsed.total.toFixed(2);
-                  result.depositFees = parsed.fees.toFixed(2);
-                }
-                if (mbConfig.selectedWithdrawalCard) {
-                  const allRows = await fetchCardData(mbConfig.selectedWithdrawalCard);
-                  const parsed = parseRows(filterByDate(allRows), "wd");
-                  result.withdrawals = parsed.total.toFixed(2);
-                  result.withdrawalFees = parsed.fees.toFixed(2);
-                }
-                setMbCustomData({ ...mbCustomData, [client.id]: result });
-                setMbViewMode("custom");
-                setMbFetchStatus("Custom range loaded!");
-                setTimeout(() => setMbFetchStatus(""), 3000);
+                const parseSummaryRows = (rows) => {
+                  const methods = {};
+                  let totalGross = 0, totalFees = 0;
+                  (rows || []).forEach(r => {
+                    const currency = r["Currency"] || "EUR";
+                    const method = r["Core Account - Account → Account"] || "Unknown";
+                    const grossRaw = Math.abs(parseFloat(r["Sum of Amount"]) || 0);
+                    const feesRaw = Math.abs(parseFloat(r["Sum of Fee"]) || 0);
+                    const count = parseInt(r["Count"]) || 0;
+                    const grossEUR = toEUR(grossRaw, currency);
+                    const feesEUR = toEUR(feesRaw, currency);
+                    totalGross += grossEUR; totalFees += feesEUR;
+                    if (!methods[method]) methods[method] = { gross: 0, fees: 0, count: 0 };
+                    methods[method].gross += grossEUR; methods[method].fees += feesEUR; methods[method].count += count;
+                  });
+                  return { totalGross, totalFees, methods };
+                };
+                const [depRows, wdRows] = await Promise.all([
+                  defaults.depositCard ? proxyCall(`/api/card/${defaults.depositCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
+                  defaults.withdrawalCard ? proxyCall(`/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
+                ]);
+                const depData = parseSummaryRows(Array.isArray(depRows) ? depRows : []);
+                const wdData = parseSummaryRows(Array.isArray(wdRows) ? wdRows : []);
+                const result = { deposits: depData.totalGross.toFixed(2), withdrawals: wdData.totalGross.toFixed(2), depositFees: depData.totalFees.toFixed(2), withdrawalFees: wdData.totalFees.toFixed(2), depositMethods: depData.methods, withdrawalMethods: wdData.methods };
+                setMbCurrentData(prev => ({ ...prev, [client.id]: result }));
+                setCubePayMonthlyData(prev => ({ ...prev, [client.id]: result }));
+                setMbFetchStatus("");
               } catch (e) { setMbFetchStatus("Error: " + e.message); }
-            };
-
-            const fetchAllTime = async () => {
-              setMbFetchStatus("Fetching all time...");
-              try {
-                let result = { deposits: "0", withdrawals: "0", depositFees: "0", withdrawalFees: "0" };
-                if (mbConfig.selectedDepositCard) {
-                  const parsed = parseRows(await fetchCardData(mbConfig.selectedDepositCard), "dep");
-                  result.deposits = parsed.total.toFixed(2);
-                  result.depositFees = parsed.fees.toFixed(2);
-                }
-                if (mbConfig.selectedWithdrawalCard) {
-                  const parsed = parseRows(await fetchCardData(mbConfig.selectedWithdrawalCard), "wd");
-                  result.withdrawals = parsed.total.toFixed(2);
-                  result.withdrawalFees = parsed.fees.toFixed(2);
-                }
-                setMbCustomData({ ...mbCustomData, [client.id]: result });
-                setMbViewMode("custom");
-                setMbFetchStatus("All time data loaded!");
-                setTimeout(() => setMbFetchStatus(""), 3000);
-              } catch (e) { setMbFetchStatus("Error: " + e.message); }
-            };
-
-            const changePct = (val) => {
-              if (val === 0) return null;
-              const color = val > 0 ? "#22c55e" : "#ef4444";
-              const arrow = val > 0 ? "▲" : "▼";
-              return <span style={{ fontSize: 10, fontWeight: 700, color, marginLeft: 4 }}>{arrow} {Math.abs(val).toFixed(1)}%</span>;
             };
 
             return (
               <div style={{ marginBottom: 16 }}>
-                {/* Metabase Status Bar */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, padding: "8px 14px", background: c.card, borderRadius: 10, border: `1px solid ${mbConnected ? "rgba(34,197,94,0.15)" : c.border}` }}>
+                {/* Status Bar */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, padding: "8px 14px", background: c.card, borderRadius: 10, border: `1px solid ${mbConnected ? "rgba(34,197,94,0.15)" : c.border}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: mbConnected ? "#22c55e" : mbLoading ? "#f59e0b" : "#6b7280" }} />
-                    <span style={{ fontSize: 10, color: c.textMuted }}>{mbLoading ? "Connecting..." : mbConnected ? "Live — Metabase" : "Not connected"}</span>
-                    {mbFetchStatus && <span style={{ fontSize: 10, color: mbFetchStatus.startsWith("Error") ? "#ef4444" : "#22c55e" }}>{mbFetchStatus}</span>}
-                    {mbError && <span style={{ fontSize: 10, color: "#ef4444" }}>{mbError}</span>}
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: mbConnected ? "#22c55e" : mbLoading ? "#f59e0b" : "#6b7280", animation: mbLoading ? "pulse 1.5s infinite" : "none" }} />
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{mbLoading ? "Loading data..." : mbConnected ? "Live — Metabase" : "No data source"}</span>
+                    {mbFetchStatus && <span style={{ fontSize: 10, color: mbFetchStatus.startsWith("Error") ? "#ef4444" : "#22c55e", marginLeft: 4 }}>{mbFetchStatus}</span>}
+                    {mbError && <span style={{ fontSize: 10, color: "#ef4444", marginLeft: 4 }}>{mbError}</span>}
                   </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    {mbConnected && !mbConfig.selectedDepositCard && (() => {
-                      const availCards = mbCards.length > 0 ? mbCards : (mbConfig.cards || []);
-                      return availCards.length > 0 ? (
-                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                          <select value={mbConfig.selectedDepositCard || ""} onChange={e => updateMbConfig({ selectedDepositCard: e.target.value })} style={{ fontSize: 10, padding: "3px 6px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text }}><option value="">Deposits card...</option>{availCards.map(cd => <option key={cd.id} value={cd.id}>[{cd.collection}] {cd.name}</option>)}</select>
-                          <select value={mbConfig.selectedWithdrawalCard || ""} onChange={e => updateMbConfig({ selectedWithdrawalCard: e.target.value })} style={{ fontSize: 10, padding: "3px 6px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text }}><option value="">Withdrawals card...</option>{availCards.map(cd => <option key={cd.id} value={cd.id}>[{cd.collection}] {cd.name}</option>)}</select>
-                        </div>
-                      ) : null;
-                    })()}
-                    {mbConnected && <button onClick={fetchAllData} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Refresh</button>}
+                  {mbConnected && <button onClick={refreshData} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Refresh</button>}
+                </div>
+
+                {/* Gross Totals */}
+                <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 18, marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 14 }}>Transaction Summary (Gross)</div>
+                  <div style={{ display: "grid", gridTemplateColumns: hasNetHoldDeal ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 12 }}>
+                    <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(99,102,241,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(99,102,241,0.15)" }}>
+                      <div style={{ fontSize: 9, color: c.accent, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Deposits</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: c.accent }}>{fmtCurrency(viewDeps)}</div>
+                    </div>
+                    <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(245,158,11,0.15)" }}>
+                      <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Withdrawals</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(viewWds)}</div>
+                    </div>
+                    <div style={{ background: "linear-gradient(135deg, rgba(236,72,153,0.1), rgba(236,72,153,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(236,72,153,0.15)" }}>
+                      <div style={{ fontSize: 9, color: "#ec4899", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Total Processed</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: "#ec4899" }}>{fmtCurrency(viewDeps + viewWds)}</div>
+                    </div>
+                    {hasNetHoldDeal && (
+                      <div style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(34,197,94,0.15)" }}>
+                        <div style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Net Hold</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: (viewDeps - viewWds - viewDepFees - viewWdFees) >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(viewDeps - viewWds - viewDepFees - viewWdFees)}</div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Fee totals row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
+                    <div style={{ background: c.surface, borderRadius: 8, padding: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>DEPOSIT FEES</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(viewDepFees)}</div>
+                    </div>
+                    <div style={{ background: c.surface, borderRadius: 8, padding: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>WITHDRAWAL FEES</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(viewWdFees)}</div>
+                    </div>
+                    <div style={{ background: c.surface, borderRadius: 8, padding: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>TOTAL FEES</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(viewDepFees + viewWdFees)}</div>
+                    </div>
                   </div>
                 </div>
 
-                {/* View Mode Tabs */}
-                <div style={{ display: "flex", gap: 4, marginBottom: 14, background: c.surface, borderRadius: 10, padding: 4 }}>
-                  {[{ k: "current", l: "Current Month" }, { k: "previous", l: "Previous Month" }, { k: "comparison", l: "Comparison" }, { k: "custom", l: "Custom Range" }].map(tab => (
-                    <button key={tab.k} onClick={() => setMbViewMode(tab.k)} style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, background: mbViewMode === tab.k ? c.accent : "transparent", color: mbViewMode === tab.k ? "#fff" : c.textMuted, transition: "all 0.15s" }}>{tab.l}</button>
-                  ))}
-                </div>
-
-                {/* Custom Date Range */}
-                {mbViewMode === "custom" && (
-                  <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 14, marginBottom: 14, display: "flex", gap: 10, alignItems: "end" }}>
-                    <div><label style={labelStyle4}>From</label><input type="date" value={mbDateFrom} onChange={e => setMbDateFrom(e.target.value)} style={{ ...inputStyle4 }} /></div>
-                    <div><label style={labelStyle4}>To</label><input type="date" value={mbDateTo} onChange={e => setMbDateTo(e.target.value)} style={{ ...inputStyle4 }} /></div>
-                    <button onClick={fetchCustomRange} style={{ fontSize: 11, padding: "6px 16px", borderRadius: 6, cursor: "pointer", border: "none", background: c.accent, color: "#fff", fontWeight: 600 }}>Fetch</button>
-                    <button onClick={fetchAllTime} style={{ fontSize: 11, padding: "6px 16px", borderRadius: 6, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>All Time</button>
-                  </div>
-                )}
-
-                {/* Data Display — Current or Previous */}
-                {(mbViewMode === "current" || mbViewMode === "previous" || mbViewMode === "custom") && (
-                  <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 18 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 12 }}>{mbViewMode === "current" ? "Current Month" : mbViewMode === "previous" ? "Previous Month" : "Custom Range"}</div>
-                    <div style={{ display: "grid", gridTemplateColumns: hasNetHoldDeal ? "1fr 1fr 1fr" : "1fr 1fr", gap: 12, marginBottom: hasNetHoldDeal ? 0 : 0 }}>
-                      <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(99,102,241,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(99,102,241,0.15)" }}>
-                        <div style={{ fontSize: 9, color: c.accent, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Deposits</div>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: c.accent }}>{fmtCurrency(viewDeps)}</div>
-                      </div>
-                      <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(245,158,11,0.15)" }}>
-                        <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Withdrawals</div>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(viewWds)}</div>
-                      </div>
-                      {hasNetHoldDeal && (
-                        <div style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(34,197,94,0.15)" }}>
-                          <div style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Net Hold</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, color: (viewDeps - viewWds - viewDepFees - viewWdFees) >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(viewDeps - viewWds - viewDepFees - viewWdFees)}</div>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
-                      <div style={{ background: c.surface, borderRadius: 8, padding: 10, textAlign: "center" }}>
-                        <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>TOTAL PROCESSED</div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#ec4899" }}>{fmtCurrency(viewDeps + viewWds)}</div>
-                      </div>
-                      <div style={{ background: c.surface, borderRadius: 8, padding: 10, textAlign: "center" }}>
-                        <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>DEPOSIT FEES</div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(viewDepFees)}</div>
-                      </div>
-                      <div style={{ background: c.surface, borderRadius: 8, padding: 10, textAlign: "center" }}>
-                        <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>WITHDRAWAL FEES</div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(viewWdFees)}</div>
+                {/* Method Breakdown */}
+                {methodBreakdown.length > 0 && (
+                  <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, overflow: "hidden" }}>
+                    <div onClick={() => setCubePayProvOpen(!cubePayProvOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Payment Method Breakdown</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 11, color: c.textMuted }}>{methodBreakdown.length} method{methodBreakdown.length !== 1 ? "s" : ""}</span>
+                        <span style={{ fontSize: 10, color: c.textMuted }}>{cubePayProvOpen ? "▴" : "▾"}</span>
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {/* Comparison View */}
-                {mbViewMode === "comparison" && (
-                  <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 18 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 14 }}>Month-over-Month Comparison</div>
-                    {/* Comparison cards */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
-                      <div style={{ background: c.surface, borderRadius: 10, padding: 14, textAlign: "center" }}>
-                        <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 6 }}>DEPOSITS</div>
-                        <div style={{ display: "flex", justifyContent: "center", gap: 16 }}>
-                          <div><div style={{ fontSize: 9, color: c.textMuted }}>This</div><div style={{ fontSize: 16, fontWeight: 700, color: c.accent }}>{fmtCurrency(curDeps)}</div></div>
-                          <div><div style={{ fontSize: 9, color: c.textMuted }}>Last</div><div style={{ fontSize: 16, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(prevDeps)}</div></div>
+                    {cubePayProvOpen && (
+                      <div style={{ padding: "0 18px 16px" }}>
+                        {/* Table header */}
+                        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${c.border}` }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Method</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", textAlign: "right" }}>Deposits</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", textAlign: "right" }}>Withdrawals</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", textAlign: "right" }}>Total</div>
                         </div>
-                        <div style={{ marginTop: 6 }}>{changePct(depChange)}</div>
-                      </div>
-                      <div style={{ background: c.surface, borderRadius: 10, padding: 14, textAlign: "center" }}>
-                        <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 6 }}>WITHDRAWALS</div>
-                        <div style={{ display: "flex", justifyContent: "center", gap: 16 }}>
-                          <div><div style={{ fontSize: 9, color: c.textMuted }}>This</div><div style={{ fontSize: 16, fontWeight: 700, color: "#f59e0b" }}>{fmtCurrency(curWds)}</div></div>
-                          <div><div style={{ fontSize: 9, color: c.textMuted }}>Last</div><div style={{ fontSize: 16, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(prevWds)}</div></div>
+                        {methodBreakdown.map(m => (
+                          <div key={m.name} style={{ marginBottom: 8 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                              <div>
+                                <span style={{ fontSize: 12, color: c.text, fontWeight: 500 }}>{m.name}</span>
+                                <span style={{ fontSize: 9, color: c.textMuted, marginLeft: 6 }}>{m.depCount + m.wdCount} txns</span>
+                              </div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: c.accent, textAlign: "right" }}>{fmtCurrency(m.deposits)}</div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#f59e0b", textAlign: "right" }}>{fmtCurrency(m.withdrawals)}</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: c.text, textAlign: "right" }}>{fmtCurrency(m.deposits + m.withdrawals)}</div>
+                            </div>
+                            <div style={{ height: 5, background: c.surface, borderRadius: 3, overflow: "hidden", display: "flex" }}>
+                              <div style={{ height: "100%", width: `${(m.deposits / maxMethodVol) * 100}%`, background: `linear-gradient(90deg, ${c.accent}, #818cf8)`, transition: "width 0.3s" }} />
+                              <div style={{ height: "100%", width: `${(m.withdrawals / maxMethodVol) * 100}%`, background: `linear-gradient(90deg, #f59e0b, #fbbf24)`, transition: "width 0.3s" }} />
+                            </div>
+                          </div>
+                        ))}
+                        {/* Totals row */}
+                        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, paddingTop: 8, borderTop: `1px solid ${c.border}`, marginTop: 4 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Total</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textAlign: "right" }}>{fmtCurrency(viewDeps)}</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", textAlign: "right" }}>{fmtCurrency(viewWds)}</div>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: c.text, textAlign: "right" }}>{fmtCurrency(viewDeps + viewWds)}</div>
                         </div>
-                        <div style={{ marginTop: 6 }}>{changePct(wdChange)}</div>
                       </div>
-                      <div style={{ background: c.surface, borderRadius: 10, padding: 14, textAlign: "center" }}>
-                        <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 6 }}>TOTAL VOLUME</div>
-                        <div style={{ display: "flex", justifyContent: "center", gap: 16 }}>
-                          <div><div style={{ fontSize: 9, color: c.textMuted }}>This</div><div style={{ fontSize: 16, fontWeight: 700, color: "#ec4899" }}>{fmtCurrency(curDeps + curWds)}</div></div>
-                          <div><div style={{ fontSize: 9, color: c.textMuted }}>Last</div><div style={{ fontSize: 16, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(prevDeps + prevWds)}</div></div>
-                        </div>
-                        <div style={{ marginTop: 6 }}>{changePct(volChange)}</div>
-                      </div>
-                    </div>
-
-                    {/* Daily Trend Graph — SVG bar chart */}
-                    <div style={{ fontSize: 11, fontWeight: 600, color: c.text, marginBottom: 8 }}>Daily Volume Trend</div>
-                    {(curDaily.length > 0 || prevDaily.length > 0) ? (
-                      <div style={{ background: c.surface, borderRadius: 10, padding: 14 }}>
-                        <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}><div style={{ width: 10, height: 10, borderRadius: 2, background: c.accent }} /> This Month</div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}><div style={{ width: 10, height: 10, borderRadius: 2, background: "rgba(100,100,140,0.4)" }} /> Last Month</div>
-                        </div>
-                        <svg viewBox={`0 0 ${maxDays * 24 + 10} 120`} style={{ width: "100%", height: 120 }}>
-                          {Array.from({ length: maxDays }, (_, i) => {
-                            const curD = curDaily[i] || {};
-                            const prevD = prevDaily[i] || {};
-                            const curVol = (parseFloat(curD.deposits) || 0) + (parseFloat(curD.withdrawals) || 0);
-                            const prevVol = (parseFloat(prevD.deposits) || 0) + (parseFloat(prevD.withdrawals) || 0);
-                            const curH = maxDailyVol > 0 ? (curVol / maxDailyVol) * 100 : 0;
-                            const prevH = maxDailyVol > 0 ? (prevVol / maxDailyVol) * 100 : 0;
-                            const x = i * 24 + 5;
-                            return (
-                              <g key={i}>
-                                <rect x={x} y={110 - prevH} width={9} height={prevH} rx={2} fill="rgba(100,100,140,0.4)" />
-                                <rect x={x + 10} y={110 - curH} width={9} height={curH} rx={2} fill={c.accent} />
-                                {i % 5 === 0 && <text x={x + 5} y={118} fontSize="7" fill={c.textMuted} textAnchor="middle">{i + 1}</text>}
-                              </g>
-                            );
-                          })}
-                        </svg>
-                      </div>
-                    ) : (
-                      <div style={{ background: c.surface, borderRadius: 10, padding: 20, textAlign: "center", fontSize: 11, color: c.textMuted }}>Connect Metabase and fetch data to see daily trends</div>
                     )}
                   </div>
                 )}
