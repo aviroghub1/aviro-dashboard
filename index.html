@@ -89,6 +89,11 @@ const GATEWAY_CLIENTS = [
   { name: "Yeet", status: "onboarding", statusColor: "#f59e0b" },
 ];
 
+// Metabase connection configs — keyed by client name (matched case-insensitive)
+const METABASE_DEFAULTS = {
+  "elite bet": { url: "https://elitebet.bookiebase.ie", username: "David@aviro-group.com", password: "Elitebet1$" },
+};
+
 const INTEGRATION_ROADMAP = [
   { name: "Hemenode Turkey", status: "integrating", priority: "high", brand: "Luna", dueDate: "2026-03-14", progress: 70 },
   { name: "Spacepay Crypto", status: "backlog", priority: "high", brand: "All", dueDate: "2026-03-24", progress: 10 },
@@ -660,6 +665,43 @@ function AviroDashboard() {
     } catch (e) { console.warn("Load state failed:", e); }
     setHasLoaded(true);
   }, []);
+
+  // ===== AUTO-CONNECT METABASE =====
+  const mbAutoConnectRef = useRef({});
+  useEffect(() => {
+    if (!selectedRevenueClient || !hasLoaded) return;
+    const client = gatewayClients.find(cl => cl.id === selectedRevenueClient);
+    if (!client) return;
+    const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
+    if (!defaults) return;
+    const existing = metabaseConfigs[client.id] || {};
+    // Already connected or already tried this session
+    if (existing.sessionToken || mbAutoConnectRef.current[client.id]) return;
+    mbAutoConnectRef.current[client.id] = true;
+    // Auto-connect
+    (async () => {
+      setMbLoading(true); setMbError(""); setMbFetchStatus("Auto-connecting to Metabase...");
+      try {
+        const proxyCall = async (path, method, body, token) => {
+          const resp = await fetch("/.netlify/functions/metabase-proxy", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ metabaseUrl: defaults.url, path, method: method || "GET", body, sessionToken: token }),
+          });
+          return resp.json();
+        };
+        const authResp = await proxyCall("/api/session", "POST", { username: defaults.username, password: defaults.password });
+        if (!authResp.id) { setMbError(authResp.message || authResp.error || JSON.stringify(authResp)); setMbLoading(false); setMbFetchStatus(""); return; }
+        const token = authResp.id;
+        const cardsResp = await proxyCall("/api/card", "GET", null, token);
+        const cardsList = Array.isArray(cardsResp) ? cardsResp.map(cd => ({ id: cd.id, name: cd.name, collection: cd.collection ? cd.collection.name : "Root" })) : [];
+        setMbCards(cardsList);
+        const newConfig = { ...defaults, sessionToken: token, cards: cardsList, selectedDepositCard: existing.selectedDepositCard || "", selectedWithdrawalCard: existing.selectedWithdrawalCard || "" };
+        setMetabaseConfigs(prev => ({ ...prev, [client.id]: newConfig }));
+        setMbFetchStatus("Connected! Select deposit & withdrawal cards to load data.");
+      } catch (e) { setMbError("Auto-connect failed: " + e.message); setMbFetchStatus(""); }
+      setMbLoading(false);
+    })();
+  }, [selectedRevenueClient, hasLoaded]);
 
   // Computed: entities grouped by category (replaces old hardcoded CORPORATE_ENTITIES)
   const CORPORATE_ENTITIES = {};
@@ -5885,41 +5927,26 @@ function AviroDashboard() {
 
             return (
               <div style={{ marginBottom: 16 }}>
-                {/* Metabase Setup — collapsible */}
-                <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${mbConnected ? "rgba(34,197,94,0.2)" : c.border}`, padding: 14, marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: c.text }}>Data Source</span>
-                      {mbConnected ? <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(34,197,94,0.15)", color: "#22c55e", fontWeight: 700 }}>Metabase Connected</span> : <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 4, background: "rgba(245,158,11,0.15)", color: "#f59e0b", fontWeight: 700 }}>Not Connected</span>}
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {mbConnected && <button onClick={fetchAllData} style={{ fontSize: 10, padding: "4px 12px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Refresh Data</button>}
-                      <button onClick={() => setMbShowSetup(!mbShowSetup)} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted }}>{mbShowSetup ? "Hide" : "Setup"}</button>
-                    </div>
+                {/* Metabase Status Bar */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, padding: "8px 14px", background: c.card, borderRadius: 10, border: `1px solid ${mbConnected ? "rgba(34,197,94,0.15)" : c.border}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: mbConnected ? "#22c55e" : mbLoading ? "#f59e0b" : "#6b7280" }} />
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{mbLoading ? "Connecting..." : mbConnected ? "Live — Metabase" : "Not connected"}</span>
+                    {mbFetchStatus && <span style={{ fontSize: 10, color: mbFetchStatus.startsWith("Error") ? "#ef4444" : "#22c55e" }}>{mbFetchStatus}</span>}
+                    {mbError && <span style={{ fontSize: 10, color: "#ef4444" }}>{mbError}</span>}
                   </div>
-                  {mbFetchStatus && <div style={{ fontSize: 10, color: mbFetchStatus.startsWith("Error") ? "#ef4444" : "#22c55e", marginTop: 6 }}>{mbFetchStatus}</div>}
-                  {mbShowSetup && (
-                    <div style={{ marginTop: 10, background: c.surface, borderRadius: 10, padding: 14, border: `1px solid ${c.border}` }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
-                        <div><label style={labelStyle4}>Metabase URL</label><input value={mbConfig.url || ""} onChange={e => updateMbConfig({ url: e.target.value })} placeholder="https://your.metabase.com" style={{ ...inputStyle4, width: "100%" }} /></div>
-                        <div><label style={labelStyle4}>Username</label><input value={mbConfig.username || ""} onChange={e => updateMbConfig({ username: e.target.value })} placeholder="email@company.com" style={{ ...inputStyle4, width: "100%" }} /></div>
-                        <div><label style={labelStyle4}>Password</label><input type="password" value={mbConfig.password || ""} onChange={e => updateMbConfig({ password: e.target.value })} placeholder="••••••••" style={{ ...inputStyle4, width: "100%" }} /></div>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: mbConnected ? 8 : 0 }}>
-                        <button onClick={connectMetabase} disabled={mbLoading} style={{ fontSize: 11, padding: "6px 16px", borderRadius: 6, cursor: mbLoading ? "wait" : "pointer", border: "none", background: c.accent, color: "#fff", fontWeight: 600 }}>{mbLoading ? "Connecting..." : mbConnected ? "Reconnect" : "Connect"}</button>
-                        {mbError && <span style={{ fontSize: 10, color: "#ef4444" }}>{mbError}</span>}
-                      </div>
-                      {(() => {
-                        const availCards = mbCards.length > 0 ? mbCards : (mbConfig.cards || []);
-                        return mbConnected && availCards.length > 0 ? (
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                            <div><label style={labelStyle4}>Deposits Card</label><select value={mbConfig.selectedDepositCard || ""} onChange={e => updateMbConfig({ selectedDepositCard: e.target.value })} style={{ ...inputStyle4, width: "100%" }}><option value="">— Select —</option>{availCards.map(cd => <option key={cd.id} value={cd.id}>[{cd.collection}] {cd.name}</option>)}</select></div>
-                            <div><label style={labelStyle4}>Withdrawals Card</label><select value={mbConfig.selectedWithdrawalCard || ""} onChange={e => updateMbConfig({ selectedWithdrawalCard: e.target.value })} style={{ ...inputStyle4, width: "100%" }}><option value="">— Select —</option>{availCards.map(cd => <option key={cd.id} value={cd.id}>[{cd.collection}] {cd.name}</option>)}</select></div>
-                          </div>
-                        ) : null;
-                      })()}
-                    </div>
-                  )}
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    {mbConnected && !mbConfig.selectedDepositCard && (() => {
+                      const availCards = mbCards.length > 0 ? mbCards : (mbConfig.cards || []);
+                      return availCards.length > 0 ? (
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          <select value={mbConfig.selectedDepositCard || ""} onChange={e => updateMbConfig({ selectedDepositCard: e.target.value })} style={{ fontSize: 10, padding: "3px 6px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text }}><option value="">Deposits card...</option>{availCards.map(cd => <option key={cd.id} value={cd.id}>[{cd.collection}] {cd.name}</option>)}</select>
+                          <select value={mbConfig.selectedWithdrawalCard || ""} onChange={e => updateMbConfig({ selectedWithdrawalCard: e.target.value })} style={{ fontSize: 10, padding: "3px 6px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text }}><option value="">Withdrawals card...</option>{availCards.map(cd => <option key={cd.id} value={cd.id}>[{cd.collection}] {cd.name}</option>)}</select>
+                        </div>
+                      ) : null;
+                    })()}
+                    {mbConnected && <button onClick={fetchAllData} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Refresh</button>}
+                  </div>
                 </div>
 
                 {/* View Mode Tabs */}
