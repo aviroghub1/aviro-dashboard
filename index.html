@@ -573,12 +573,12 @@ export default function AviroDashboard() {
   const [mbFetchStatus, setMbFetchStatus] = useState("");
   const [pvBreakdownOpen, setPvBreakdownOpen] = useState(false);
   const [cubePayProvOpen, setCubePayProvOpen] = useState(false);
-  const [mbCurrentData, setMbCurrentData] = useState({}); // { clientId: { deposits, withdrawals, depositFees, withdrawalFees, dailyData: [{date, deposits, withdrawals}] } }
+  const [mbCurrentData, setMbCurrentData] = useState({}); // { clientId: { deposits, withdrawals, depositFees, withdrawalFees } }
   const [mbPrevData, setMbPrevData] = useState({}); // same structure for previous month
-  const [mbCustomData, setMbCustomData] = useState({}); // { clientId: { deposits, withdrawals, ... } } for custom date range
-  const [mbDateFrom, setMbDateFrom] = useState("");
-  const [mbDateTo, setMbDateTo] = useState("");
-  const [mbViewMode, setMbViewMode] = useState("current"); // current, previous, comparison, custom
+  const [mbSummaryRows, setMbSummaryRows] = useState({}); // { clientId: [{ month, tx_type, currency, method, tx_count, gross_amount, fee_amount }] }
+  const [mbCachedMonths, setMbCachedMonths] = useState({}); // { clientId: Set of "YYYY-MM" strings }
+  const [mbDateFrom, setMbDateFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
+  const [mbDateTo, setMbDateTo] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
 
   // ===== SETTINGS STATE =====
   const [fxRates, setFxRates] = useState(DEFAULT_FX_RATES); // { currency: rateToEUR }
@@ -685,6 +685,53 @@ export default function AviroDashboard() {
     setHasLoaded(true);
   }, []);
 
+  // ===== METABASE HELPERS =====
+  const mbProxyCall = useCallback(async (baseUrl, path, method, body, token) => {
+    const resp = await fetch("/.netlify/functions/metabase-proxy", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ metabaseUrl: baseUrl, path, method: method || "GET", body, sessionToken: token }),
+    });
+    return resp.json();
+  }, []);
+
+  // Parse Metabase summary rows into individual Supabase-ready records
+  const parseMbRows = useCallback((rows, txType, monthStr) => {
+    return (rows || []).map(r => ({
+      month: monthStr,
+      tx_type: txType,
+      currency: r["Currency"] || "EUR",
+      method: r["Core Account - Account → Account"] || "Unknown",
+      tx_count: parseInt(r["Count"]) || 0,
+      gross_amount: Math.abs(parseFloat(r["Sum of Amount"]) || 0),
+      fee_amount: Math.abs(parseFloat(r["Sum of Fee"]) || 0),
+    }));
+  }, []);
+
+  // Aggregate summary rows for a date range into display-ready data
+  const aggregateSummary = useCallback((rows, fromMonth, toMonth) => {
+    const filtered = rows.filter(r => r.month >= fromMonth && r.month <= toMonth);
+    const depMethods = {}, wdMethods = {};
+    let totalDeps = 0, totalWds = 0, totalDepFees = 0, totalWdFees = 0;
+    filtered.forEach(r => {
+      const grossEUR = toEUR(r.gross_amount, r.currency);
+      const feesEUR = toEUR(r.fee_amount, r.currency);
+      if (r.tx_type === "deposit") {
+        totalDeps += grossEUR; totalDepFees += feesEUR;
+        if (!depMethods[r.method]) depMethods[r.method] = { gross: 0, fees: 0, count: 0 };
+        depMethods[r.method].gross += grossEUR; depMethods[r.method].fees += feesEUR; depMethods[r.method].count += r.tx_count;
+      } else {
+        totalWds += grossEUR; totalWdFees += feesEUR;
+        if (!wdMethods[r.method]) wdMethods[r.method] = { gross: 0, fees: 0, count: 0 };
+        wdMethods[r.method].gross += grossEUR; wdMethods[r.method].fees += feesEUR; wdMethods[r.method].count += r.tx_count;
+      }
+    });
+    return {
+      deposits: totalDeps.toFixed(2), withdrawals: totalWds.toFixed(2),
+      depositFees: totalDepFees.toFixed(2), withdrawalFees: totalWdFees.toFixed(2),
+      depositMethods: depMethods, withdrawalMethods: wdMethods,
+    };
+  }, [toEUR]);
+
   // ===== AUTO-CONNECT METABASE =====
   const mbAutoConnectRef = useRef({});
   useEffect(() => {
@@ -704,132 +751,114 @@ export default function AviroDashboard() {
     if (existing.sessionToken || mbAutoConnectRef.current[client.id]) { console.log("[MB] Already connected or attempted:", client.name, !!existing.sessionToken); return; }
     mbAutoConnectRef.current[client.id] = true;
     console.log("[MB] Auto-connecting:", client.name, "to", defaults.url);
-    // Auto-connect, fetch current month, cache in Supabase
+
     (async () => {
-      setMbLoading(true); setMbError(""); setMbFetchStatus("Connecting to Metabase...");
+      setMbLoading(true); setMbError(""); setMbFetchStatus("Connecting...");
       try {
-        const proxyCall = async (path, method, body, token) => {
-          const resp = await fetch("/.netlify/functions/metabase-proxy", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ metabaseUrl: defaults.url, path, method: method || "GET", body, sessionToken: token }),
-          });
-          return resp.json();
-        };
+        const now = new Date();
+        const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-        // Parse Metabase summary rows into structured data with FX conversion
-        const parseSummaryRows = (rows) => {
-          const methods = {};
-          let totalGross = 0, totalFees = 0;
-          (rows || []).forEach(r => {
-            const currency = r["Currency"] || "EUR";
-            const method = r["Core Account - Account → Account"] || "Unknown";
-            const grossRaw = Math.abs(parseFloat(r["Sum of Amount"]) || 0);
-            const feesRaw = Math.abs(parseFloat(r["Sum of Fee"]) || 0);
-            const count = parseInt(r["Count"]) || 0;
-            const grossEUR = toEUR(grossRaw, currency);
-            const feesEUR = toEUR(feesRaw, currency);
-            totalGross += grossEUR; totalFees += feesEUR;
-            if (!methods[method]) methods[method] = { gross: 0, fees: 0, count: 0 };
-            methods[method].gross += grossEUR; methods[method].fees += feesEUR; methods[method].count += count;
+        // 1) Load ALL cached rows from Supabase for this client
+        let cachedRows = [];
+        const cachedMonthSet = new Set();
+        try {
+          setMbFetchStatus("Loading cached data...");
+          const supaResp = await fetch(`${SUPA_URL}/rest/v1/metabase_summary?select=*&client_name=eq.${encodeURIComponent(client.name)}&order=month.desc`, {
+            headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
           });
-          return { totalGross, totalFees, methods };
-        };
+          if (supaResp.ok) {
+            cachedRows = await supaResp.json();
+            cachedRows.forEach(r => cachedMonthSet.add(r.month));
+            console.log("[MB] Cached months from Supabase:", [...cachedMonthSet].sort());
+          }
+        } catch (e) { console.log("[MB] Supabase cache not available:", e.message); }
 
-        // Build date filter parameters for a given month (YYYY-MM)
+        // 2) Authenticate with Metabase
+        setMbFetchStatus("Authenticating...");
+        const authResp = await mbProxyCall(defaults.url, "/api/session", "POST", { username: defaults.username, password: defaults.password });
+        if (!authResp.id) { setMbError(authResp.message || authResp.error || JSON.stringify(authResp)); setMbLoading(false); setMbFetchStatus(""); return; }
+        const token = authResp.id;
+        console.log("[MB] Auth success, token obtained");
+
+        // 3) Build list of months to fetch: always current month + any missing months going back 6 months
+        const monthsToFetch = [];
+        for (let i = 0; i < 6; i++) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          if (m === curMonth || !cachedMonthSet.has(m)) monthsToFetch.push(m);
+        }
+        console.log("[MB] Months to fetch from Metabase:", monthsToFetch);
+
+        // 4) Date filter builder
         const dateParams = (monthStr) => defaults.dateFieldId ? [{
           type: "date/month-year",
           target: ["dimension", ["field", defaults.dateFieldId, null]],
           value: monthStr,
         }] : [];
 
-        // Fetch card data with date filter
-        const fetchCardMonth = async (cardId, monthStr, token) => {
-          const resp = await proxyCall(`/api/card/${cardId}/query/json`, "POST", { parameters: dateParams(monthStr) }, token);
-          return Array.isArray(resp) ? resp : [];
-        };
-
-        // Check Supabase cache first
-        const now = new Date();
-        const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-        const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
-        const cacheKey = `mb_cache_${client.name.toLowerCase().replace(/\s+/g, "_")}`;
-
-        // Try to load cached data from Supabase
-        let cached = {};
-        try {
-          const supaResp = await fetch(`${SUPA_URL}/rest/v1/metabase_cache?select=*&client_name=eq.${encodeURIComponent(client.name)}`, {
-            headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
-          });
-          if (supaResp.ok) {
-            const rows = await supaResp.json();
-            rows.forEach(r => { cached[r.month] = JSON.parse(r.data); });
-            console.log("[MB] Cached months from Supabase:", Object.keys(cached));
-          }
-        } catch (e) { console.log("[MB] Supabase cache not available, using Metabase directly"); }
-
-        // Authenticate with Metabase
-        const authResp = await proxyCall("/api/session", "POST", { username: defaults.username, password: defaults.password });
-        if (!authResp.id) { setMbError(authResp.message || authResp.error || JSON.stringify(authResp)); setMbLoading(false); setMbFetchStatus(""); return; }
-        const token = authResp.id;
-        console.log("[MB] Auth success, fetching data for", curMonth);
-
-        // Always fetch current month fresh (it changes)
-        setMbFetchStatus("Loading current month (" + curMonth + ")...");
-        const [curDepRows, curWdRows] = await Promise.all([
-          defaults.depositCard ? fetchCardMonth(defaults.depositCard, curMonth, token) : [],
-          defaults.withdrawalCard ? fetchCardMonth(defaults.withdrawalCard, curMonth, token) : [],
-        ]);
-        const curDepData = parseSummaryRows(curDepRows);
-        const curWdData = parseSummaryRows(curWdRows);
-        const curResult = {
-          month: curMonth,
-          deposits: curDepData.totalGross.toFixed(2), withdrawals: curWdData.totalGross.toFixed(2),
-          depositFees: curDepData.totalFees.toFixed(2), withdrawalFees: curWdData.totalFees.toFixed(2),
-          depositMethods: curDepData.methods, withdrawalMethods: curWdData.methods,
-        };
-        console.log("[MB] Current month:", curResult.deposits, "deps,", curResult.withdrawals, "wds");
-
-        // For previous month: use cache if available, otherwise fetch
-        let prevResult;
-        if (cached[prevMonth]) {
-          prevResult = cached[prevMonth];
-          console.log("[MB] Previous month loaded from cache");
-        } else {
-          setMbFetchStatus("Loading previous month (" + prevMonth + ")...");
-          const [prevDepRows, prevWdRows] = await Promise.all([
-            defaults.depositCard ? fetchCardMonth(defaults.depositCard, prevMonth, token) : [],
-            defaults.withdrawalCard ? fetchCardMonth(defaults.withdrawalCard, prevMonth, token) : [],
+        // 5) Fetch each missing month
+        let newRows = [];
+        for (const m of monthsToFetch) {
+          setMbFetchStatus(`Fetching ${m}...`);
+          const [depRows, wdRows] = await Promise.all([
+            defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateParams(m) }, token) : [],
+            defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateParams(m) }, token) : [],
           ]);
-          const prevDepData = parseSummaryRows(prevDepRows);
-          const prevWdData = parseSummaryRows(prevWdRows);
-          prevResult = {
-            month: prevMonth,
-            deposits: prevDepData.totalGross.toFixed(2), withdrawals: prevWdData.totalGross.toFixed(2),
-            depositFees: prevDepData.totalFees.toFixed(2), withdrawalFees: prevWdData.totalFees.toFixed(2),
-            depositMethods: prevDepData.methods, withdrawalMethods: prevWdData.methods,
-          };
-          console.log("[MB] Previous month fetched fresh");
+          const depRecords = parseMbRows(Array.isArray(depRows) ? depRows : [], "deposit", m);
+          const wdRecords = parseMbRows(Array.isArray(wdRows) ? wdRows : [], "withdrawal", m);
+          newRows = [...newRows, ...depRecords, ...wdRecords];
+          console.log("[MB]", m, ":", depRecords.length, "dep rows,", wdRecords.length, "wd rows");
         }
 
-        // Save to Supabase cache (upsert)
-        const saveToCache = async (monthData) => {
-          try {
-            await fetch(`${SUPA_URL}/rest/v1/metabase_cache`, {
-              method: "POST",
-              headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-              body: JSON.stringify({ client_name: client.name, month: monthData.month, data: JSON.stringify(monthData), synced_at: new Date().toISOString() }),
-            });
-          } catch (e) { console.log("[MB] Cache save failed:", e.message); }
-        };
-        saveToCache(curResult);
-        if (!cached[prevMonth]) saveToCache(prevResult);
+        // 6) Save new rows to Supabase (upsert)
+        if (newRows.length > 0) {
+          setMbFetchStatus("Saving to database...");
+          // Delete existing rows for fetched months first, then insert fresh
+          for (const m of monthsToFetch) {
+            try {
+              await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${m}`, {
+                method: "DELETE",
+                headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+              });
+            } catch (e) { console.log("[MB] Delete old rows failed for", m, e.message); }
+          }
+          // Insert in batches of 50
+          const insertRows = newRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
+          for (let i = 0; i < insertRows.length; i += 50) {
+            try {
+              await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, {
+                method: "POST",
+                headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
+                body: JSON.stringify(insertRows.slice(i, i + 50)),
+              });
+            } catch (e) { console.log("[MB] Insert batch failed:", e.message); }
+          }
+          console.log("[MB] Saved", insertRows.length, "rows to Supabase");
+        }
+
+        // 7) Merge cached + new into full row set
+        // Remove old rows for re-fetched months from cachedRows, add newRows
+        const fetchedMonthSet = new Set(monthsToFetch);
+        const allRows = [...cachedRows.filter(r => !fetchedMonthSet.has(r.month)), ...newRows];
+        setMbSummaryRows(prev => ({ ...prev, [client.id]: allRows }));
+        const allMonths = new Set(allRows.map(r => r.month));
+        setMbCachedMonths(prev => ({ ...prev, [client.id]: allMonths }));
+
+        // 8) Build current month display data
+        const curAgg = aggregateSummary(allRows, curMonth, curMonth);
+        setMbCurrentData(prev => ({ ...prev, [client.id]: curAgg }));
+        setCubePayMonthlyData(prev => ({ ...prev, [client.id]: curAgg }));
+
+        // Set previous month data too
+        const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+        const prevAgg = aggregateSummary(allRows, prevMonth, prevMonth);
+        setMbPrevData(prev => ({ ...prev, [client.id]: prevAgg }));
+
+        console.log("[MB] Current month:", curAgg.deposits, "deps,", curAgg.withdrawals, "wds");
 
         const newConfig = { ...defaults, sessionToken: token };
         setMetabaseConfigs(prev => ({ ...prev, [client.id]: newConfig }));
-        setMbCurrentData(prev => ({ ...prev, [client.id]: curResult }));
-        setMbPrevData(prev => ({ ...prev, [client.id]: prevResult }));
-        setCubePayMonthlyData(prev => ({ ...prev, [client.id]: curResult }));
         setMbFetchStatus("");
       } catch (e) { console.error("[MB] Error:", e); setMbError("Failed: " + e.message); setMbFetchStatus(""); }
       setMbLoading(false);
@@ -5992,7 +6021,11 @@ export default function AviroDashboard() {
             const mbConfig = metabaseConfigs[client.id] || {};
             const mbConnected = !!mbConfig.sessionToken;
             const hasNetHoldDeal = deals.some(d => d.type === "Net Hold" || d.type === "Profit Share");
-            const txData = mbCurrentData[client.id] || data;
+            const allRows = mbSummaryRows[client.id] || [];
+            const cachedMonths = mbCachedMonths[client.id] || new Set();
+
+            // Aggregate data for the selected date range
+            const txData = allRows.length > 0 ? aggregateSummary(allRows, mbDateFrom, mbDateTo) : (mbCurrentData[client.id] || data);
             const viewDeps = parseFloat(txData.deposits) || 0;
             const viewWds = parseFloat(txData.withdrawals) || 0;
             const viewDepFees = parseFloat(txData.depositFees) || 0;
@@ -6006,64 +6039,85 @@ export default function AviroDashboard() {
               name: m,
               deposits: (depMethods[m] || {}).gross || 0,
               withdrawals: (wdMethods[m] || {}).gross || 0,
+              depFees: (depMethods[m] || {}).fees || 0,
+              wdFees: (wdMethods[m] || {}).fees || 0,
               depCount: (depMethods[m] || {}).count || 0,
               wdCount: (wdMethods[m] || {}).count || 0,
             })).sort((a, b) => (b.deposits + b.withdrawals) - (a.deposits + a.withdrawals));
             const maxMethodVol = methodBreakdown.length > 0 ? Math.max(...methodBreakdown.map(m => m.deposits + m.withdrawals)) : 1;
 
-            // Refresh handler
+            // Quick-select month presets
+            const now = new Date();
+            const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+            const prevMonthD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevMonth = `${prevMonthD.getFullYear()}-${String(prevMonthD.getMonth() + 1).padStart(2, "0")}`;
+            const isCurrentMonth = mbDateFrom === curMonth && mbDateTo === curMonth;
+            const isPrevMonth = mbDateFrom === prevMonth && mbDateTo === prevMonth;
+            const availableMonths = [...cachedMonths].sort().reverse();
+
+            // Refresh handler — re-fetches selected date range from Metabase
             const refreshData = async () => {
               const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
               if (!defaults || !mbConfig.sessionToken) return;
               setMbFetchStatus("Refreshing...");
               try {
-                const proxyCall = async (path, method, body, token) => {
-                  const resp = await fetch("/.netlify/functions/metabase-proxy", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ metabaseUrl: defaults.url, path, method: method || "GET", body, sessionToken: token }),
-                  });
-                  return resp.json();
-                };
-                const parseSummaryRows = (rows) => {
-                  const methods = {};
-                  let totalGross = 0, totalFees = 0;
-                  (rows || []).forEach(r => {
-                    const currency = r["Currency"] || "EUR";
-                    const method = r["Core Account - Account → Account"] || "Unknown";
-                    const grossRaw = Math.abs(parseFloat(r["Sum of Amount"]) || 0);
-                    const feesRaw = Math.abs(parseFloat(r["Sum of Fee"]) || 0);
-                    const count = parseInt(r["Count"]) || 0;
-                    const grossEUR = toEUR(grossRaw, currency);
-                    const feesEUR = toEUR(feesRaw, currency);
-                    totalGross += grossEUR; totalFees += feesEUR;
-                    if (!methods[method]) methods[method] = { gross: 0, fees: 0, count: 0 };
-                    methods[method].gross += grossEUR; methods[method].fees += feesEUR; methods[method].count += count;
-                  });
-                  return { totalGross, totalFees, methods };
-                };
-                // Date filter for current month
-                const now = new Date();
-                const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-                const dateFilterParams = defaults.dateFieldId ? [{ type: "date/month-year", target: ["dimension", ["field", defaults.dateFieldId, null]], value: curMonth }] : [];
+                const dateParams = (monthStr) => defaults.dateFieldId ? [{ type: "date/month-year", target: ["dimension", ["field", defaults.dateFieldId, null]], value: monthStr }] : [];
+                // Build list of months in the selected range
+                const rangeMonths = [];
+                let d = new Date(mbDateFrom + "-01");
+                const endD = new Date(mbDateTo + "-01");
+                while (d <= endD) {
+                  rangeMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+                  d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+                }
+                let freshRows = [];
+                for (const m of rangeMonths) {
+                  setMbFetchStatus(`Refreshing ${m}...`);
+                  const [depRows, wdRows] = await Promise.all([
+                    defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateParams(m) }, mbConfig.sessionToken) : [],
+                    defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateParams(m) }, mbConfig.sessionToken) : [],
+                  ]);
+                  freshRows = [...freshRows, ...parseMbRows(Array.isArray(depRows) ? depRows : [], "deposit", m), ...parseMbRows(Array.isArray(wdRows) ? wdRows : [], "withdrawal", m)];
+                }
+                // Save to Supabase
+                const rangeSet = new Set(rangeMonths);
+                for (const m of rangeMonths) {
+                  try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${m}`, { method: "DELETE", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }); } catch (e) {}
+                }
+                const insertRows = freshRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
+                for (let i = 0; i < insertRows.length; i += 50) {
+                  try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, { method: "POST", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(insertRows.slice(i, i + 50)) }); } catch (e) {}
+                }
+                // Update local state
+                const updatedRows = [...allRows.filter(r => !rangeSet.has(r.month)), ...freshRows];
+                setMbSummaryRows(prev => ({ ...prev, [client.id]: updatedRows }));
+                const agg = aggregateSummary(updatedRows, mbDateFrom, mbDateTo);
+                if (isCurrentMonth) { setMbCurrentData(prev => ({ ...prev, [client.id]: agg })); setCubePayMonthlyData(prev => ({ ...prev, [client.id]: agg })); }
+                setMbFetchStatus("");
+              } catch (e) { setMbFetchStatus("Error: " + e.message); }
+            };
 
+            // Fetch older months on demand when date range changes
+            const fetchOlderMonth = async (monthStr) => {
+              const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
+              if (!defaults || !mbConfig.sessionToken) return;
+              setMbFetchStatus(`Fetching ${monthStr}...`);
+              try {
+                const dateParams = defaults.dateFieldId ? [{ type: "date/month-year", target: ["dimension", ["field", defaults.dateFieldId, null]], value: monthStr }] : [];
                 const [depRows, wdRows] = await Promise.all([
-                  defaults.depositCard ? proxyCall(`/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateFilterParams }, mbConfig.sessionToken) : [],
-                  defaults.withdrawalCard ? proxyCall(`/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateFilterParams }, mbConfig.sessionToken) : [],
+                  defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateParams }, mbConfig.sessionToken) : [],
+                  defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateParams }, mbConfig.sessionToken) : [],
                 ]);
-                const depData = parseSummaryRows(Array.isArray(depRows) ? depRows : []);
-                const wdData = parseSummaryRows(Array.isArray(wdRows) ? wdRows : []);
-                const result = { month: curMonth, deposits: depData.totalGross.toFixed(2), withdrawals: wdData.totalGross.toFixed(2), depositFees: depData.totalFees.toFixed(2), withdrawalFees: wdData.totalFees.toFixed(2), depositMethods: depData.methods, withdrawalMethods: wdData.methods };
-                setMbCurrentData(prev => ({ ...prev, [client.id]: result }));
-                setCubePayMonthlyData(prev => ({ ...prev, [client.id]: result }));
-
-                // Save refreshed data to Supabase cache
-                try {
-                  await fetch(`${SUPA_URL}/rest/v1/metabase_cache`, {
-                    method: "POST",
-                    headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
-                    body: JSON.stringify({ client_name: client.name, month: curMonth, data: JSON.stringify(result), synced_at: new Date().toISOString() }),
-                  });
-                } catch (e) { console.log("[MB] Cache save on refresh failed:", e.message); }
+                const newRows = [...parseMbRows(Array.isArray(depRows) ? depRows : [], "deposit", monthStr), ...parseMbRows(Array.isArray(wdRows) ? wdRows : [], "withdrawal", monthStr)];
+                // Save to Supabase
+                const insertRows = newRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
+                try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${monthStr}`, { method: "DELETE", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }); } catch (e) {}
+                for (let i = 0; i < insertRows.length; i += 50) {
+                  try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, { method: "POST", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(insertRows.slice(i, i + 50)) }); } catch (e) {}
+                }
+                const updatedRows = [...allRows, ...newRows];
+                setMbSummaryRows(prev => ({ ...prev, [client.id]: updatedRows }));
+                setMbCachedMonths(prev => ({ ...prev, [client.id]: new Set([...cachedMonths, monthStr]) }));
                 setMbFetchStatus("");
               } catch (e) { setMbFetchStatus("Error: " + e.message); }
             };
@@ -6071,19 +6125,53 @@ export default function AviroDashboard() {
             return (
               <div style={{ marginBottom: 16 }}>
                 {/* Status Bar */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, padding: "8px 14px", background: c.card, borderRadius: 10, border: `1px solid ${mbConnected ? "rgba(34,197,94,0.15)" : c.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "8px 14px", background: c.card, borderRadius: 10, border: `1px solid ${mbConnected ? "rgba(34,197,94,0.15)" : c.border}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ width: 7, height: 7, borderRadius: "50%", background: mbConnected ? "#22c55e" : mbLoading ? "#f59e0b" : "#6b7280", animation: mbLoading ? "pulse 1.5s infinite" : "none" }} />
                     <span style={{ fontSize: 10, color: c.textMuted }}>{mbLoading ? "Loading data..." : mbConnected ? "Live — Metabase" : "No data source"}</span>
                     {mbFetchStatus && <span style={{ fontSize: 10, color: mbFetchStatus.startsWith("Error") ? "#ef4444" : "#22c55e", marginLeft: 4 }}>{mbFetchStatus}</span>}
                     {mbError && <span style={{ fontSize: 10, color: "#ef4444", marginLeft: 4 }}>{mbError}</span>}
                   </div>
-                  {mbConnected && <button onClick={refreshData} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Refresh</button>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {cachedMonths.size > 0 && <span style={{ fontSize: 9, color: c.textMuted }}>{cachedMonths.size} months cached</span>}
+                    {mbConnected && <button onClick={refreshData} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Refresh</button>}
+                  </div>
+                </div>
+
+                {/* Date Range Picker */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "10px 14px", background: c.card, borderRadius: 10, border: `1px solid ${c.border}`, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Period:</span>
+                  <button onClick={() => { setMbDateFrom(curMonth); setMbDateTo(curMonth); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", border: `1px solid ${isCurrentMonth ? c.accent : c.border}`, background: isCurrentMonth ? "rgba(99,102,241,0.15)" : "transparent", color: isCurrentMonth ? c.accent : c.textSecondary, fontWeight: 600 }}>This Month</button>
+                  <button onClick={() => { setMbDateFrom(prevMonth); setMbDateTo(prevMonth); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", border: `1px solid ${isPrevMonth ? c.accent : c.border}`, background: isPrevMonth ? "rgba(99,102,241,0.15)" : "transparent", color: isPrevMonth ? c.accent : c.textSecondary, fontWeight: 600 }}>Last Month</button>
+                  <span style={{ fontSize: 10, color: c.textMuted, margin: "0 2px" }}>|</span>
+                  <input type="month" value={mbDateFrom} onChange={e => setMbDateFrom(e.target.value)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+                  <span style={{ fontSize: 10, color: c.textMuted }}>to</span>
+                  <input type="month" value={mbDateTo} onChange={e => setMbDateTo(e.target.value)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+                  {/* Show warning if selected range includes months not yet fetched */}
+                  {(() => {
+                    const missing = [];
+                    let d = new Date(mbDateFrom + "-01");
+                    const endD = new Date(mbDateTo + "-01");
+                    while (d <= endD) {
+                      const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                      if (!cachedMonths.has(m)) missing.push(m);
+                      d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+                    }
+                    if (missing.length === 0) return null;
+                    return (
+                      <button onClick={async () => { for (const m of missing) await fetchOlderMonth(m); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontWeight: 600 }}>
+                        Fetch {missing.length} missing month{missing.length > 1 ? "s" : ""}
+                      </button>
+                    );
+                  })()}
                 </div>
 
                 {/* Gross Totals */}
                 <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 18, marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 14 }}>Transaction Summary (Gross)</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>Transaction Summary (Gross)</div>
+                    <div style={{ fontSize: 10, color: c.textMuted }}>{mbDateFrom === mbDateTo ? mbDateFrom : `${mbDateFrom} — ${mbDateTo}`}</div>
+                  </div>
                   <div style={{ display: "grid", gridTemplateColumns: hasNetHoldDeal ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 12 }}>
                     <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(99,102,241,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(99,102,241,0.15)" }}>
                       <div style={{ fontSize: 9, color: c.accent, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Deposits</div>
