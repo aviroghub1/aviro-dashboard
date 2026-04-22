@@ -3104,8 +3104,7 @@ function AviroDashboard() {
                             if (linkedSvc.cardType) typeLabels.push(linkedSvc.cardType);
                           }
                           const typeStr = typeLabels.length > 0 ? typeLabels.join(" · ") : "—";
-                          const hasICC = linkedSvc && (linkedSvc.payinICC || linkedSvc.payoutICC);
-                          const iccLabel = linkedSvc ? (linkedSvc.payinICC && linkedSvc.payoutICC ? "ICC++" : linkedSvc.payinICC ? "ICC++ (Payin)" : linkedSvc.payoutICC ? "ICC++ (Payout)" : "") : "";
+                          const hasICC = !!cp.iccPlusPlus;
 
                           // Deal / fee model
                           const deal = cp.feeModel || "—";
@@ -3152,7 +3151,7 @@ function AviroDashboard() {
                                 </td>
                                 <td style={{ padding: "12px 12px", verticalAlign: "top", color: c.textSecondary }}>
                                   <div>{typeStr}</div>
-                                  {hasICC && <div style={{ marginTop: 3 }}><span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>{iccLabel}</span></div>}
+                                  {hasICC && <div style={{ marginTop: 3 }}><span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>ICC++</span></div>}
                                 </td>
                                 <td style={{ padding: "12px 12px", verticalAlign: "top" }}>
                                   <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: `${feeModelColor}15`, color: feeModelColor }}>{deal}</span>
@@ -3319,8 +3318,19 @@ function AviroDashboard() {
                         </div>
                       )}
 
-                      {/* Provider base cost reference */}
+                      {/* ICC++ toggle */}
                       {linkedSvc && cp.feeModel && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                          <label style={{ fontSize: 11, color: c.textSecondary, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                            <input type="checkbox" checked={!!cp.iccPlusPlus} onChange={e => updateClProv(cpIdx, "iccPlusPlus", e.target.checked)} style={{ accentColor: c.accent }} />
+                            ICC++
+                          </label>
+                          {cp.iccPlusPlus && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>ICC++ ENABLED</span>}
+                        </div>
+                      )}
+
+                      {/* Provider base cost reference (Direct only) */}
+                      {linkedSvc && cp.feeModel === "Direct" && (
                         <div style={{ background: `${c.accent}08`, borderRadius: 8, padding: 10, marginBottom: 14, border: `1px solid ${c.accent}15` }}>
                           <div style={{ fontSize: 9, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 4 }}>Provider Cost (from {linkedProv.name})</div>
                           <div style={{ display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
