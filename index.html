@@ -95,8 +95,8 @@ const METABASE_DEFAULTS = {
 };
 
 // Simple FX rates to EUR (update as needed)
-const FX_TO_EUR = { EUR: 1, GBP: 1.17, USD: 0.92, CAD: 0.67, AUD: 0.60, SEK: 0.087, NOK: 0.087, BRL: 0.17, BTC: 55000 };
-const toEUR = (amount, currency) => (parseFloat(amount) || 0) * (FX_TO_EUR[(currency || "EUR").toUpperCase()] || 1);
+// Default FX rates — will be overridden by state
+const DEFAULT_FX_RATES = { EUR: 1, GBP: 1.17, USD: 0.92, CAD: 0.67, AUD: 0.60, SEK: 0.087, NOK: 0.087, BRL: 0.17, BTC: 55000 };
 
 const INTEGRATION_ROADMAP = [
   { name: "Hemenode Turkey", status: "integrating", priority: "high", brand: "Luna", dueDate: "2026-03-14", progress: 70 },
@@ -581,6 +581,16 @@ function AviroDashboard() {
   const [mbDateTo, setMbDateTo] = useState("");
   const [mbViewMode, setMbViewMode] = useState("current"); // current, previous, comparison, custom
 
+  // ===== SETTINGS STATE =====
+  const [fxRates, setFxRates] = useState(DEFAULT_FX_RATES); // { currency: rateToEUR }
+  const [fxBaseCurrency, setFxBaseCurrency] = useState("EUR");
+  const [fxLastUpdated, setFxLastUpdated] = useState("");
+
+  // FX conversion function using live rates
+  const toEUR = useCallback((amount, currency) => {
+    return (parseFloat(amount) || 0) * (fxRates[(currency || "EUR").toUpperCase()] || 1);
+  }, [fxRates]);
+
   // ===== LOCALSTORAGE PERSISTENCE =====
   const STORAGE_KEY = "aviro_dashboard_state";
   const saveState = useCallback(() => {
@@ -594,10 +604,11 @@ function AviroDashboard() {
         bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
         supabaseUrl, supabaseKey,
         cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
+        fxRates, fxBaseCurrency, fxLastUpdated,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -665,6 +676,9 @@ function AviroDashboard() {
         if (s.providerGroups) setProviderGroups(s.providerGroups);
         if (s.gatewayRevFees) setGatewayRevFees(s.gatewayRevFees);
         if (s.metabaseConfigs) setMetabaseConfigs(s.metabaseConfigs);
+        if (s.fxRates) setFxRates(s.fxRates);
+        if (s.fxBaseCurrency) setFxBaseCurrency(s.fxBaseCurrency);
+        if (s.fxLastUpdated) setFxLastUpdated(s.fxLastUpdated);
       }
     } catch (e) { console.warn("Load state failed:", e); }
     setHasLoaded(true);
@@ -5551,6 +5565,7 @@ function AviroDashboard() {
       { key: "revenue", title: "Revenue", desc: "Revenue Tracking & Analytics", icon: "signal", gradient: "linear-gradient(135deg, #ec4899, #be185d)", defaultSection: "revenue" },
       { key: "finance", title: "Finance", desc: "Financial Management & Reporting", icon: "flow", gradient: "linear-gradient(135deg, #14b8a6, #0d9488)", defaultSection: null },
       { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)", defaultSection: "calendar" },
+      { key: "settings", title: "Settings", desc: "FX Rates, Connections & Configuration", icon: "bank", gradient: "linear-gradient(135deg, #6b7280, #4b5563)", defaultSection: "settings" },
     ];
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 64px)" }}>
@@ -5582,6 +5597,132 @@ function AviroDashboard() {
               {card.defaultSection && <div style={{ marginTop: 12, fontSize: 12, color: c.accent, fontWeight: 600 }}>Open →</div>}
             </div>
           ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ===== SETTINGS =====
+  const renderSettings = () => {
+    const inputStyle5 = { fontSize: 12, padding: "8px 12px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const labelStyle5 = { fontSize: 10, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, display: "block" };
+
+    const sortedCurrencies = Object.entries(fxRates).sort((a, b) => a[0].localeCompare(b[0]));
+    const [newCurr, setNewCurr] = useState("");
+    const [newRate, setNewRate] = useState("");
+
+    const updateRate = (curr, rate) => {
+      const val = parseFloat(rate);
+      if (isNaN(val) || val <= 0) return;
+      setFxRates(prev => ({ ...prev, [curr.toUpperCase()]: val }));
+    };
+
+    const addCurrency = () => {
+      if (!newCurr || !newRate) return;
+      const val = parseFloat(newRate);
+      if (isNaN(val) || val <= 0) return;
+      setFxRates(prev => ({ ...prev, [newCurr.toUpperCase().trim()]: val }));
+      setNewCurr("");
+      setNewRate("");
+    };
+
+    const removeCurrency = (curr) => {
+      if (curr === "EUR") return; // Can't remove base
+      setFxRates(prev => { const n = { ...prev }; delete n[curr]; return n; });
+    };
+
+    const fetchLiveRates = async () => {
+      try {
+        setMbFetchStatus("Fetching live FX rates...");
+        const resp = await fetch("https://api.exchangerate-api.com/v4/latest/EUR");
+        const data = await resp.json();
+        if (data && data.rates) {
+          const updated = { EUR: 1 };
+          Object.keys(fxRates).forEach(curr => {
+            if (curr === "EUR") return;
+            if (data.rates[curr]) {
+              updated[curr] = parseFloat((1 / data.rates[curr]).toFixed(6));
+            } else {
+              updated[curr] = fxRates[curr]; // Keep existing if not found
+            }
+          });
+          setFxRates(updated);
+          setFxLastUpdated(new Date().toISOString());
+          setMbFetchStatus("FX rates updated!");
+          setTimeout(() => setMbFetchStatus(""), 3000);
+        }
+      } catch (e) {
+        setMbFetchStatus("FX fetch failed: " + e.message);
+        setTimeout(() => setMbFetchStatus(""), 5000);
+      }
+    };
+
+    return (
+      <div>
+        <div style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: c.text, margin: "0 0 4px" }}>Settings</h2>
+          <p style={{ color: c.textSecondary, fontSize: 13, margin: 0 }}>Configure global settings for the dashboard</p>
+        </div>
+
+        {/* FX Rates Section */}
+        <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 24, marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 4 }}>FX Rates</div>
+              <div style={{ fontSize: 12, color: c.textMuted }}>All rates expressed as 1 unit of currency = X EUR {fxLastUpdated && <span style={{ marginLeft: 8, fontSize: 10, color: c.accent }}>Last updated: {new Date(fxLastUpdated).toLocaleString()}</span>}</div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {mbFetchStatus && <span style={{ fontSize: 11, color: mbFetchStatus.includes("fail") ? "#ef4444" : "#22c55e", alignSelf: "center" }}>{mbFetchStatus}</span>}
+              <button onClick={fetchLiveRates} style={{ fontSize: 12, padding: "8px 20px", borderRadius: 8, cursor: "pointer", border: "none", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff", fontWeight: 600, boxShadow: "0 2px 8px rgba(99,102,241,0.3)" }}>Fetch Live Rates</button>
+            </div>
+          </div>
+
+          {/* Currency Grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
+            {sortedCurrencies.map(([curr, rate]) => (
+              <div key={curr} style={{ background: c.surface, borderRadius: 12, border: `1px solid ${curr === "EUR" ? "rgba(99,102,241,0.3)" : c.border}`, padding: 14, position: "relative" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: c.text }}>{curr}</span>
+                    {curr === "EUR" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(99,102,241,0.15)", color: c.accent, fontWeight: 700 }}>BASE</span>}
+                  </div>
+                  {curr !== "EUR" && (
+                    <button onClick={() => removeCurrency(curr)} style={{ fontSize: 14, width: 22, height: 22, borderRadius: 6, cursor: "pointer", border: "none", background: "rgba(239,68,68,0.1)", color: "#ef4444", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>×</button>
+                  )}
+                </div>
+                {curr === "EUR" ? (
+                  <div style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic" }}>Base currency (1.00)</div>
+                ) : (
+                  <div>
+                    <label style={labelStyle5}>1 {curr} = EUR</label>
+                    <input type="number" step="any" value={rate} onChange={e => updateRate(curr, e.target.value)} style={{ ...inputStyle5, width: "100%" }} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Add New Currency */}
+          <div style={{ background: c.surface, borderRadius: 12, border: `1px dashed ${c.border}`, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 10 }}>Add Currency Pair</div>
+            <div style={{ display: "flex", gap: 10, alignItems: "end" }}>
+              <div>
+                <label style={labelStyle5}>Currency Code</label>
+                <input value={newCurr} onChange={e => setNewCurr(e.target.value.toUpperCase())} placeholder="e.g. CHF" maxLength={4} style={{ ...inputStyle5, width: 100, textTransform: "uppercase" }} />
+              </div>
+              <div>
+                <label style={labelStyle5}>Rate (1 unit = ? EUR)</label>
+                <input type="number" step="any" value={newRate} onChange={e => setNewRate(e.target.value)} placeholder="e.g. 1.04" style={{ ...inputStyle5, width: 140 }} />
+              </div>
+              <button onClick={addCurrency} style={{ fontSize: 12, padding: "8px 20px", borderRadius: 8, cursor: "pointer", border: "none", background: c.accent, color: "#fff", fontWeight: 600 }}>Add</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Metabase Connections — future: move metabase config management here */}
+        <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 24, opacity: 0.5 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 4 }}>Metabase Connections</div>
+          <div style={{ fontSize: 12, color: c.textMuted }}>Manage data source connections for revenue tracking. Currently hard-coded — settings management coming soon.</div>
         </div>
       </div>
     );
@@ -6378,6 +6519,7 @@ function AviroDashboard() {
     gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
     revenue: { label: "REVENUE", sections: ["revenue"] },
+    settings: { label: "SETTINGS", sections: ["settings"] },
   };
 
   const getSectionGroup = (s) => {
@@ -6409,11 +6551,13 @@ function AviroDashboard() {
     { section: "brands", icon: "grid", label: "Gaming Brands", group: "corporate" },
     { section: "revenue_header", label: "REVENUE", isHeader: true, group: "revenue" },
     { section: "revenue", icon: "signal", label: "Revenue Dashboard", group: "revenue" },
+    { section: "settings_header", label: "SETTINGS", isHeader: true, group: "settings" },
+    { section: "settings", icon: "bank", label: "Settings", group: "settings" },
   ];
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, revenue: renderRevenue };
+  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, revenue: renderRevenue, settings: renderSettings };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
