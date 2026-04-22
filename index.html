@@ -23,7 +23,7 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 <body>
 <div id="root"></div>
 <script type="text/babel">
-import { useState, useCallback, useRef, useEffect } from "react";
+const { useState, useEffect, useRef, useCallback } = React;
 
 // ===== AVIRO GROUP MASTER DASHBOARD =====
 const ENTITY_TYPES = ["Gaming License", "Payment Agent", "Technology Company", "Management Company", "Financial Institute", "Cayman Foundation Company", "Other"];
@@ -208,7 +208,7 @@ const motionFetch = async (endpoint, opts = {}) => {
   throw new Error("All Motion API attempts failed (CORS)");
 };
 
-export default function AviroDashboard() {
+function AviroDashboard() {
   const [section, setSection] = useState("home");
   const [collapsed, setCollapsed] = useState(false);
 
