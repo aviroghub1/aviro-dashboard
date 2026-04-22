@@ -3509,9 +3509,12 @@ function AviroDashboard() {
 
     const entityNames = corporateEntities.map(e => e.name);
 
-    const updateProvider = (provId, field, val) => setProviders(providers.map(p => p.id === provId ? { ...p, [field]: val } : p));
+    const updateProvider = (provId, field, val) => setProviders(prev => prev.map(p => p.id === provId ? { ...p, [field]: val } : p));
     const updateService = (provId, svcId, field, val) => {
-      setProviders(providers.map(p => p.id === provId ? { ...p, services: (p.services || []).map(s => s.id === svcId ? { ...s, [field]: val } : s) } : p));
+      setProviders(prev => prev.map(p => p.id === provId ? { ...p, services: (p.services || []).map(s => s.id === svcId ? { ...s, [field]: val } : s) } : p));
+    };
+    const updateServiceMulti = (provId, svcId, updates) => {
+      setProviders(prev => prev.map(p => p.id === provId ? { ...p, services: (p.services || []).map(s => s.id === svcId ? { ...s, ...updates } : s) } : p));
     };
 
     // ===== PROVIDER DETAIL VIEW =====
@@ -3530,7 +3533,9 @@ function AviroDashboard() {
 
           {/* Add Service */}
           <button onClick={() => {
-            const newSvc = { id: `svc-${Date.now()}`, name: "", mainContact: "", contactDetails: "", serviceType1: "", serviceType2: "", regions: [], supportGroup: "", supportPlatform: "", supportPlatformOther: "", supportEmail: "", agreementType: "", entities: [], payinPct: "", payinTxFee: "", payinTxCurrency: "USD", payoutPct: "", payoutTxFee: "", payoutTxCurrency: "USD", settlementTerms: "", settlementFee: "" };
+            // Auto-fill contact/support info from existing services if available
+            const existingSvc = svcs.length > 0 ? svcs[svcs.length - 1] : {};
+            const newSvc = { id: `svc-${Date.now()}`, name: "", mainContact: existingSvc.mainContact || "", contactDetails: existingSvc.contactDetails || "", serviceType1: "", serviceType2: "", regions: [], supportGroup: existingSvc.supportGroup || "", supportPlatform: existingSvc.supportPlatform || "", supportPlatformOther: existingSvc.supportPlatformOther || "", supportEmail: existingSvc.supportEmail || "", agreementType: "", entities: [], payinPct: "", payinTxFee: "", payinTxCurrency: "USD", payoutPct: "", payoutTxFee: "", payoutTxCurrency: "USD", settlementTerms: "", settlementFee: "" };
             updateProvider(prov.id, "services", [...svcs, newSvc]);
           }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600, marginBottom: 20 }}>+ Add Service</button>
 
@@ -3581,6 +3586,36 @@ function AviroDashboard() {
                       )}
                     </div>
 
+                    {/* Open Banking: C2B Account option */}
+                    {svc.serviceType2 === "Open Banking" && (
+                      <div style={{ background: "rgba(99,102,241,0.05)", borderRadius: 8, padding: 14, border: `1px solid rgba(99,102,241,0.15)` }}>
+                        <label style={labelStyle3}>Provides C2B Account?</label>
+                        <div style={{ display: "flex", gap: 6, marginBottom: svc.providesC2B === false ? 10 : 0 }}>
+                          {[{ val: true, label: "Yes" }, { val: false, label: "No" }].map(opt => {
+                            const sel = svc.providesC2B === opt.val;
+                            return <button key={String(opt.val)} onClick={() => updateServiceMulti(prov.id, svc.id, { providesC2B: opt.val, c2bBankAccountId: opt.val ? "" : svc.c2bBankAccountId })} style={{ padding: "5px 16px", borderRadius: 6, fontSize: 11, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? (opt.val ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)") : c.surface, color: sel ? (opt.val ? "#22c55e" : "#f59e0b") : c.textMuted, border: `2px solid ${sel ? (opt.val ? "#22c55e" : "#f59e0b") : c.border}`, transition: "all 0.15s" }}>{opt.label}</button>;
+                          })}
+                        </div>
+                        {svc.providesC2B === false && (() => {
+                          // Show bank account selector from our bank accounts list
+                          const bankOptions = bankAccountsList.map(acc => {
+                            const rel = bankRelationships.find(b => b.id === acc.bankRelId);
+                            return { id: acc.id, label: `${rel ? rel.bankName : "Unknown Bank"} — ${acc.entityName || "No entity"} (${(acc.accountPurpose || []).join(", ") || "General"})` };
+                          });
+                          return (
+                            <div>
+                              <label style={labelStyle3}>Select Bank Account for C2B</label>
+                              <select value={svc.c2bBankAccountId || ""} onChange={e => updateService(prov.id, svc.id, "c2bBankAccountId", e.target.value)} style={{ ...inputStyle3, width: "100%" }}>
+                                <option value="">— Select Bank Account —</option>
+                                {bankOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                              </select>
+                              {bankOptions.length === 0 && <div style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic", marginTop: 4 }}>No bank accounts configured — add them in Corporate Matrix → Banks</div>}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {/* Regions */}
                     <div>
                       <label style={labelStyle3}>Regions</label>
@@ -3593,7 +3628,7 @@ function AviroDashboard() {
                     </div>
 
                     {/* Agreement & Entities */}
-                    <div><label style={labelStyle3}>Agreement Type</label><select value={svc.agreementType || ""} onChange={e => { updateService(prov.id, svc.id, "agreementType", e.target.value); updateService(prov.id, svc.id, "entities", []); }} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{AGREEMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div><label style={labelStyle3}>Agreement Type</label><select value={svc.agreementType || ""} onChange={e => updateServiceMulti(prov.id, svc.id, { agreementType: e.target.value, entities: [] })} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{AGREEMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                     {svc.agreementType && (() => {
                       const financialInstitutes = corporateEntities.filter(e => e.category === "Financial Institute").map(e => e.name);
                       const paymentAgents = corporateEntities.filter(e => e.category === "Payment Agent").map(e => e.name);
