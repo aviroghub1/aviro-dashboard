@@ -3104,6 +3104,8 @@ function AviroDashboard() {
                             if (linkedSvc.cardType) typeLabels.push(linkedSvc.cardType);
                           }
                           const typeStr = typeLabels.length > 0 ? typeLabels.join(" · ") : "—";
+                          const hasICC = linkedSvc && (linkedSvc.payinICC || linkedSvc.payoutICC);
+                          const iccLabel = linkedSvc ? (linkedSvc.payinICC && linkedSvc.payoutICC ? "ICC++" : linkedSvc.payinICC ? "ICC++ (Payin)" : linkedSvc.payoutICC ? "ICC++ (Payout)" : "") : "";
 
                           // Deal / fee model
                           const deal = cp.feeModel || "—";
@@ -3148,7 +3150,10 @@ function AviroDashboard() {
                                   <div style={{ fontWeight: 600, color: c.text }}>{provName}</div>
                                   {svcName && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{svcName}</div>}
                                 </td>
-                                <td style={{ padding: "12px 12px", verticalAlign: "top", color: c.textSecondary }}>{typeStr}</td>
+                                <td style={{ padding: "12px 12px", verticalAlign: "top", color: c.textSecondary }}>
+                                  <div>{typeStr}</div>
+                                  {hasICC && <div style={{ marginTop: 3 }}><span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>{iccLabel}</span></div>}
+                                </td>
                                 <td style={{ padding: "12px 12px", verticalAlign: "top" }}>
                                   <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: `${feeModelColor}15`, color: feeModelColor }}>{deal}</span>
                                   {dealExtra && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{dealExtra}</div>}
