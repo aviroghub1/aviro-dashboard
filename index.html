@@ -3110,52 +3110,56 @@ function AviroDashboard() {
                 )}
 
                 {clProviders.map((cp, cpIdx) => {
-                  // Find the linked provider and service
                   const linkedProv = providers.find(p => p.id === cp.providerId);
                   const linkedSvcs = linkedProv ? (linkedProv.services || []) : [];
                   const linkedSvc = linkedSvcs.find(s => s.id === cp.serviceId);
 
-                  // Provider base costs (what we pay the provider)
+                  // Provider base cost from provider config
                   const provPayinPct = linkedSvc ? parseFloat(linkedSvc.payinPct) || 0 : 0;
                   const provPayinTx = linkedSvc ? parseFloat(linkedSvc.payinTxFee) || 0 : 0;
-                  const provPayoutPct = linkedSvc ? parseFloat(linkedSvc.payoutPct) || 0 : 0;
-                  const provPayoutTx = linkedSvc ? parseFloat(linkedSvc.payoutTxFee) || 0 : 0;
+                  const provSettlementFee = linkedSvc ? parseFloat(linkedSvc.settlementFee) || 0 : 0;
 
-                  // Margin calculations based on fee model
-                  let payinMarginPct = 0, payoutMarginPct = 0, payinMarginTx = 0, payoutMarginTx = 0;
-                  if (cp.feeModel === "Direct") {
-                    payinMarginPct = (parseFloat(cp.clientPayinPct) || 0) - provPayinPct;
-                    payinMarginTx = (parseFloat(cp.clientPayinTxFee) || 0) - provPayinTx;
-                    payoutMarginPct = (parseFloat(cp.clientPayoutPct) || 0) - provPayoutPct;
-                    payoutMarginTx = (parseFloat(cp.clientPayoutTxFee) || 0) - provPayoutTx;
-                  } else if (cp.feeModel === "Profit Share") {
-                    const clientPayin = parseFloat(cp.clientPayinPct) || 0;
-                    const hardCostPayin = parseFloat(cp.hardCostPayinPct) || 0;
-                    const sharePct = parseFloat(cp.profitSharePct) || 0;
-                    payinMarginPct = (clientPayin - hardCostPayin) * (1 - sharePct / 100);
-                    const clientPayout = parseFloat(cp.clientPayoutPct) || 0;
-                    const hardCostPayout = parseFloat(cp.hardCostPayoutPct) || 0;
-                    payoutMarginPct = (clientPayout - hardCostPayout) * (1 - sharePct / 100);
-                  }
-
-                  const fmtMargin = (v) => { const n = parseFloat(v) || 0; return n >= 0 ? `+${n.toFixed(3)}%` : `${n.toFixed(3)}%`; };
-                  const fmtMarginTx = (v) => { const n = parseFloat(v) || 0; return n >= 0 ? `+${n.toFixed(2)}` : `${n.toFixed(2)}`; };
+                  // Markup calc for Direct
+                  const clientRate = parseFloat(cp.clientPayinPct) || 0;
+                  const clientTx = parseFloat(cp.clientPayinTxFee) || 0;
+                  const marginPct = clientRate - provPayinPct;
+                  const marginTx = clientTx - provPayinTx;
                   const marginColor = (v) => parseFloat(v) > 0 ? "#22c55e" : parseFloat(v) < 0 ? "#ef4444" : c.textMuted;
+
+                  // Tiers renderer (reusable)
+                  const renderTiers = (tiers, field) => (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Volume Tiers / Targets (optional)</span>
+                        <button onClick={() => addTier(cpIdx, tiers, field)} style={{ fontSize: 9, background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>+ Tier</button>
+                      </div>
+                      {(tiers || []).map(tier => (
+                        <div key={tier.id} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                          <span style={{ fontSize: 10, color: c.textMuted }}>Up to</span>
+                          <input value={tier.upTo || ""} onChange={e => updateTier(cpIdx, tiers, field, tier.id, "upTo", e.target.value)} placeholder="Volume" style={{ ...inputStyle, width: 100, fontSize: 11 }} />
+                          <span style={{ fontSize: 10, color: c.textMuted }}>→</span>
+                          <input value={tier.rate || ""} onChange={e => updateTier(cpIdx, tiers, field, tier.id, "rate", e.target.value)} placeholder="Rate %" style={{ ...inputStyle, width: 80, fontSize: 11 }} />
+                          <span style={{ fontSize: 10, color: c.textMuted }}>%</span>
+                          <button onClick={() => removeTier(cpIdx, tiers, field, tier.id)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 11 }}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  );
 
                   return (
                     <div key={cp.id} style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 14 }}>
                       {/* Header */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 10, fontWeight: 700, color: c.accent, background: c.accentBg, padding: "2px 8px", borderRadius: 4 }}>PROVIDER {cpIdx + 1}</span>
                           {linkedProv && <span style={{ fontSize: 14, fontWeight: 700, color: c.text }}>{linkedProv.name}</span>}
-                          {linkedSvc && <span style={{ fontSize: 11, color: c.textMuted }}>— {linkedSvc.name || "Unnamed service"}</span>}
+                          {linkedSvc && <span style={{ fontSize: 11, color: c.textMuted }}>— {linkedSvc.name || "Unnamed"}</span>}
                           {cp.feeModel && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 600, background: cp.feeModel === "Direct" ? "rgba(34,197,94,0.1)" : cp.feeModel === "Profit Share" ? "rgba(139,92,246,0.1)" : "rgba(245,158,11,0.1)", color: cp.feeModel === "Direct" ? "#22c55e" : cp.feeModel === "Profit Share" ? "#8b5cf6" : "#f59e0b" }}>{cp.feeModel}</span>}
                         </div>
                         <button onClick={() => { if (confirm("Remove this provider?")) removeClProv(cpIdx); }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Remove</button>
                       </div>
 
-                      {/* Provider & Service Selection */}
+                      {/* Provider & Service & Fee Model Selection */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
                         <div>
                           <label style={labelStyle}>Provider</label>
@@ -3182,143 +3186,114 @@ function AviroDashboard() {
                         </div>
                       </div>
 
-                      {/* Provider base cost reference (read-only) */}
+                      {/* Service Info Badge (type, channel, card type, C2B) */}
+                      {linkedSvc && (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                          {linkedSvc.serviceType1 && <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, fontWeight: 600 }}>{linkedSvc.serviceType1}</span>}
+                          {linkedSvc.serviceType2 && <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", color: c.accent, fontWeight: 600 }}>{linkedSvc.serviceType2}</span>}
+                          {linkedSvc.serviceType2 === "Cards" && linkedSvc.cardType && <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: "rgba(236,72,153,0.08)", border: "1px solid rgba(236,72,153,0.2)", color: "#ec4899", fontWeight: 600 }}>MCC: {linkedSvc.cardType}</span>}
+                          {linkedSvc.serviceType2 === "Open Banking" && (
+                            linkedSvc.providesC2B === true
+                              ? <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", color: "#22c55e", fontWeight: 600 }}>C2B Account: Provider</span>
+                              : linkedSvc.providesC2B === false
+                                ? <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", color: "#f59e0b", fontWeight: 600 }}>C2B Account: Our Bank</span>
+                                : <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted, fontWeight: 600 }}>C2B: Not set</span>
+                          )}
+                          {linkedSvc.agreementType && <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted, fontWeight: 600 }}>{linkedSvc.agreementType}</span>}
+                          {(linkedSvc.regions || []).length > 0 && <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted }}>{linkedSvc.regions.join(", ")}</span>}
+                        </div>
+                      )}
+
+                      {/* Provider base cost reference */}
                       {linkedSvc && cp.feeModel && (
                         <div style={{ background: `${c.accent}08`, borderRadius: 8, padding: 10, marginBottom: 14, border: `1px solid ${c.accent}15` }}>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 6 }}>Provider Base Cost (from {linkedProv.name} — {linkedSvc.name})</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 4 }}>Provider Cost (from {linkedProv.name})</div>
                           <div style={{ display: "flex", gap: 16, fontSize: 11, color: c.textMuted }}>
-                            <span>Payin: <strong style={{ color: c.text }}>{provPayinPct}%</strong>{provPayinTx > 0 && <> + <strong style={{ color: c.text }}>{linkedSvc.payinTxCurrency || "USD"} {provPayinTx}</strong>/tx</>}</span>
-                            <span>Payout: <strong style={{ color: c.text }}>{provPayoutPct}%</strong>{provPayoutTx > 0 && <> + <strong style={{ color: c.text }}>{linkedSvc.payoutTxCurrency || "USD"} {provPayoutTx}</strong>/tx</>}</span>
+                            <span>Rate: <strong style={{ color: c.text }}>{provPayinPct}%</strong>{provPayinTx > 0 && <> + <strong style={{ color: c.text }}>{linkedSvc.payinTxCurrency || "USD"} {provPayinTx}</strong>/tx</>}</span>
+                            {provSettlementFee > 0 && <span>Settlement: <strong style={{ color: c.text }}>{provSettlementFee}%</strong></span>}
                           </div>
                         </div>
                       )}
 
-                      {/* ===== DIRECT FEE MODEL ===== */}
+                      {/* ===== DIRECT ===== */}
                       {cp.feeModel === "Direct" && (
                         <div>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 8 }}>Client Rates (what the client pays)</div>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-                            <div><label style={labelStyle}>Payin %</label><input value={cp.clientPayinPct || ""} onChange={e => updateClProv(cpIdx, "clientPayinPct", e.target.value)} placeholder="e.g. 4.5" style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div><label style={labelStyle}>Payin Tx Fee</label><input value={cp.clientPayinTxFee || ""} onChange={e => updateClProv(cpIdx, "clientPayinTxFee", e.target.value)} placeholder="e.g. 0.20" style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div><label style={labelStyle}>Payout %</label><input value={cp.clientPayoutPct || ""} onChange={e => updateClProv(cpIdx, "clientPayoutPct", e.target.value)} placeholder="e.g. 1.5" style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div><label style={labelStyle}>Payout Tx Fee</label><input value={cp.clientPayoutTxFee || ""} onChange={e => updateClProv(cpIdx, "clientPayoutTxFee", e.target.value)} placeholder="e.g. 0.10" style={{ ...inputStyle, width: "100%" }} /></div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 8 }}>Client Rates</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
+                            <div><label style={labelStyle}>Rate %</label><input value={cp.clientPayinPct || ""} onChange={e => updateClProv(cpIdx, "clientPayinPct", e.target.value)} placeholder="e.g. 4.5" style={{ ...inputStyle, width: "100%" }} /></div>
+                            <div><label style={labelStyle}>Tx Fee</label><input value={cp.clientPayinTxFee || ""} onChange={e => updateClProv(cpIdx, "clientPayinTxFee", e.target.value)} placeholder="e.g. 0.20" style={{ ...inputStyle, width: "100%" }} /></div>
                           </div>
-                          {/* Auto-calculated margins */}
-                          {linkedSvc && (parseFloat(cp.clientPayinPct) || parseFloat(cp.clientPayoutPct)) ? (
-                            <div style={{ display: "flex", gap: 16, padding: "8px 12px", background: "rgba(34,197,94,0.05)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.15)", marginBottom: 10 }}>
+                          {linkedSvc && clientRate > 0 && (
+                            <div style={{ display: "flex", gap: 16, padding: "8px 12px", background: "rgba(34,197,94,0.05)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.15)", marginBottom: 8 }}>
                               <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Our Markup:</span>
-                              <span style={{ fontSize: 11 }}>Payin <strong style={{ color: marginColor(payinMarginPct) }}>{fmtMargin(payinMarginPct)}</strong>{payinMarginTx !== 0 && <> + <strong style={{ color: marginColor(payinMarginTx) }}>{fmtMarginTx(payinMarginTx)}</strong>/tx</>}</span>
-                              <span style={{ fontSize: 11 }}>Payout <strong style={{ color: marginColor(payoutMarginPct) }}>{fmtMargin(payoutMarginPct)}</strong>{payoutMarginTx !== 0 && <> + <strong style={{ color: marginColor(payoutMarginTx) }}>{fmtMarginTx(payoutMarginTx)}</strong>/tx</>}</span>
+                              <span style={{ fontSize: 11 }}>Rate <strong style={{ color: marginColor(marginPct) }}>{marginPct >= 0 ? "+" : ""}{marginPct.toFixed(3)}%</strong></span>
+                              {marginTx !== 0 && <span style={{ fontSize: 11 }}>Tx <strong style={{ color: marginColor(marginTx) }}>{marginTx >= 0 ? "+" : ""}{marginTx.toFixed(2)}</strong>/tx</span>}
                             </div>
-                          ) : null}
-                          {/* Volume Tiers for Payin */}
-                          <div style={{ marginBottom: 8 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Payin Volume Tiers (optional)</span>
-                              <button onClick={() => addTier(cpIdx, cp.payinTiers, "payinTiers")} style={{ fontSize: 9, background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>+ Tier</button>
-                            </div>
-                            {(cp.payinTiers || []).map(tier => (
-                              <div key={tier.id} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
-                                <span style={{ fontSize: 10, color: c.textMuted, width: 20 }}>Up to</span>
-                                <input value={tier.upTo || ""} onChange={e => updateTier(cpIdx, cp.payinTiers, "payinTiers", tier.id, "upTo", e.target.value)} placeholder="Volume" style={{ ...inputStyle, width: 100, fontSize: 11 }} />
-                                <span style={{ fontSize: 10, color: c.textMuted }}>→</span>
-                                <input value={tier.rate || ""} onChange={e => updateTier(cpIdx, cp.payinTiers, "payinTiers", tier.id, "rate", e.target.value)} placeholder="Rate %" style={{ ...inputStyle, width: 80, fontSize: 11 }} />
-                                <span style={{ fontSize: 10, color: c.textMuted }}>%</span>
-                                <button onClick={() => removeTier(cpIdx, cp.payinTiers, "payinTiers", tier.id)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 11 }}>✕</button>
-                              </div>
-                            ))}
-                          </div>
-                          {/* Volume Tiers for Payout */}
-                          <div>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Payout Volume Tiers (optional)</span>
-                              <button onClick={() => addTier(cpIdx, cp.payoutTiers, "payoutTiers")} style={{ fontSize: 9, background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>+ Tier</button>
-                            </div>
-                            {(cp.payoutTiers || []).map(tier => (
-                              <div key={tier.id} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
-                                <span style={{ fontSize: 10, color: c.textMuted, width: 20 }}>Up to</span>
-                                <input value={tier.upTo || ""} onChange={e => updateTier(cpIdx, cp.payoutTiers, "payoutTiers", tier.id, "upTo", e.target.value)} placeholder="Volume" style={{ ...inputStyle, width: 100, fontSize: 11 }} />
-                                <span style={{ fontSize: 10, color: c.textMuted }}>→</span>
-                                <input value={tier.rate || ""} onChange={e => updateTier(cpIdx, cp.payoutTiers, "payoutTiers", tier.id, "rate", e.target.value)} placeholder="Rate %" style={{ ...inputStyle, width: 80, fontSize: 11 }} />
-                                <span style={{ fontSize: 10, color: c.textMuted }}>%</span>
-                                <button onClick={() => removeTier(cpIdx, cp.payoutTiers, "payoutTiers", tier.id)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 11 }}>✕</button>
-                              </div>
-                            ))}
-                          </div>
+                          )}
+                          {renderTiers(cp.payinTiers, "payinTiers")}
                         </div>
                       )}
 
-                      {/* ===== PROFIT SHARE FEE MODEL ===== */}
+                      {/* ===== PROFIT SHARE ===== */}
                       {cp.feeModel === "Profit Share" && (
                         <div>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Client Pays</div>
-                              <div style={{ display: "grid", gap: 6 }}>
-                                <div><label style={labelStyle}>Payin %</label><input value={cp.clientPayinPct || ""} onChange={e => updateClProv(cpIdx, "clientPayinPct", e.target.value)} placeholder="e.g. 6.0" style={{ ...inputStyle, width: "100%" }} /></div>
-                                <div><label style={labelStyle}>Payout %</label><input value={cp.clientPayoutPct || ""} onChange={e => updateClProv(cpIdx, "clientPayoutPct", e.target.value)} placeholder="e.g. 2.0" style={{ ...inputStyle, width: "100%" }} /></div>
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Hard Cost (Base)</div>
-                              <div style={{ display: "grid", gap: 6 }}>
-                                <div><label style={labelStyle}>Payin %</label><input value={cp.hardCostPayinPct || ""} onChange={e => updateClProv(cpIdx, "hardCostPayinPct", e.target.value)} placeholder="e.g. 2.0" style={{ ...inputStyle, width: "100%" }} /></div>
-                                <div><label style={labelStyle}>Payout %</label><input value={cp.hardCostPayoutPct || ""} onChange={e => updateClProv(cpIdx, "hardCostPayoutPct", e.target.value)} placeholder="e.g. 0.5" style={{ ...inputStyle, width: "100%" }} /></div>
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Profit Share</div>
-                              <div><label style={labelStyle}>Share %</label><input value={cp.profitSharePct || ""} onChange={e => updateClProv(cpIdx, "profitSharePct", e.target.value)} placeholder="e.g. 50" style={{ ...inputStyle, width: "100%" }} /></div>
-                            </div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 8 }}>Client Rates</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                            <div><label style={labelStyle}>Rate %</label><input value={cp.clientPayinPct || ""} onChange={e => updateClProv(cpIdx, "clientPayinPct", e.target.value)} placeholder="e.g. 6.0" style={{ ...inputStyle, width: "100%" }} /></div>
+                            <div><label style={labelStyle}>Tx Fee</label><input value={cp.clientPayinTxFee || ""} onChange={e => updateClProv(cpIdx, "clientPayinTxFee", e.target.value)} placeholder="e.g. 0.20" style={{ ...inputStyle, width: "100%" }} /></div>
                           </div>
-                          {/* Auto-calculated example */}
-                          {(parseFloat(cp.clientPayinPct) && parseFloat(cp.hardCostPayinPct) && parseFloat(cp.profitSharePct)) ? (() => {
-                            const clientRate = parseFloat(cp.clientPayinPct);
-                            const hardCost = parseFloat(cp.hardCostPayinPct);
-                            const share = parseFloat(cp.profitSharePct);
-                            const profit = clientRate - hardCost;
-                            const theyGet = profit * (share / 100);
-                            const weGet = profit - theyGet;
-                            return (
-                              <div style={{ padding: "10px 12px", background: "rgba(139,92,246,0.05)", borderRadius: 6, border: "1px solid rgba(139,92,246,0.15)", marginBottom: 10 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: "#8b5cf6", textTransform: "uppercase", marginBottom: 4 }}>Payin Example Breakdown</div>
-                                <div style={{ fontSize: 11, color: c.textSecondary }}>
-                                  Client pays <strong>{clientRate}%</strong> — Hard cost <strong>{hardCost}%</strong> = <strong>{profit.toFixed(2)}%</strong> profit — Provider gets <strong>{theyGet.toFixed(2)}%</strong> ({share}%) — <strong style={{ color: "#22c55e" }}>We make {weGet.toFixed(2)}%</strong>
+                          {renderTiers(cp.payinTiers, "payinTiers")}
+                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${c.border}` }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: "#8b5cf6", textTransform: "uppercase", marginBottom: 8 }}>Provider Hard Cost & Profit Share</div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
+                              <div><label style={labelStyle}>Hard Cost %</label><input value={cp.hardCostPayinPct || ""} onChange={e => updateClProv(cpIdx, "hardCostPayinPct", e.target.value)} placeholder="e.g. 2.0" style={{ ...inputStyle, width: "100%" }} /></div>
+                              <div><label style={labelStyle}>Profit Share %</label><input value={cp.profitSharePct || ""} onChange={e => updateClProv(cpIdx, "profitSharePct", e.target.value)} placeholder="e.g. 50" style={{ ...inputStyle, width: "100%" }} /></div>
+                            </div>
+                            {(parseFloat(cp.clientPayinPct) && parseFloat(cp.hardCostPayinPct) && parseFloat(cp.profitSharePct)) ? (() => {
+                              const cr = parseFloat(cp.clientPayinPct), hc = parseFloat(cp.hardCostPayinPct), sh = parseFloat(cp.profitSharePct);
+                              const profit = cr - hc, theyGet = profit * (sh / 100), weGet = profit - theyGet;
+                              return (
+                                <div style={{ padding: "10px 12px", background: "rgba(139,92,246,0.05)", borderRadius: 6, border: "1px solid rgba(139,92,246,0.15)" }}>
+                                  <div style={{ fontSize: 11, color: c.textSecondary }}>
+                                    Client <strong>{cr}%</strong> — Cost <strong>{hc}%</strong> = <strong>{profit.toFixed(2)}%</strong> profit — They get <strong>{theyGet.toFixed(2)}%</strong> ({sh}%) — <strong style={{ color: "#22c55e" }}>We make {weGet.toFixed(2)}%</strong>
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })() : null}
+                              );
+                            })() : null}
+                          </div>
                         </div>
                       )}
 
-                      {/* ===== REFERRAL FEE MODEL ===== */}
+                      {/* ===== REFERRAL ===== */}
                       {cp.feeModel === "Referral" && (
                         <div>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 8 }}>Rates Charged to Client (by the provider)</div>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-                            <div><label style={labelStyle}>Payin %</label><input value={cp.referralPayinPct || ""} onChange={e => updateClProv(cpIdx, "referralPayinPct", e.target.value)} placeholder="e.g. 4.5" style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div><label style={labelStyle}>Payin Tx Fee</label><input value={cp.referralPayinTxFee || ""} onChange={e => updateClProv(cpIdx, "referralPayinTxFee", e.target.value)} placeholder="e.g. 0.20" style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div><label style={labelStyle}>Payout %</label><input value={cp.referralPayoutPct || ""} onChange={e => updateClProv(cpIdx, "referralPayoutPct", e.target.value)} placeholder="e.g. 1.5" style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div><label style={labelStyle}>Payout Tx Fee</label><input value={cp.referralPayoutTxFee || ""} onChange={e => updateClProv(cpIdx, "referralPayoutTxFee", e.target.value)} placeholder="e.g. 0.10" style={{ ...inputStyle, width: "100%" }} /></div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 8 }}>Rates Charged to Merchant</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                            <div><label style={labelStyle}>Rate %</label><input value={cp.referralPayinPct || ""} onChange={e => updateClProv(cpIdx, "referralPayinPct", e.target.value)} placeholder="e.g. 4.5" style={{ ...inputStyle, width: "100%" }} /></div>
+                            <div><label style={labelStyle}>Tx Fee</label><input value={cp.referralPayinTxFee || ""} onChange={e => updateClProv(cpIdx, "referralPayinTxFee", e.target.value)} placeholder="e.g. 0.20" style={{ ...inputStyle, width: "100%" }} /></div>
                           </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
-                            <div><label style={labelStyle}>Our Referral %</label><input value={cp.referralPct || ""} onChange={e => updateClProv(cpIdx, "referralPct", e.target.value)} placeholder="e.g. 10" style={{ ...inputStyle, width: "100%" }} /></div>
-                            {(parseFloat(cp.referralPct) && parseFloat(cp.referralPayinPct)) ? (
-                              <div style={{ display: "flex", alignItems: "end", padding: "0 0 6px 0" }}>
-                                <div style={{ fontSize: 11, color: c.textSecondary }}>
-                                  On <strong>{cp.referralPayinPct}%</strong> payin rate, we earn <strong style={{ color: "#22c55e" }}>{((parseFloat(cp.referralPayinPct) || 0) * (parseFloat(cp.referralPct) || 0) / 100).toFixed(3)}%</strong> per transaction ({cp.referralPct}% referral)
+                          {renderTiers(cp.payinTiers, "payinTiers")}
+                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${c.border}` }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
+                              <div><label style={labelStyle}>Our Referral %</label><input value={cp.referralPct || ""} onChange={e => updateClProv(cpIdx, "referralPct", e.target.value)} placeholder="e.g. 10" style={{ ...inputStyle, width: "100%" }} /></div>
+                              {(parseFloat(cp.referralPct) && parseFloat(cp.referralPayinPct)) ? (
+                                <div style={{ display: "flex", alignItems: "end", paddingBottom: 6 }}>
+                                  <div style={{ fontSize: 11, color: c.textSecondary }}>
+                                    {cp.referralPct}% of volume — on <strong>{cp.referralPayinPct}%</strong> rate = <strong style={{ color: "#22c55e" }}>{((parseFloat(cp.referralPayinPct)) * (parseFloat(cp.referralPct)) / 100).toFixed(3)}%</strong> effective earning
+                                  </div>
                                 </div>
-                              </div>
-                            ) : null}
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       )}
 
                       {/* Settlement */}
                       {cp.feeModel && (
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                           <div><label style={labelStyle}>Settlement Terms</label><select value={cp.settlementTerms || ""} onChange={e => updateClProv(cpIdx, "settlementTerms", e.target.value)} style={{ ...inputStyle, width: "100%" }}><option value="">— Select —</option>{SETTLEMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                           <div><label style={labelStyle}>Settlement Fee (%)</label><input value={cp.settlementFee || ""} onChange={e => updateClProv(cpIdx, "settlementFee", e.target.value)} placeholder="e.g. 0.5" style={{ ...inputStyle, width: "100%" }} /></div>
+                          <div><label style={labelStyle}>Method</label><select value={cp.settlementMethod || ""} onChange={e => updateClProv(cpIdx, "settlementMethod", e.target.value)} style={{ ...inputStyle, width: "100%" }}><option value="">— Select —</option><option value="Fiat">Fiat</option><option value="Crypto">Crypto</option></select></div>
                           <div><label style={labelStyle}>Currency</label><select value={cp.currency || "USD"} onChange={e => updateClProv(cpIdx, "currency", e.target.value)} style={{ ...inputStyle, width: "100%" }}>{CLIENT_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
                         </div>
                       )}
