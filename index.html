@@ -585,6 +585,8 @@ function AviroDashboard() {
   const [fxRates, setFxRates] = useState(DEFAULT_FX_RATES); // { currency: rateToEUR }
   const [fxBaseCurrency, setFxBaseCurrency] = useState("EUR");
   const [fxLastUpdated, setFxLastUpdated] = useState("");
+  const [fxNewCurr, setFxNewCurr] = useState("");
+  const [fxNewRate, setFxNewRate] = useState("");
 
   // FX conversion function using live rates
   const toEUR = useCallback((amount, currency) => {
@@ -5608,8 +5610,6 @@ function AviroDashboard() {
     const labelStyle5 = { fontSize: 10, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, display: "block" };
 
     const sortedCurrencies = Object.entries(fxRates).sort((a, b) => a[0].localeCompare(b[0]));
-    const [newCurr, setNewCurr] = useState("");
-    const [newRate, setNewRate] = useState("");
 
     const updateRate = (curr, rate) => {
       const val = parseFloat(rate);
@@ -5618,12 +5618,12 @@ function AviroDashboard() {
     };
 
     const addCurrency = () => {
-      if (!newCurr || !newRate) return;
-      const val = parseFloat(newRate);
+      if (!fxNewCurr || !fxNewRate) return;
+      const val = parseFloat(fxNewRate);
       if (isNaN(val) || val <= 0) return;
-      setFxRates(prev => ({ ...prev, [newCurr.toUpperCase().trim()]: val }));
-      setNewCurr("");
-      setNewRate("");
+      setFxRates(prev => ({ ...prev, [fxNewCurr.toUpperCase().trim()]: val }));
+      setFxNewCurr("");
+      setFxNewRate("");
     };
 
     const removeCurrency = (curr) => {
@@ -5708,11 +5708,11 @@ function AviroDashboard() {
             <div style={{ display: "flex", gap: 10, alignItems: "end" }}>
               <div>
                 <label style={labelStyle5}>Currency Code</label>
-                <input value={newCurr} onChange={e => setNewCurr(e.target.value.toUpperCase())} placeholder="e.g. CHF" maxLength={4} style={{ ...inputStyle5, width: 100, textTransform: "uppercase" }} />
+                <input value={fxNewCurr} onChange={e => setFxNewCurr(e.target.value.toUpperCase())} placeholder="e.g. CHF" maxLength={4} style={{ ...inputStyle5, width: 100, textTransform: "uppercase" }} />
               </div>
               <div>
                 <label style={labelStyle5}>Rate (1 unit = ? EUR)</label>
-                <input type="number" step="any" value={newRate} onChange={e => setNewRate(e.target.value)} placeholder="e.g. 1.04" style={{ ...inputStyle5, width: 140 }} />
+                <input type="number" step="any" value={fxNewRate} onChange={e => setFxNewRate(e.target.value)} placeholder="e.g. 1.04" style={{ ...inputStyle5, width: 140 }} />
               </div>
               <button onClick={addCurrency} style={{ fontSize: 12, padding: "8px 20px", borderRadius: 8, cursor: "pointer", border: "none", background: c.accent, color: "#fff", fontWeight: 600 }}>Add</button>
             </div>
