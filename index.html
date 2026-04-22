@@ -2701,7 +2701,7 @@ function AviroDashboard() {
 
           {/* Sub-tab navigation */}
           <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${c.border}`, paddingBottom: 0 }}>
-            {[{ key: "corporate", label: "Corporate Details" }, { key: "providers", label: "Providers & Deal" }, { key: "introducer", label: "Introducer" }].map(tab => {
+            {[{ key: "corporate", label: "Corporate Details" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }].map(tab => {
               const sel = clientDetailTab === tab.key;
               return <button key={tab.key} onClick={() => setClientDetailTab(tab.key)} style={{ padding: "10px 20px", fontSize: 12, fontWeight: sel ? 700 : 500, color: sel ? c.accent : c.textMuted, background: sel ? `${c.accent}12` : "transparent", border: "none", borderBottom: sel ? `2px solid ${c.accent}` : "2px solid transparent", cursor: "pointer", marginBottom: -1, transition: "all 0.15s" }}>{tab.label}</button>;
             })}
@@ -3067,6 +3067,116 @@ function AviroDashboard() {
             </div>
 
             </>)}
+
+            {/* ===== RATES OVERVIEW TAB ===== */}
+            {clientDetailTab === "rates" && (() => {
+              const clProviders = cl.clientProviders || [];
+              return (<>
+              <div style={{ ...sectionCard, borderColor: `${c.accent}30` }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: c.accent, marginBottom: 16, textTransform: "uppercase" }}>Rates Overview</div>
+                {clProviders.length === 0 ? (
+                  <div style={{ background: c.surface, borderRadius: 10, padding: 30, textAlign: "center", border: `1px dashed ${c.border}` }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 4 }}>No providers configured</div>
+                    <div style={{ fontSize: 12, color: c.textMuted }}>Add providers in the "Providers & Deal" tab to see rates here</div>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ borderBottom: `2px solid ${c.border}` }}>
+                          {["Provider", "Type", "Deal", "Rate", "Settlement"].map(h => (
+                            <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {clProviders.map((cp, cpIdx) => {
+                          const linkedProv = providers.find(p => p.id === cp.providerId);
+                          const linkedSvc = linkedProv ? (linkedProv.services || []).find(s => s.id === cp.serviceId) : null;
+                          const provName = linkedProv ? linkedProv.name : "—";
+                          const svcName = linkedSvc ? (linkedSvc.name || "Unnamed") : "";
+
+                          // Type info
+                          const typeLabels = [];
+                          if (linkedSvc) {
+                            if (linkedSvc.serviceType1) typeLabels.push(linkedSvc.serviceType1);
+                            if (linkedSvc.serviceType2) typeLabels.push(linkedSvc.serviceType2);
+                            if (linkedSvc.cardType) typeLabels.push(linkedSvc.cardType);
+                          }
+                          const typeStr = typeLabels.length > 0 ? typeLabels.join(" · ") : "—";
+
+                          // Deal / fee model
+                          const deal = cp.feeModel || "—";
+
+                          // Rate display
+                          let rateDisplay = "—";
+                          const tiers = cp.payinTiers || [];
+                          const basePct = cp.clientPayinPct || "";
+                          const baseTx = cp.clientPayinTxFee || "";
+                          if (basePct || baseTx) {
+                            const parts = [];
+                            if (basePct) parts.push(`${basePct}%`);
+                            if (baseTx) parts.push(`${baseTx} tx`);
+                            rateDisplay = parts.join(" + ");
+                          }
+
+                          // Settlement display
+                          const settleParts = [];
+                          if (cp.settlementTerms) settleParts.push(cp.settlementTerms);
+                          if (cp.settlementFee) settleParts.push(`Fee: ${cp.settlementFee}`);
+                          if (cp.settlementMethod) settleParts.push(cp.settlementMethod);
+                          if (cp.settlementCurrency) settleParts.push(cp.settlementCurrency);
+                          const settleStr = settleParts.length > 0 ? settleParts.join(" · ") : "—";
+
+                          // Deal-specific extras
+                          let dealExtra = "";
+                          if (cp.feeModel === "Profit Share") {
+                            const parts = [];
+                            if (cp.hardCostPayinPct) parts.push(`Hard Cost: ${cp.hardCostPayinPct}%`);
+                            if (cp.profitSharePct) parts.push(`Share: ${cp.profitSharePct}%`);
+                            dealExtra = parts.join(" · ");
+                          } else if (cp.feeModel === "Referral") {
+                            if (cp.referralPct) dealExtra = `Referral: ${cp.referralPct}%`;
+                          }
+
+                          const feeModelColor = deal === "Direct" ? "#22c55e" : deal === "Profit Share" ? "#8b5cf6" : deal === "Referral" ? "#f59e0b" : c.textMuted;
+
+                          return (
+                            <React.Fragment key={cp.id || cpIdx}>
+                              <tr style={{ borderBottom: `1px solid ${c.border}20` }}>
+                                <td style={{ padding: "12px 12px", verticalAlign: "top" }}>
+                                  <div style={{ fontWeight: 600, color: c.text }}>{provName}</div>
+                                  {svcName && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{svcName}</div>}
+                                </td>
+                                <td style={{ padding: "12px 12px", verticalAlign: "top", color: c.textSecondary }}>{typeStr}</td>
+                                <td style={{ padding: "12px 12px", verticalAlign: "top" }}>
+                                  <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: `${feeModelColor}15`, color: feeModelColor }}>{deal}</span>
+                                  {dealExtra && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{dealExtra}</div>}
+                                </td>
+                                <td style={{ padding: "12px 12px", verticalAlign: "top" }}>
+                                  <div style={{ fontWeight: 600, color: c.text }}>{rateDisplay}</div>
+                                  {tiers.length > 0 && (
+                                    <div style={{ marginTop: 4 }}>
+                                      {tiers.map((tier, tIdx) => (
+                                        <div key={tier.id || tIdx} style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
+                                          <span style={{ color: c.accent }}>↳</span> Up to {tier.upTo || "∞"} → {tier.rate || "—"}%
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ padding: "12px 12px", verticalAlign: "top", fontSize: 11, color: c.textSecondary }}>{settleStr}</td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              </>);
+            })()}
 
             {/* ===== PROVIDERS & DEAL TAB ===== */}
             {clientDetailTab === "providers" && (() => {
