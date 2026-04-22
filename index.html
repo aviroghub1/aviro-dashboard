@@ -23,8 +23,7 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useRef, useCallback } = React;
-
+import { useState, useCallback, useRef, useEffect } from "react";
 
 // ===== AVIRO GROUP MASTER DASHBOARD =====
 const ENTITY_TYPES = ["Gaming License", "Payment Agent", "Technology Company", "Management Company", "Financial Institute", "Cayman Foundation Company", "Other"];
@@ -91,7 +90,7 @@ const GATEWAY_CLIENTS = [
 
 // Metabase connection configs — keyed by client name (matched case-insensitive)
 const METABASE_DEFAULTS = {
-  "elite bet": { url: "https://reports.elitebet.bookiebase.ie", username: "David@aviro-group.com", password: "Elitebet1$", depositCard: 57, withdrawalCard: 58 },
+  "elite bet": { url: "https://reports.elitebet.bookiebase.ie", username: "David@aviro-group.com", password: "Elitebet1$", depositCard: 57, withdrawalCard: 58, dateFieldId: 443 },
 };
 
 // Simple FX rates to EUR (update as needed)
@@ -209,7 +208,7 @@ const motionFetch = async (endpoint, opts = {}) => {
   throw new Error("All Motion API attempts failed (CORS)");
 };
 
-function AviroDashboard() {
+export default function AviroDashboard() {
   const [section, setSection] = useState("home");
   const [collapsed, setCollapsed] = useState(false);
 
@@ -705,7 +704,7 @@ function AviroDashboard() {
     if (existing.sessionToken || mbAutoConnectRef.current[client.id]) { console.log("[MB] Already connected or attempted:", client.name, !!existing.sessionToken); return; }
     mbAutoConnectRef.current[client.id] = true;
     console.log("[MB] Auto-connecting:", client.name, "to", defaults.url);
-    // Auto-connect and auto-fetch
+    // Auto-connect, fetch current month, cache in Supabase
     (async () => {
       setMbLoading(true); setMbError(""); setMbFetchStatus("Connecting to Metabase...");
       try {
@@ -716,16 +715,11 @@ function AviroDashboard() {
           });
           return resp.json();
         };
-        const authResp = await proxyCall("/api/session", "POST", { username: defaults.username, password: defaults.password });
-        if (!authResp.id) { setMbError(authResp.message || authResp.error || JSON.stringify(authResp)); setMbLoading(false); setMbFetchStatus(""); return; }
-        const token = authResp.id;
-        console.log("[MB] Auth success, fetching data...");
 
         // Parse Metabase summary rows into structured data with FX conversion
-        const parseSummaryRows = (rows, isWithdrawal) => {
+        const parseSummaryRows = (rows) => {
           const methods = {};
-          let totalGross = 0;
-          let totalFees = 0;
+          let totalGross = 0, totalFees = 0;
           (rows || []).forEach(r => {
             const currency = r["Currency"] || "EUR";
             const method = r["Core Account - Account → Account"] || "Unknown";
@@ -734,46 +728,108 @@ function AviroDashboard() {
             const count = parseInt(r["Count"]) || 0;
             const grossEUR = toEUR(grossRaw, currency);
             const feesEUR = toEUR(feesRaw, currency);
-            totalGross += grossEUR;
-            totalFees += feesEUR;
-            if (!methods[method]) methods[method] = { gross: 0, fees: 0, count: 0, currencies: {} };
-            methods[method].gross += grossEUR;
-            methods[method].fees += feesEUR;
-            methods[method].count += count;
-            if (!methods[method].currencies[currency]) methods[method].currencies[currency] = { gross: 0, fees: 0, count: 0 };
-            methods[method].currencies[currency].gross += grossRaw;
-            methods[method].currencies[currency].fees += feesRaw;
-            methods[method].currencies[currency].count += count;
+            totalGross += grossEUR; totalFees += feesEUR;
+            if (!methods[method]) methods[method] = { gross: 0, fees: 0, count: 0 };
+            methods[method].gross += grossEUR; methods[method].fees += feesEUR; methods[method].count += count;
           });
           return { totalGross, totalFees, methods };
         };
 
-        // Fetch deposit and withdrawal data
-        setMbFetchStatus("Loading transaction data...");
-        const [depRows, wdRows] = await Promise.all([
-          defaults.depositCard ? proxyCall(`/api/card/${defaults.depositCard}/query/json`, "POST", {}, token) : [],
-          defaults.withdrawalCard ? proxyCall(`/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, token) : [],
-        ]);
+        // Build date filter parameters for a given month (YYYY-MM)
+        const dateParams = (monthStr) => defaults.dateFieldId ? [{
+          type: "date/month-year",
+          target: ["dimension", ["field", defaults.dateFieldId, null]],
+          value: monthStr,
+        }] : [];
 
-        const depData = parseSummaryRows(Array.isArray(depRows) ? depRows : [], false);
-        const wdData = parseSummaryRows(Array.isArray(wdRows) ? wdRows : [], true);
-
-        console.log("[MB] Deposits:", depData.totalGross.toFixed(2), "EUR, methods:", Object.keys(depData.methods).length);
-        console.log("[MB] Withdrawals:", wdData.totalGross.toFixed(2), "EUR, methods:", Object.keys(wdData.methods).length);
-
-        const result = {
-          deposits: depData.totalGross.toFixed(2),
-          withdrawals: wdData.totalGross.toFixed(2),
-          depositFees: depData.totalFees.toFixed(2),
-          withdrawalFees: wdData.totalFees.toFixed(2),
-          depositMethods: depData.methods,
-          withdrawalMethods: wdData.methods,
+        // Fetch card data with date filter
+        const fetchCardMonth = async (cardId, monthStr, token) => {
+          const resp = await proxyCall(`/api/card/${cardId}/query/json`, "POST", { parameters: dateParams(monthStr) }, token);
+          return Array.isArray(resp) ? resp : [];
         };
+
+        // Check Supabase cache first
+        const now = new Date();
+        const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+        const cacheKey = `mb_cache_${client.name.toLowerCase().replace(/\s+/g, "_")}`;
+
+        // Try to load cached data from Supabase
+        let cached = {};
+        try {
+          const supaResp = await fetch(`${SUPA_URL}/rest/v1/metabase_cache?select=*&client_name=eq.${encodeURIComponent(client.name)}`, {
+            headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+          });
+          if (supaResp.ok) {
+            const rows = await supaResp.json();
+            rows.forEach(r => { cached[r.month] = JSON.parse(r.data); });
+            console.log("[MB] Cached months from Supabase:", Object.keys(cached));
+          }
+        } catch (e) { console.log("[MB] Supabase cache not available, using Metabase directly"); }
+
+        // Authenticate with Metabase
+        const authResp = await proxyCall("/api/session", "POST", { username: defaults.username, password: defaults.password });
+        if (!authResp.id) { setMbError(authResp.message || authResp.error || JSON.stringify(authResp)); setMbLoading(false); setMbFetchStatus(""); return; }
+        const token = authResp.id;
+        console.log("[MB] Auth success, fetching data for", curMonth);
+
+        // Always fetch current month fresh (it changes)
+        setMbFetchStatus("Loading current month (" + curMonth + ")...");
+        const [curDepRows, curWdRows] = await Promise.all([
+          defaults.depositCard ? fetchCardMonth(defaults.depositCard, curMonth, token) : [],
+          defaults.withdrawalCard ? fetchCardMonth(defaults.withdrawalCard, curMonth, token) : [],
+        ]);
+        const curDepData = parseSummaryRows(curDepRows);
+        const curWdData = parseSummaryRows(curWdRows);
+        const curResult = {
+          month: curMonth,
+          deposits: curDepData.totalGross.toFixed(2), withdrawals: curWdData.totalGross.toFixed(2),
+          depositFees: curDepData.totalFees.toFixed(2), withdrawalFees: curWdData.totalFees.toFixed(2),
+          depositMethods: curDepData.methods, withdrawalMethods: curWdData.methods,
+        };
+        console.log("[MB] Current month:", curResult.deposits, "deps,", curResult.withdrawals, "wds");
+
+        // For previous month: use cache if available, otherwise fetch
+        let prevResult;
+        if (cached[prevMonth]) {
+          prevResult = cached[prevMonth];
+          console.log("[MB] Previous month loaded from cache");
+        } else {
+          setMbFetchStatus("Loading previous month (" + prevMonth + ")...");
+          const [prevDepRows, prevWdRows] = await Promise.all([
+            defaults.depositCard ? fetchCardMonth(defaults.depositCard, prevMonth, token) : [],
+            defaults.withdrawalCard ? fetchCardMonth(defaults.withdrawalCard, prevMonth, token) : [],
+          ]);
+          const prevDepData = parseSummaryRows(prevDepRows);
+          const prevWdData = parseSummaryRows(prevWdRows);
+          prevResult = {
+            month: prevMonth,
+            deposits: prevDepData.totalGross.toFixed(2), withdrawals: prevWdData.totalGross.toFixed(2),
+            depositFees: prevDepData.totalFees.toFixed(2), withdrawalFees: prevWdData.totalFees.toFixed(2),
+            depositMethods: prevDepData.methods, withdrawalMethods: prevWdData.methods,
+          };
+          console.log("[MB] Previous month fetched fresh");
+        }
+
+        // Save to Supabase cache (upsert)
+        const saveToCache = async (monthData) => {
+          try {
+            await fetch(`${SUPA_URL}/rest/v1/metabase_cache`, {
+              method: "POST",
+              headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+              body: JSON.stringify({ client_name: client.name, month: monthData.month, data: JSON.stringify(monthData), synced_at: new Date().toISOString() }),
+            });
+          } catch (e) { console.log("[MB] Cache save failed:", e.message); }
+        };
+        saveToCache(curResult);
+        if (!cached[prevMonth]) saveToCache(prevResult);
 
         const newConfig = { ...defaults, sessionToken: token };
         setMetabaseConfigs(prev => ({ ...prev, [client.id]: newConfig }));
-        setMbCurrentData(prev => ({ ...prev, [client.id]: result }));
-        setCubePayMonthlyData(prev => ({ ...prev, [client.id]: result }));
+        setMbCurrentData(prev => ({ ...prev, [client.id]: curResult }));
+        setMbPrevData(prev => ({ ...prev, [client.id]: prevResult }));
+        setCubePayMonthlyData(prev => ({ ...prev, [client.id]: curResult }));
         setMbFetchStatus("");
       } catch (e) { console.error("[MB] Error:", e); setMbError("Failed: " + e.message); setMbFetchStatus(""); }
       setMbLoading(false);
@@ -5985,15 +6041,29 @@ function AviroDashboard() {
                   });
                   return { totalGross, totalFees, methods };
                 };
+                // Date filter for current month
+                const now = new Date();
+                const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                const dateFilterParams = defaults.dateFieldId ? [{ type: "date/month-year", target: ["dimension", ["field", defaults.dateFieldId, null]], value: curMonth }] : [];
+
                 const [depRows, wdRows] = await Promise.all([
-                  defaults.depositCard ? proxyCall(`/api/card/${defaults.depositCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
-                  defaults.withdrawalCard ? proxyCall(`/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
+                  defaults.depositCard ? proxyCall(`/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateFilterParams }, mbConfig.sessionToken) : [],
+                  defaults.withdrawalCard ? proxyCall(`/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateFilterParams }, mbConfig.sessionToken) : [],
                 ]);
                 const depData = parseSummaryRows(Array.isArray(depRows) ? depRows : []);
                 const wdData = parseSummaryRows(Array.isArray(wdRows) ? wdRows : []);
-                const result = { deposits: depData.totalGross.toFixed(2), withdrawals: wdData.totalGross.toFixed(2), depositFees: depData.totalFees.toFixed(2), withdrawalFees: wdData.totalFees.toFixed(2), depositMethods: depData.methods, withdrawalMethods: wdData.methods };
+                const result = { month: curMonth, deposits: depData.totalGross.toFixed(2), withdrawals: wdData.totalGross.toFixed(2), depositFees: depData.totalFees.toFixed(2), withdrawalFees: wdData.totalFees.toFixed(2), depositMethods: depData.methods, withdrawalMethods: wdData.methods };
                 setMbCurrentData(prev => ({ ...prev, [client.id]: result }));
                 setCubePayMonthlyData(prev => ({ ...prev, [client.id]: result }));
+
+                // Save refreshed data to Supabase cache
+                try {
+                  await fetch(`${SUPA_URL}/rest/v1/metabase_cache`, {
+                    method: "POST",
+                    headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+                    body: JSON.stringify({ client_name: client.name, month: curMonth, data: JSON.stringify(result), synced_at: new Date().toISOString() }),
+                  });
+                } catch (e) { console.log("[MB] Cache save on refresh failed:", e.message); }
                 setMbFetchStatus("");
               } catch (e) { setMbFetchStatus("Error: " + e.message); }
             };
@@ -6750,7 +6820,6 @@ function AviroDashboard() {
     </div>
   );
 }
-
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(AviroDashboard));
 </script>
