@@ -792,41 +792,55 @@ function AviroDashboard() {
         const token = authResp.id;
         console.log("[MB] Auth success, token obtained");
 
-        // 3) Build list of months to fetch: always current month + any missing months going back 6 months
-        const monthsToFetch = [];
-        for (let i = 0; i < 6; i++) {
-          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-          const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-          if (m === curMonth || !cachedMonthSet.has(m)) monthsToFetch.push(m);
-        }
-        console.log("[MB] Months to fetch from Metabase:", monthsToFetch);
+        // 3) Fetch ALL data from Metabase (cards don't support date parameters)
+        setMbFetchStatus("Fetching all data...");
+        const [depRows, wdRows] = await Promise.all([
+          defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", {}, token) : [],
+          defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, token) : [],
+        ]);
+        const depArr = Array.isArray(depRows) ? depRows : [];
+        const wdArr = Array.isArray(wdRows) ? wdRows : [];
+        console.log("[MB] Fetched:", depArr.length, "deposit rows,", wdArr.length, "withdrawal rows");
+        if (depArr.length > 0) console.log("[MB] Deposit row keys:", Object.keys(depArr[0]));
+        if (depArr.length > 0) console.log("[MB] First deposit row:", JSON.stringify(depArr[0]));
+        if (wdArr.length > 0) console.log("[MB] Withdrawal row keys:", Object.keys(wdArr[0]));
+        if (wdArr.length > 0) console.log("[MB] First withdrawal row:", JSON.stringify(wdArr[0]));
 
-        // 4) Date filter builder
-        const dateParams = (monthStr) => defaults.dateFieldId ? [{
-          type: "date/month-year",
-          target: ["dimension", ["field", defaults.dateFieldId, null]],
-          value: monthStr,
-        }] : [];
+        // 4) Parse rows — extract month from date field if available
+        const dateFieldName = defaults.dateFieldName || "Created At";
+        const extractMonth = (row) => {
+          // Try common date field names
+          const dateVal = row[dateFieldName] || row["Created At"] || row["Date"] || row["Transaction Date"] || row["created_at"] || row["date"];
+          if (dateVal) {
+            const d = new Date(dateVal);
+            if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          }
+          // If no date field, use current month as fallback
+          return curMonth;
+        };
 
-        // 5) Fetch each missing month
-        let newRows = [];
-        for (const m of monthsToFetch) {
-          setMbFetchStatus(`Fetching ${m}...`);
-          const [depRows, wdRows] = await Promise.all([
-            defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateParams(m) }, token) : [],
-            defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateParams(m) }, token) : [],
-          ]);
-          const depRecords = parseMbRows(Array.isArray(depRows) ? depRows : [], "deposit", m);
-          const wdRecords = parseMbRows(Array.isArray(wdRows) ? wdRows : [], "withdrawal", m);
-          newRows = [...newRows, ...depRecords, ...wdRecords];
-          console.log("[MB]", m, ":", depRecords.length, "dep rows,", wdRecords.length, "wd rows");
-        }
+        const parseMbRowsWithDate = (rows, txType) => {
+          return (rows || []).map(r => ({
+            month: extractMonth(r),
+            tx_type: txType,
+            currency: r["Currency"] || "EUR",
+            method: r["Core Account - Account → Account"] || r["Account"] || r["Method"] || "Unknown",
+            tx_count: parseInt(r["Count"]) || 0,
+            gross_amount: Math.abs(parseFloat(r["Sum of Amount"]) || 0),
+            fee_amount: Math.abs(parseFloat(r["Sum of Fee"]) || 0),
+          }));
+        };
 
-        // 6) Save new rows to Supabase (upsert)
+        let newRows = [...parseMbRowsWithDate(depArr, "deposit"), ...parseMbRowsWithDate(wdArr, "withdrawal")];
+        const monthsInData = [...new Set(newRows.map(r => r.month))].sort();
+        console.log("[MB] Months found in data:", monthsInData);
+        console.log("[MB] Total parsed rows:", newRows.length);
+
+        // 5) Save new rows to Supabase (upsert)
         if (newRows.length > 0) {
           setMbFetchStatus("Saving to database...");
-          // Delete existing rows for fetched months first, then insert fresh
-          for (const m of monthsToFetch) {
+          // Delete existing rows for all months we got data for, then insert fresh
+          for (const m of monthsInData) {
             try {
               await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${m}`, {
                 method: "DELETE",
@@ -848,9 +862,8 @@ function AviroDashboard() {
           console.log("[MB] Saved", insertRows.length, "rows to Supabase");
         }
 
-        // 7) Merge cached + new into full row set
-        // Remove old rows for re-fetched months from cachedRows, add newRows
-        const fetchedMonthSet = new Set(monthsToFetch);
+        // 6) Merge cached + new into full row set
+        const fetchedMonthSet = new Set(monthsInData);
         const allRows = [...cachedRows.filter(r => !fetchedMonthSet.has(r.month)), ...newRows];
         setMbSummaryRows(prev => ({ ...prev, [client.id]: allRows }));
         const allMonths = new Set(allRows.map(r => r.month));
@@ -6470,62 +6483,49 @@ function AviroDashboard() {
               </div>
             );
 
-            // Refresh handler
+            // Refresh handler — re-fetches all data from Metabase (no date params)
             const refreshData = async () => {
               const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
               if (!defaults || !mbConfig.sessionToken) return;
               setMbFetchStatus("Refreshing...");
               try {
-                const dateParams = (monthStr) => defaults.dateFieldId ? [{ type: "date/month-year", target: ["dimension", ["field", defaults.dateFieldId, null]], value: monthStr }] : [];
-                const rangeMonths = [curMonth, prevMonth];
-                let freshRows = [];
-                for (const m of rangeMonths) {
-                  setMbFetchStatus(`Refreshing ${m}...`);
-                  const [depRows, wdRows] = await Promise.all([
-                    defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateParams(m) }, mbConfig.sessionToken) : [],
-                    defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateParams(m) }, mbConfig.sessionToken) : [],
-                  ]);
-                  freshRows = [...freshRows, ...parseMbRows(Array.isArray(depRows) ? depRows : [], "deposit", m), ...parseMbRows(Array.isArray(wdRows) ? wdRows : [], "withdrawal", m)];
-                }
-                const rangeSet = new Set(rangeMonths);
-                for (const m of rangeMonths) {
+                const [depRows, wdRows] = await Promise.all([
+                  defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
+                  defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
+                ]);
+                const dateFieldName = defaults.dateFieldName || "Created At";
+                const extractMo = (row) => {
+                  const dv = row[dateFieldName] || row["Created At"] || row["Date"] || row["Transaction Date"] || row["created_at"];
+                  if (dv) { const dt = new Date(dv); if (!isNaN(dt.getTime())) return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; }
+                  return curMonth;
+                };
+                const parseFresh = (rows, txType) => (rows || []).map(r => ({
+                  month: extractMo(r), tx_type: txType,
+                  currency: r["Currency"] || "EUR",
+                  method: r["Core Account - Account → Account"] || r["Account"] || r["Method"] || "Unknown",
+                  tx_count: parseInt(r["Count"]) || 0,
+                  gross_amount: Math.abs(parseFloat(r["Sum of Amount"]) || 0),
+                  fee_amount: Math.abs(parseFloat(r["Sum of Fee"]) || 0),
+                }));
+                const freshRows = [...parseFresh(Array.isArray(depRows) ? depRows : [], "deposit"), ...parseFresh(Array.isArray(wdRows) ? wdRows : [], "withdrawal")];
+                const freshMonths = [...new Set(freshRows.map(r => r.month))];
+                // Save to Supabase
+                for (const m of freshMonths) {
                   try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${m}`, { method: "DELETE", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }); } catch (e) {}
                 }
                 const insertRows = freshRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
                 for (let i = 0; i < insertRows.length; i += 50) {
                   try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, { method: "POST", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(insertRows.slice(i, i + 50)) }); } catch (e) {}
                 }
-                const updatedRows = [...allRows.filter(r => !rangeSet.has(r.month)), ...freshRows];
+                const freshMonthSet = new Set(freshMonths);
+                const updatedRows = [...allRows.filter(r => !freshMonthSet.has(r.month)), ...freshRows];
                 setMbSummaryRows(prev => ({ ...prev, [client.id]: updatedRows }));
+                setMbCachedMonths(prev => ({ ...prev, [client.id]: new Set(updatedRows.map(r => r.month)) }));
                 const agg = aggregateSummary(updatedRows, curMonth, curMonth);
                 setMbCurrentData(prev => ({ ...prev, [client.id]: agg }));
                 setCubePayMonthlyData(prev => ({ ...prev, [client.id]: agg }));
                 const prevAgg = aggregateSummary(updatedRows, prevMonth, prevMonth);
                 setMbPrevData(prev => ({ ...prev, [client.id]: prevAgg }));
-                setMbFetchStatus("");
-              } catch (e) { setMbFetchStatus("Error: " + e.message); }
-            };
-
-            // Fetch older months on demand
-            const fetchOlderMonth = async (monthStr) => {
-              const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
-              if (!defaults || !mbConfig.sessionToken) return;
-              setMbFetchStatus(`Fetching ${monthStr}...`);
-              try {
-                const dateParams = defaults.dateFieldId ? [{ type: "date/month-year", target: ["dimension", ["field", defaults.dateFieldId, null]], value: monthStr }] : [];
-                const [depRows, wdRows] = await Promise.all([
-                  defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateParams }, mbConfig.sessionToken) : [],
-                  defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateParams }, mbConfig.sessionToken) : [],
-                ]);
-                const newRows = [...parseMbRows(Array.isArray(depRows) ? depRows : [], "deposit", monthStr), ...parseMbRows(Array.isArray(wdRows) ? wdRows : [], "withdrawal", monthStr)];
-                const insertRows = newRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
-                try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${monthStr}`, { method: "DELETE", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }); } catch (e) {}
-                for (let i = 0; i < insertRows.length; i += 50) {
-                  try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, { method: "POST", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(insertRows.slice(i, i + 50)) }); } catch (e) {}
-                }
-                const updatedRows = [...allRows, ...newRows];
-                setMbSummaryRows(prev => ({ ...prev, [client.id]: updatedRows }));
-                setMbCachedMonths(prev => ({ ...prev, [client.id]: new Set([...cachedMonths, monthStr]) }));
                 setMbFetchStatus("");
               } catch (e) { setMbFetchStatus("Error: " + e.message); }
             };
@@ -6637,9 +6637,9 @@ function AviroDashboard() {
                           }
                           if (missing.length === 0) return null;
                           return (
-                            <button onClick={async () => { for (const m of missing) await fetchOlderMonth(m); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontWeight: 600 }}>
-                              Fetch {missing.length} missing month{missing.length > 1 ? "s" : ""}
-                            </button>
+                            <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 600 }}>
+                              {missing.length} month{missing.length > 1 ? "s" : ""} not yet loaded — hit Refresh above to pull all data
+                            </span>
                           );
                         })()}
                       </div>
