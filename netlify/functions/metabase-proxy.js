@@ -1,25 +1,7 @@
 // Netlify Function: proxies requests to Metabase instances to avoid CORS issues
 // Usage: POST /.netlify/functions/metabase-proxy
 // Body: { metabaseUrl, path, method, body, sessionToken }
-
-const https = require("https");
-const http = require("http");
-const { URL } = require("url");
-
-function makeRequest(parsedUrl, options, postData) {
-  return new Promise((resolve, reject) => {
-    const lib = parsedUrl.protocol === "https:" ? https : http;
-    const req = lib.request(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => { data += chunk; });
-      res.on("end", () => resolve({ status: res.statusCode, body: data }));
-    });
-    req.on("error", (e) => reject(new Error(`Request failed: ${e.message}`)));
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error("Request timeout after 30s")); });
-    if (postData) req.write(postData);
-    req.end();
-  });
-}
+// Uses native fetch (Node 18+) — no external dependencies
 
 exports.handler = async (event) => {
   const headers = {
@@ -44,37 +26,38 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "metabaseUrl and path are required" }) };
     }
 
-    // Build the full URL
     const fullUrl = `${metabaseUrl.replace(/\/$/, "")}${path}`;
-    const parsedUrl = new URL(fullUrl);
+    console.log("[proxy]", method || "GET", fullUrl);
 
-    // Build request headers
-    const reqHeaders = { "Content-Type": "application/json" };
+    const fetchHeaders = { "Content-Type": "application/json" };
     if (sessionToken) {
-      reqHeaders["X-Metabase-Session"] = sessionToken;
+      fetchHeaders["X-Metabase-Session"] = sessionToken;
     }
 
-    const postData = (body && (method === "POST" || method === "PUT" || method === "PATCH")) ? JSON.stringify(body) : null;
-    if (postData) {
-      reqHeaders["Content-Length"] = Buffer.byteLength(postData);
-    }
-
-    const options = {
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port || (parsedUrl.protocol === "https:" ? 443 : 80),
-      path: parsedUrl.pathname + parsedUrl.search,
+    const fetchOptions = {
       method: method || "GET",
-      headers: reqHeaders,
+      headers: fetchHeaders,
     };
 
-    const response = await makeRequest(parsedUrl, options, postData);
+    if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
+      fetchOptions.body = JSON.stringify(body);
+    }
 
-    // Try to parse as JSON, otherwise return as text
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    fetchOptions.signal = controller.signal;
+
+    const response = await fetch(fullUrl, fetchOptions);
+    clearTimeout(timeout);
+
+    const responseText = await response.text();
+    console.log("[proxy] Response:", response.status, responseText.substring(0, 200));
+
     let responseBody;
     try {
-      responseBody = JSON.parse(response.body);
+      responseBody = JSON.parse(responseText);
     } catch {
-      responseBody = { raw: response.body };
+      responseBody = { raw: responseText };
     }
 
     return {
@@ -83,11 +66,15 @@ exports.handler = async (event) => {
       body: JSON.stringify(responseBody),
     };
   } catch (error) {
-    console.error("Proxy error:", error.message, error.stack);
+    console.error("[proxy] Error:", error.name, error.message);
+    const isTimeout = error.name === "AbortError";
     return {
-      statusCode: 500,
+      statusCode: isTimeout ? 504 : 500,
       headers,
-      body: JSON.stringify({ error: error.message, stack: error.stack }),
+      body: JSON.stringify({
+        error: isTimeout ? "Request timed out after 25s" : error.message,
+        type: error.name,
+      }),
     };
   }
 };
