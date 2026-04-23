@@ -83,10 +83,11 @@ exports.handler = async (event) => {
       body: JSON.stringify(responseBody),
     };
   } catch (error) {
+    console.error("Proxy error:", error.message, error.stack);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message }),
+      body: JSON.stringify({ error: error.message, stack: error.stack }),
     };
   }
 };

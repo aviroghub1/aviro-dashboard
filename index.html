@@ -690,11 +690,20 @@ function AviroDashboard() {
 
   // ===== METABASE HELPERS =====
   const mbProxyCall = useCallback(async (baseUrl, path, method, body, token) => {
+    const payload = { metabaseUrl: baseUrl, path, method: method || "GET", body, sessionToken: token };
+    console.log("[MB] Proxy call:", path, method || "GET");
     const resp = await fetch("/.netlify/functions/metabase-proxy", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ metabaseUrl: baseUrl, path, method: method || "GET", body, sessionToken: token }),
+      body: JSON.stringify(payload),
     });
-    return resp.json();
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error("[MB] Proxy error:", resp.status, errText);
+      try { return JSON.parse(errText); } catch (e) { return { error: errText }; }
+    }
+    const data = await resp.json();
+    console.log("[MB] Proxy response for", path, ":", Array.isArray(data) ? `${data.length} rows` : typeof data === "object" ? Object.keys(data).join(",") : "ok");
+    return data;
   }, []);
 
   // Parse Metabase summary rows into individual Supabase-ready records
@@ -863,7 +872,7 @@ function AviroDashboard() {
         const newConfig = { ...defaults, sessionToken: token };
         setMetabaseConfigs(prev => ({ ...prev, [client.id]: newConfig }));
         setMbFetchStatus("");
-      } catch (e) { console.error("[MB] Error:", e); setMbError("Failed: " + e.message); setMbFetchStatus(""); }
+      } catch (e) { console.error("[MB] Error:", e); setMbError("Failed: " + e.message); setMbFetchStatus(""); mbAutoConnectRef.current[client.id] = false; }
       setMbLoading(false);
     })();
   }, [selectedRevenueClient, hasLoaded]);
