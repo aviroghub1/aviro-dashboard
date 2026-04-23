@@ -6384,10 +6384,12 @@ function AviroDashboard() {
             const curWds = parseFloat(curData.withdrawals) || 0;
             const curDepFees = parseFloat(curData.depositFees) || 0;
             const curWdFees = parseFloat(curData.withdrawalFees) || 0;
+            const curNetHold = curDeps - curWds - curDepFees - curWdFees;
             const prevDeps = parseFloat(prevData2.deposits) || 0;
             const prevWds = parseFloat(prevData2.withdrawals) || 0;
             const prevDepFees = parseFloat(prevData2.depositFees) || 0;
             const prevWdFees = parseFloat(prevData2.withdrawalFees) || 0;
+            const prevNetHold = prevDeps - prevWds - prevDepFees - prevWdFees;
 
             // Trend helpers
             const trendPct = (cur, prev) => prev > 0 ? ((cur - prev) / prev * 100) : (cur > 0 ? 100 : 0);
@@ -6396,10 +6398,68 @@ function AviroDashboard() {
               if (Math.abs(pct) < 0.5) return { arrow: "→", color: c.textMuted, pct: 0 };
               return pct > 0 ? { arrow: "↑", color: "#22c55e", pct } : { arrow: "↓", color: "#ef4444", pct };
             };
-            const TrendBadge = ({ cur, prev }) => {
-              const t = trendArrow(cur, prev);
-              return <span style={{ fontSize: 10, fontWeight: 600, color: t.color, marginLeft: 6 }}>{t.arrow} {Math.abs(t.pct).toFixed(1)}%</span>;
+
+            // Revenue calc for arbitrary net hold (for prev month / historical)
+            const calcRevForNetHold = (nh) => {
+              return deals.reduce((sum, deal) => {
+                if (deal.type === "Net Hold") return sum + nh * ((parseFloat(deal.netHoldPct) || 0) / 100);
+                if (deal.type === "Provider Mark Up") return sum + calcDealRevenue(deal, client.id);
+                if (deal.type === "Profit Share") {
+                  const costsPct = parseFloat(cubePayPlaceholderCostPct[client.id]) || 0;
+                  const costs = nh * (costsPct / 100);
+                  return sum + (nh - costs) * ((parseFloat(deal.profitSharePct) || 0) / 100);
+                }
+                return sum;
+              }, 0);
             };
+            const prevRevenue = calcRevForNetHold(prevNetHold);
+
+            // Revenue by deal for a given net hold
+            const revByDealForNH = (nh) => deals.map(deal => {
+              let rev = 0;
+              if (deal.type === "Net Hold") rev = nh * ((parseFloat(deal.netHoldPct) || 0) / 100);
+              if (deal.type === "Provider Mark Up") rev = calcDealRevenue(deal, client.id);
+              if (deal.type === "Profit Share") {
+                const costsPct = parseFloat(cubePayPlaceholderCostPct[client.id]) || 0;
+                rev = (nh - nh * (costsPct / 100)) * ((parseFloat(deal.profitSharePct) || 0) / 100);
+              }
+              return { ...deal, rev };
+            });
+
+            // KPI card renderer
+            const KpiCard = ({ label, value, color, size, trend }) => (
+              <div style={{ background: size === "lg" ? `linear-gradient(135deg, ${color}18, ${color}06)` : c.surface, borderRadius: size === "lg" ? 12 : 8, padding: size === "lg" ? 18 : 12, textAlign: "center", border: `1px solid ${color}${size === "lg" ? "30" : "15"}` }}>
+                <div style={{ fontSize: 9, color: size === "lg" ? color : c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: size === "lg" ? 6 : 3 }}>{label}</div>
+                <div style={{ fontSize: size === "lg" ? 22 : 15, fontWeight: 800, color: size === "lg" ? color : c.textSecondary }}>{fmtCurrency(value)}</div>
+                {trend && <div style={{ fontSize: 10, fontWeight: 600, color: trend.color, marginTop: 3 }}>{trend.arrow} {Math.abs(trend.pct).toFixed(1)}%</div>}
+              </div>
+            );
+
+            // Deal revenue rows renderer
+            const DealRevRows = ({ revList, total, size }) => (
+              <div style={{ marginTop: size === "lg" ? 12 : 8 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 4 }}>Revenue by Deal</div>
+                {revList.map(d => {
+                  const dc = d.type === "Net Hold" ? "#22c55e" : d.type === "Provider Mark Up" ? c.accent : "#f59e0b";
+                  return (
+                    <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: size === "lg" ? "8px 12px" : "5px 10px", marginBottom: 3, background: `${dc}08`, borderRadius: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: size === "lg" ? 10 : 9, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: `${dc}15`, color: dc }}>{d.type}</span>
+                        {d.type === "Net Hold" && <span style={{ fontSize: 9, color: c.textMuted }}>{d.netHoldPct || 0}%</span>}
+                        {d.type === "Profit Share" && <span style={{ fontSize: 9, color: c.textMuted }}>{d.profitSharePct || 0}%</span>}
+                      </div>
+                      <span style={{ fontSize: size === "lg" ? 14 : 12, fontWeight: 800, color: d.rev >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(d.rev)}</span>
+                    </div>
+                  );
+                })}
+                {revList.length > 1 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 12px", marginTop: 2, borderTop: `1px solid ${c.border}` }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: c.text }}>Combined</span>
+                    <span style={{ fontSize: size === "lg" ? 16 : 13, fontWeight: 800, color: total >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(total)}</span>
+                  </div>
+                )}
+              </div>
+            );
 
             // Refresh handler
             const refreshData = async () => {
@@ -6461,6 +6521,9 @@ function AviroDashboard() {
               } catch (e) { setMbFetchStatus("Error: " + e.message); }
             };
 
+            const curDealRev = revByDealForNH(curNetHold);
+            const prevDealRev = revByDealForNH(prevNetHold);
+
             return (
               <div style={{ marginBottom: 16 }}>
                 {/* Status Bar */}
@@ -6473,134 +6536,82 @@ function AviroDashboard() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     {cachedMonths.size > 0 && <span style={{ fontSize: 9, color: c.textMuted }}>{cachedMonths.size} months cached</span>}
-                    <button onClick={() => setMbCompareView(!mbCompareView)} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: `1px solid ${mbCompareView ? c.accent : c.border}`, background: mbCompareView ? `${c.accent}15` : "transparent", color: mbCompareView ? c.accent : c.textSecondary, fontWeight: 600 }}>{mbCompareView ? "Compare ✓" : "Compare"}</button>
                     {mbConnected && <button onClick={refreshData} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Refresh</button>}
                   </div>
                 </div>
 
-                {/* ===== CURRENT MONTH — PRIMARY DISPLAY ===== */}
-                <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.05em" }}>Current Month — {curMonth}</div>
-                    <div style={{ fontSize: 10, color: c.textMuted }}>Total Revenue: <strong style={{ color: "#22c55e", fontSize: 14 }}>{fmtCurrency(clientRevenue)}</strong></div>
+                {/* ===== CURRENT MONTH ===== */}
+                <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.accent}20`, padding: 20, marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 16 }}>Current Month — {curMonth}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 12 }}>
+                    <KpiCard label="Deposits" value={curDeps} color={c.accent} size="lg" />
+                    <KpiCard label="Withdrawals" value={curWds} color="#f59e0b" size="lg" />
+                    <KpiCard label="Total Processed" value={curDeps + curWds} color="#ec4899" size="lg" />
+                    <KpiCard label="Net Hold" value={curNetHold} color={curNetHold >= 0 ? "#22c55e" : "#ef4444"} size="lg" />
+                    <KpiCard label="Revenue" value={clientRevenue} color="#22c55e" size="lg" />
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-                    <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04))", borderRadius: 12, padding: 18, textAlign: "center", border: "1px solid rgba(99,102,241,0.2)" }}>
-                      <div style={{ fontSize: 9, color: c.accent, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Deposits</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, color: c.accent }}>{fmtCurrency(curDeps)}</div>
-                      {prevDeps > 0 && <TrendBadge cur={curDeps} prev={prevDeps} />}
-                    </div>
-                    <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))", borderRadius: 12, padding: 18, textAlign: "center", border: "1px solid rgba(245,158,11,0.2)" }}>
-                      <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Withdrawals</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(curWds)}</div>
-                      {prevWds > 0 && <TrendBadge cur={curWds} prev={prevWds} />}
-                    </div>
-                    <div style={{ background: "linear-gradient(135deg, rgba(236,72,153,0.12), rgba(236,72,153,0.04))", borderRadius: 12, padding: 18, textAlign: "center", border: "1px solid rgba(236,72,153,0.2)" }}>
-                      <div style={{ fontSize: 9, color: "#ec4899", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Processed</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, color: "#ec4899" }}>{fmtCurrency(curDeps + curWds)}</div>
-                      {(prevDeps + prevWds) > 0 && <TrendBadge cur={curDeps + curWds} prev={prevDeps + prevWds} />}
-                    </div>
-                  </div>
+                  {deals.length > 1 && <DealRevRows revList={curDealRev} total={clientRevenue} size="lg" />}
                 </div>
 
-                {/* ===== PREVIOUS MONTH — SECONDARY DISPLAY ===== */}
-                <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 14, marginBottom: 14, opacity: 0.85 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Previous Month — {prevMonth}</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                    <div style={{ background: c.surface, borderRadius: 8, padding: 10, textAlign: "center" }}>
-                      <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>Deposits</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(prevDeps)}</div>
-                    </div>
-                    <div style={{ background: c.surface, borderRadius: 8, padding: 10, textAlign: "center" }}>
-                      <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>Withdrawals</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(prevWds)}</div>
-                    </div>
-                    <div style={{ background: c.surface, borderRadius: 8, padding: 10, textAlign: "center" }}>
-                      <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>Total Processed</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(prevDeps + prevWds)}</div>
-                    </div>
+                {/* ===== PREVIOUS MONTH ===== */}
+                <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 16, marginBottom: 14, opacity: 0.9 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Previous Month — {prevMonth}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 10 }}>
+                    <KpiCard label="Deposits" value={prevDeps} color={c.accent} size="sm" />
+                    <KpiCard label="Withdrawals" value={prevWds} color="#f59e0b" size="sm" />
+                    <KpiCard label="Total Processed" value={prevDeps + prevWds} color="#ec4899" size="sm" />
+                    <KpiCard label="Net Hold" value={prevNetHold} color={prevNetHold >= 0 ? "#22c55e" : "#ef4444"} size="sm" />
+                    <KpiCard label="Revenue" value={prevRevenue} color="#22c55e" size="sm" />
                   </div>
+                  {deals.length > 1 && <DealRevRows revList={prevDealRev} total={prevRevenue} size="sm" />}
                 </div>
 
-                {/* ===== COMPARISON VIEW (toggle) ===== */}
-                {mbCompareView && (
-                  <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.accent}20`, padding: 18, marginBottom: 14 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 14 }}>Month-on-Month Comparison</div>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead>
-                        <tr style={{ borderBottom: `2px solid ${c.border}` }}>
-                          <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Metric</th>
-                          <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>{prevMonth}</th>
-                          <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>{curMonth}</th>
-                          <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Change</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[
-                          { label: "Deposits", prev: prevDeps, cur: curDeps, color: c.accent },
-                          { label: "Withdrawals", prev: prevWds, cur: curWds, color: "#f59e0b" },
-                          { label: "Total Processed", prev: prevDeps + prevWds, cur: curDeps + curWds, color: "#ec4899" },
-                          { label: "Net Hold", prev: prevDeps - prevWds - prevDepFees - prevWdFees, cur: curDeps - curWds - curDepFees - curWdFees, color: "#22c55e" },
-                        ].map(row => {
-                          const t = trendArrow(row.cur, row.prev);
-                          const diff = row.cur - row.prev;
-                          return (
-                            <tr key={row.label} style={{ borderBottom: `1px solid ${c.border}20` }}>
-                              <td style={{ padding: "10px 10px", fontWeight: 600, color: row.color }}>{row.label}</td>
-                              <td style={{ padding: "10px 10px", textAlign: "right", color: c.textSecondary }}>{fmtCurrency(row.prev)}</td>
-                              <td style={{ padding: "10px 10px", textAlign: "right", fontWeight: 700, color: c.text }}>{fmtCurrency(row.cur)}</td>
-                              <td style={{ padding: "10px 10px", textAlign: "right" }}>
-                                <span style={{ color: t.color, fontWeight: 600 }}>{t.arrow} {Math.abs(t.pct).toFixed(1)}%</span>
-                                <div style={{ fontSize: 10, color: diff >= 0 ? "#22c55e" : "#ef4444" }}>{diff >= 0 ? "+" : ""}{fmtCurrency(diff)}</div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* ===== REVENUE BREAKDOWN BY DEAL ===== */}
-                {deals.length > 0 && (
-                  <div style={{ background: c.card, borderRadius: 14, border: `1px solid rgba(34,197,94,0.2)`, padding: 18, marginBottom: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", textTransform: "uppercase", letterSpacing: "0.05em" }}>Revenue by Deal</div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: "#22c55e" }}>{fmtCurrency(clientRevenue)}</div>
-                    </div>
-                    {deals.map(deal => {
-                      const rev = calcDealRevenue(deal, client.id);
-                      const dealColor = deal.type === "Net Hold" ? "#22c55e" : deal.type === "Provider Mark Up" ? c.accent : "#f59e0b";
-                      return (
-                        <div key={deal.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", marginBottom: 6, background: c.surface, borderRadius: 8, border: `1px solid ${c.border}` }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 5, background: `${dealColor}15`, color: dealColor }}>{deal.type}</span>
-                            {deal.type === "Net Hold" && <span style={{ fontSize: 10, color: c.textMuted }}>{deal.netHoldPct || 0}% of net hold</span>}
-                            {deal.type === "Provider Mark Up" && <span style={{ fontSize: 10, color: c.textMuted }}>{(deal.markups || []).length} method{(deal.markups || []).length !== 1 ? "s" : ""}</span>}
-                            {deal.type === "Profit Share" && <span style={{ fontSize: 10, color: c.textMuted }}>{deal.profitSharePct || 0}% share</span>}
-                          </div>
-                          <div style={{ fontSize: 16, fontWeight: 800, color: rev >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(rev)}</div>
-                        </div>
-                      );
-                    })}
-                    {deals.length > 1 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", marginTop: 4, borderTop: `1px solid ${c.border}` }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: c.text }}>Combined Total</span>
-                        <span style={{ fontSize: 18, fontWeight: 800, color: clientRevenue >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(clientRevenue)}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* ===== COMPARISON — Current vs Previous ===== */}
+                <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.accent}15`, padding: 18, marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 14 }}>Trend — Current vs Previous Month</div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `2px solid ${c.border}` }}>
+                        <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Metric</th>
+                        <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>{prevMonth}</th>
+                        <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>{curMonth}</th>
+                        <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Change</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { label: "Deposits", prev: prevDeps, cur: curDeps, color: c.accent },
+                        { label: "Withdrawals", prev: prevWds, cur: curWds, color: "#f59e0b" },
+                        { label: "Total Processed", prev: prevDeps + prevWds, cur: curDeps + curWds, color: "#ec4899" },
+                        { label: "Net Hold", prev: prevNetHold, cur: curNetHold, color: "#22c55e" },
+                        { label: "Revenue", prev: prevRevenue, cur: clientRevenue, color: "#22c55e" },
+                      ].map(row => {
+                        const t = trendArrow(row.cur, row.prev);
+                        const diff = row.cur - row.prev;
+                        return (
+                          <tr key={row.label} style={{ borderBottom: `1px solid ${c.border}20` }}>
+                            <td style={{ padding: "10px 10px", fontWeight: 600, color: row.color }}>{row.label}</td>
+                            <td style={{ padding: "10px 10px", textAlign: "right", color: c.textSecondary }}>{fmtCurrency(row.prev)}</td>
+                            <td style={{ padding: "10px 10px", textAlign: "right", fontWeight: 700, color: c.text }}>{fmtCurrency(row.cur)}</td>
+                            <td style={{ padding: "10px 10px", textAlign: "right" }}>
+                              <span style={{ color: t.color, fontWeight: 600 }}>{t.arrow} {Math.abs(t.pct).toFixed(1)}%</span>
+                              <div style={{ fontSize: 10, color: diff >= 0 ? "#22c55e" : "#ef4444" }}>{diff >= 0 ? "+" : ""}{fmtCurrency(diff)}</div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
                 {/* ===== HISTORICAL DATE RANGE — COLLAPSIBLE ===== */}
                 <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, overflow: "hidden", marginBottom: 14 }}>
                   <div onClick={() => setMbHistoricalOpen(!mbHistoricalOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Historical Data Search</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Historical Data</div>
                     <span style={{ fontSize: 10, color: c.textMuted }}>{mbHistoricalOpen ? "▴" : "▾"}</span>
                   </div>
                   {mbHistoricalOpen && (
                     <div style={{ padding: "0 18px 18px" }}>
-                      {/* Date range picker */}
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Range:</span>
                         <input type="month" value={mbDateFrom} onChange={e => setMbDateFrom(e.target.value)} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
@@ -6623,7 +6634,6 @@ function AviroDashboard() {
                           );
                         })()}
                       </div>
-                      {/* Historical results */}
                       {(() => {
                         const histData = allRows.length > 0 ? aggregateSummary(allRows, mbDateFrom, mbDateTo) : {};
                         const hDeps = parseFloat(histData.deposits) || 0;
@@ -6631,85 +6641,20 @@ function AviroDashboard() {
                         const hDepFees = parseFloat(histData.depositFees) || 0;
                         const hWdFees = parseFloat(histData.withdrawalFees) || 0;
                         const hNetHold = hDeps - hWds - hDepFees - hWdFees;
-                        const hDepMethods = histData.depositMethods || {};
-                        const hWdMethods = histData.withdrawalMethods || {};
-                        const hAllMethodNames = [...new Set([...Object.keys(hDepMethods), ...Object.keys(hWdMethods)])];
-                        const hMethodBreak = hAllMethodNames.map(m => ({
-                          name: m, deposits: (hDepMethods[m] || {}).gross || 0, withdrawals: (hWdMethods[m] || {}).gross || 0,
-                          depCount: (hDepMethods[m] || {}).count || 0, wdCount: (hWdMethods[m] || {}).count || 0,
-                        })).sort((a, b) => (b.deposits + b.withdrawals) - (a.deposits + a.withdrawals));
-
-                        // Calculate revenue for this historical range
-                        // For simplicity, recalculate based on historical net hold
-                        const hRevByDeal = deals.map(deal => {
-                          let rev = 0;
-                          if (deal.type === "Net Hold") rev = hNetHold * ((parseFloat(deal.netHoldPct) || 0) / 100);
-                          if (deal.type === "Provider Mark Up") rev = calcDealRevenue(deal, client.id); // uses current volume for now
-                          if (deal.type === "Profit Share") {
-                            const costsPct = parseFloat(cubePayPlaceholderCostPct[client.id]) || 0;
-                            const costs = hNetHold * (costsPct / 100);
-                            rev = (hNetHold - costs) * ((parseFloat(deal.profitSharePct) || 0) / 100);
-                          }
-                          return { ...deal, rev };
-                        });
-                        const hTotalRev = hRevByDeal.reduce((s, d) => s + d.rev, 0);
+                        const hDealRev = revByDealForNH(hNetHold);
+                        const hTotalRev = hDealRev.reduce((s, d) => s + d.rev, 0);
 
                         return (
                           <div>
                             <div style={{ fontSize: 10, color: c.textMuted, marginBottom: 10 }}>{mbDateFrom === mbDateTo ? mbDateFrom : `${mbDateFrom} — ${mbDateTo}`}</div>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
-                              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                                <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>Deposits</div>
-                                <div style={{ fontSize: 16, fontWeight: 700, color: c.accent }}>{fmtCurrency(hDeps)}</div>
-                              </div>
-                              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                                <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>Withdrawals</div>
-                                <div style={{ fontSize: 16, fontWeight: 700, color: "#f59e0b" }}>{fmtCurrency(hWds)}</div>
-                              </div>
-                              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                                <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>Net Hold</div>
-                                <div style={{ fontSize: 16, fontWeight: 700, color: hNetHold >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(hNetHold)}</div>
-                              </div>
-                              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                                <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>Revenue</div>
-                                <div style={{ fontSize: 16, fontWeight: 700, color: hTotalRev >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(hTotalRev)}</div>
-                              </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+                              <KpiCard label="Deposits" value={hDeps} color={c.accent} size="sm" />
+                              <KpiCard label="Withdrawals" value={hWds} color="#f59e0b" size="sm" />
+                              <KpiCard label="Total Processed" value={hDeps + hWds} color="#ec4899" size="sm" />
+                              <KpiCard label="Net Hold" value={hNetHold} color={hNetHold >= 0 ? "#22c55e" : "#ef4444"} size="sm" />
+                              <KpiCard label="Revenue" value={hTotalRev} color="#22c55e" size="sm" />
                             </div>
-                            {/* Revenue by deal for historical */}
-                            {hRevByDeal.length > 0 && deals.length > 1 && (
-                              <div style={{ marginBottom: 14 }}>
-                                <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Revenue by Deal</div>
-                                {hRevByDeal.map(d => {
-                                  const dealColor = d.type === "Net Hold" ? "#22c55e" : d.type === "Provider Mark Up" ? c.accent : "#f59e0b";
-                                  return (
-                                    <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", marginBottom: 3, background: `${dealColor}08`, borderRadius: 6 }}>
-                                      <span style={{ fontSize: 10, fontWeight: 600, color: dealColor }}>{d.type}</span>
-                                      <span style={{ fontSize: 12, fontWeight: 700, color: d.rev >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(d.rev)}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {/* Method breakdown */}
-                            {hMethodBreak.length > 0 && (
-                              <div>
-                                <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Method Breakdown</div>
-                                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 6, marginBottom: 4, paddingBottom: 4, borderBottom: `1px solid ${c.border}` }}>
-                                  <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Method</div>
-                                  <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", textAlign: "right" }}>Deposits</div>
-                                  <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", textAlign: "right" }}>Withdrawals</div>
-                                  <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", textAlign: "right" }}>Total</div>
-                                </div>
-                                {hMethodBreak.map(m => (
-                                  <div key={m.name} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 6, padding: "4px 0", alignItems: "center" }}>
-                                    <div><span style={{ fontSize: 11, color: c.text }}>{m.name}</span><span style={{ fontSize: 9, color: c.textMuted, marginLeft: 4 }}>{m.depCount + m.wdCount} txns</span></div>
-                                    <div style={{ fontSize: 11, fontWeight: 600, color: c.accent, textAlign: "right" }}>{fmtCurrency(m.deposits)}</div>
-                                    <div style={{ fontSize: 11, fontWeight: 600, color: "#f59e0b", textAlign: "right" }}>{fmtCurrency(m.withdrawals)}</div>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: c.text, textAlign: "right" }}>{fmtCurrency(m.deposits + m.withdrawals)}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            {deals.length > 1 && <DealRevRows revList={hDealRev} total={hTotalRev} size="sm" />}
                           </div>
                         );
                       })()}
