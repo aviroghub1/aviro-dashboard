@@ -801,51 +801,106 @@ function AviroDashboard() {
         const token = authResp.id;
         mbLog("Auth success, token: " + token.substring(0, 8) + "...");
 
-        // 3) Fetch ALL data from Metabase (cards don't support date parameters)
-        setMbFetchStatus("Fetching all data...");
-        mbLog("Fetching cards " + defaults.depositCard + " (deposits) and " + defaults.withdrawalCard + " (withdrawals)...");
+        // 3) Fetch card definitions to get MBQL queries, then add date breakout
+        setMbFetchStatus("Fetching card definitions...");
+        mbLog("Fetching card definitions for " + defaults.depositCard + " and " + defaults.withdrawalCard + "...");
+
+        // Helper: fetch card def, add date breakout by month, run via /api/dataset
+        const fetchWithDateBreakout = async (cardId) => {
+          if (!cardId) return [];
+          // Get card definition
+          const cardDef = await mbProxyCall(defaults.url, `/api/card/${cardId}`, "GET", null, token);
+          if (!cardDef || !cardDef.dataset_query) {
+            mbLog("Card " + cardId + " has no dataset_query: " + JSON.stringify(cardDef).substring(0, 200));
+            return [];
+          }
+          mbLog("Card " + cardId + " type: " + cardDef.dataset_query.type + ", db: " + cardDef.dataset_query.database);
+
+          const query = JSON.parse(JSON.stringify(cardDef.dataset_query)); // deep clone
+          const dateFieldId = defaults.dateFieldId;
+
+          if (query.type === "query" && query.query) {
+            // Add date breakout: group by month on the date field
+            if (!query.query.breakout) query.query.breakout = [];
+            // Add temporal breakout for month
+            const dateBreakout = ["field", dateFieldId, { "temporal-unit": "month" }];
+            // Check if already has this breakout
+            const alreadyHas = query.query.breakout.some(b => Array.isArray(b) && b[0] === "field" && b[1] === dateFieldId);
+            if (!alreadyHas) {
+              query.query.breakout.push(dateBreakout);
+              mbLog("Card " + cardId + ": Added date breakout on field " + dateFieldId);
+            } else {
+              mbLog("Card " + cardId + ": Already has date breakout");
+            }
+          } else if (query.type === "native") {
+            mbLog("Card " + cardId + " is a native SQL query — cannot add breakout automatically");
+            // Fallback: just run the card as-is
+            const fallbackRows = await mbProxyCall(defaults.url, `/api/card/${cardId}/query/json`, "POST", {}, token);
+            return Array.isArray(fallbackRows) ? fallbackRows : [];
+          }
+
+          // Run modified query via /api/dataset
+          mbLog("Card " + cardId + ": Running modified query via /api/dataset...");
+          const datasetResp = await mbProxyCall(defaults.url, "/api/dataset", "POST", query, token);
+
+          // /api/dataset returns { data: { rows: [], cols: [] } } format
+          if (datasetResp && datasetResp.data && datasetResp.data.rows) {
+            const cols = (datasetResp.data.cols || []).map(c => c.display_name || c.name);
+            mbLog("Card " + cardId + " columns: " + cols.join(", "));
+            mbLog("Card " + cardId + ": " + datasetResp.data.rows.length + " rows returned");
+            // Convert to key-value format like /query/json would return
+            return datasetResp.data.rows.map(row => {
+              const obj = {};
+              cols.forEach((col, i) => { obj[col] = row[i]; });
+              return obj;
+            });
+          } else if (Array.isArray(datasetResp)) {
+            // Sometimes returns array directly
+            mbLog("Card " + cardId + ": Got array response with " + datasetResp.length + " rows");
+            return datasetResp;
+          } else {
+            mbLog("Card " + cardId + " dataset error: " + JSON.stringify(datasetResp).substring(0, 400));
+            return [];
+          }
+        };
+
+        setMbFetchStatus("Fetching data with date breakout...");
         const [depRows, wdRows] = await Promise.all([
-          defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", {}, token) : [],
-          defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, token) : [],
+          fetchWithDateBreakout(defaults.depositCard),
+          fetchWithDateBreakout(defaults.withdrawalCard),
         ]);
         const depArr = Array.isArray(depRows) ? depRows : [];
         const wdArr = Array.isArray(wdRows) ? wdRows : [];
         mbLog("Fetched: " + depArr.length + " deposit rows, " + wdArr.length + " withdrawal rows");
 
-        // If not arrays, log what we got back
-        if (!Array.isArray(depRows)) mbLog("DEPOSIT RESPONSE (not array): " + JSON.stringify(depRows).substring(0, 300));
-        if (!Array.isArray(wdRows)) mbLog("WITHDRAWAL RESPONSE (not array): " + JSON.stringify(wdRows).substring(0, 300));
-
         if (depArr.length > 0) mbLog("Deposit keys: " + Object.keys(depArr[0]).join(", "));
-        if (depArr.length > 0) mbLog("First deposit row: " + JSON.stringify(depArr[0]).substring(0, 400));
+        if (depArr.length > 0) mbLog("First deposit: " + JSON.stringify(depArr[0]).substring(0, 500));
         if (wdArr.length > 0) mbLog("Withdrawal keys: " + Object.keys(wdArr[0]).join(", "));
-        if (wdArr.length > 0) mbLog("First withdrawal row: " + JSON.stringify(wdArr[0]).substring(0, 400));
+        if (wdArr.length > 0) mbLog("First withdrawal: " + JSON.stringify(wdArr[0]).substring(0, 500));
 
-        // 4) Parse rows — extract month from date field if available
-        const dateFieldName = defaults.dateFieldName || "Created At";
+        // 4) Parse rows — extract month from date field
         let dateFieldDetected = "";
         const extractMonth = (row) => {
-          // Try explicit field names first
-          const tryFields = [dateFieldName, "Created At", "Created At: Month", "Date", "Transaction Date", "created_at", "date", "month", "Month"];
+          // Try common date field names including Metabase's temporal breakout names
+          const tryFields = ["Created At", "Created At: Month", "Date", "Transaction Date", "created_at", "date", "month", "Month"];
           for (const f of tryFields) {
-            if (row[f]) {
+            if (row[f] != null) {
               const d = new Date(row[f]);
-              if (!isNaN(d.getTime())) { if (!dateFieldDetected) { dateFieldDetected = f; mbLog("Date field matched: '" + f + "' = " + row[f]); } return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
+              if (!isNaN(d.getTime())) { if (!dateFieldDetected) { dateFieldDetected = f; mbLog("Date field: '" + f + "' = " + row[f]); } return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
             }
           }
-          // Fallback: scan ALL keys for any value that parses as a date
+          // Scan all keys for date-like values
           for (const key of Object.keys(row)) {
             const val = row[key];
-            if (typeof val === "string" && val.length >= 7 && val.length <= 30) {
+            if (val != null && typeof val === "string" && val.length >= 7 && val.length <= 30) {
               const d = new Date(val);
               if (!isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2100) {
-                if (!dateFieldDetected) { dateFieldDetected = key; mbLog("Auto-detected date field: '" + key + "' = " + val); }
+                if (!dateFieldDetected) { dateFieldDetected = key; mbLog("Auto-detected date: '" + key + "' = " + val); }
                 return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
               }
             }
           }
-          // If no date field, use current month as fallback
-          if (!dateFieldDetected) mbLog("WARNING: No date found in row. Keys: " + Object.keys(row).join(", ") + " | Values: " + Object.values(row).map(v => typeof v + ":" + String(v).substring(0, 30)).join(", "));
+          if (!dateFieldDetected) mbLog("WARNING: No date in row. Keys: " + Object.keys(row).join(", "));
           return curMonth;
         };
 
@@ -6511,41 +6566,58 @@ function AviroDashboard() {
               </div>
             );
 
-            // Refresh handler — re-fetches all data from Metabase (no date params)
+            // Refresh handler — re-fetches data with date breakout
             const refreshData = async () => {
               const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
               if (!defaults || !mbConfig.sessionToken) return;
+              const tkn = mbConfig.sessionToken;
               setMbFetchStatus("Refreshing...");
+              mbLog("REFRESH starting...");
               try {
-                const [depRows, wdRows] = await Promise.all([
-                  defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
-                  defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
-                ]);
+                // Same fetchWithDateBreakout approach as auto-connect
+                const fetchWithBreakout = async (cardId) => {
+                  if (!cardId) return [];
+                  const cardDef = await mbProxyCall(defaults.url, `/api/card/${cardId}`, "GET", null, tkn);
+                  if (!cardDef || !cardDef.dataset_query) { mbLog("Card " + cardId + " no dataset_query"); return []; }
+                  const query = JSON.parse(JSON.stringify(cardDef.dataset_query));
+                  if (query.type === "query" && query.query) {
+                    if (!query.query.breakout) query.query.breakout = [];
+                    const dateBreakout = ["field", defaults.dateFieldId, { "temporal-unit": "month" }];
+                    if (!query.query.breakout.some(b => Array.isArray(b) && b[0] === "field" && b[1] === defaults.dateFieldId)) {
+                      query.query.breakout.push(dateBreakout);
+                    }
+                  } else {
+                    const fallback = await mbProxyCall(defaults.url, `/api/card/${cardId}/query/json`, "POST", {}, tkn);
+                    return Array.isArray(fallback) ? fallback : [];
+                  }
+                  const resp = await mbProxyCall(defaults.url, "/api/dataset", "POST", query, tkn);
+                  if (resp && resp.data && resp.data.rows) {
+                    const cols = (resp.data.cols || []).map(col => col.display_name || col.name);
+                    return resp.data.rows.map(row => { const obj = {}; cols.forEach((col, i) => { obj[col] = row[i]; }); return obj; });
+                  }
+                  return Array.isArray(resp) ? resp : [];
+                };
+
+                const [depRows, wdRows] = await Promise.all([fetchWithBreakout(defaults.depositCard), fetchWithBreakout(defaults.withdrawalCard)]);
                 const depArr = Array.isArray(depRows) ? depRows : [];
                 const wdArr = Array.isArray(wdRows) ? wdRows : [];
-                mbLog("REFRESH: " + depArr.length + " deposit rows, " + wdArr.length + " withdrawal rows");
-                if (!Array.isArray(depRows)) mbLog("DEPOSIT RESPONSE (not array): " + JSON.stringify(depRows).substring(0, 300));
-                if (!Array.isArray(wdRows)) mbLog("WITHDRAWAL RESPONSE (not array): " + JSON.stringify(wdRows).substring(0, 300));
-                if (depArr.length > 0) mbLog("Deposit keys: " + Object.keys(depArr[0]).join(", "));
-                if (depArr.length > 0) mbLog("First deposit: " + JSON.stringify(depArr[0]).substring(0, 500));
-                if (wdArr.length > 0) mbLog("Withdrawal keys: " + Object.keys(wdArr[0]).join(", "));
-                if (wdArr.length > 0) mbLog("First withdrawal: " + JSON.stringify(wdArr[0]).substring(0, 500));
+                mbLog("REFRESH: " + depArr.length + " dep rows, " + wdArr.length + " wd rows");
+                if (depArr.length > 0) mbLog("Dep keys: " + Object.keys(depArr[0]).join(", "));
+                if (depArr.length > 0) mbLog("First dep: " + JSON.stringify(depArr[0]).substring(0, 500));
 
-                const dateFieldName = defaults.dateFieldName || "Created At";
                 let dateDetected = "";
                 const extractMo = (row) => {
-                  const tryFields = [dateFieldName, "Created At", "Created At: Month", "Date", "Transaction Date", "created_at", "date", "month", "Month"];
+                  const tryFields = ["Created At", "Created At: Month", "Date", "Transaction Date", "created_at", "date", "month", "Month"];
                   for (const f of tryFields) {
-                    if (row[f]) { const dt = new Date(row[f]); if (!isNaN(dt.getTime())) { if (!dateDetected) { dateDetected = f; mbLog("Date field: '" + f + "' = " + row[f]); } return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; } }
+                    if (row[f] != null) { const dt = new Date(row[f]); if (!isNaN(dt.getTime())) { if (!dateDetected) { dateDetected = f; mbLog("Date: '" + f + "' = " + row[f]); } return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; } }
                   }
                   for (const key of Object.keys(row)) {
                     const val = row[key];
-                    if (typeof val === "string" && val.length >= 7 && val.length <= 30) {
+                    if (val != null && typeof val === "string" && val.length >= 7 && val.length <= 30) {
                       const dt = new Date(val);
-                      if (!isNaN(dt.getTime()) && dt.getFullYear() > 2000 && dt.getFullYear() < 2100) { if (!dateDetected) { dateDetected = key; mbLog("Auto-detected date: '" + key + "' = " + val); } return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; }
+                      if (!isNaN(dt.getTime()) && dt.getFullYear() > 2000 && dt.getFullYear() < 2100) { if (!dateDetected) { dateDetected = key; mbLog("Auto date: '" + key + "' = " + val); } return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; }
                     }
                   }
-                  if (!dateDetected) mbLog("WARNING: No date in row. Values: " + Object.entries(row).map(([k,v]) => k + "=" + String(v).substring(0, 40)).join(" | "));
                   return curMonth;
                 };
                 const parseFresh = (rows, txType) => (rows || []).map(r => ({
@@ -6558,8 +6630,7 @@ function AviroDashboard() {
                 }));
                 const freshRows = [...parseFresh(depArr, "deposit"), ...parseFresh(wdArr, "withdrawal")];
                 const freshMonths = [...new Set(freshRows.map(r => r.month))].sort();
-                mbLog("Months found: " + freshMonths.join(", ") + " (" + freshRows.length + " total rows)");
-                // Save to Supabase
+                mbLog("Months: " + freshMonths.join(", ") + " (" + freshRows.length + " rows)");
                 for (const m of freshMonths) {
                   try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${m}`, { method: "DELETE", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }); } catch (e) {}
                 }
