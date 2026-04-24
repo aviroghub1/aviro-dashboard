@@ -582,6 +582,8 @@ function AviroDashboard() {
   const [mbCachedMonths, setMbCachedMonths] = useState({}); // { clientId: Set of "YYYY-MM" strings }
   const [mbDateFrom, setMbDateFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
   const [mbDateTo, setMbDateTo] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
+  const [mbDebugLog, setMbDebugLog] = useState([]);
+  const mbLog = useCallback((msg) => { console.log("[MB]", msg); setMbDebugLog(prev => [...prev.slice(-30), `${new Date().toLocaleTimeString()} ${msg}`]); }, []);
 
   // ===== SETTINGS STATE =====
   const [fxRates, setFxRates] = useState(DEFAULT_FX_RATES); // { currency: rateToEUR }
@@ -749,20 +751,20 @@ function AviroDashboard() {
   useEffect(() => {
     if (!selectedRevenueClient || !hasLoaded) return;
     const client = gatewayClients.find(cl => cl.id === selectedRevenueClient);
-    if (!client) { console.log("[MB] No client found for id:", selectedRevenueClient); return; }
+    if (!client) { mbLog("No client found for id: " + selectedRevenueClient); return; }
     const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
-    if (!defaults) { console.log("[MB] No defaults for:", client.name); return; }
+    if (!defaults) { mbLog("No defaults for: " + client.name); return; }
     // Clear any stale config with wrong URL and reset attempt tracker
     const existing = metabaseConfigs[client.id] || {};
     if (existing.url && existing.url !== defaults.url) {
-      console.log("[MB] Stale config detected, clearing for:", client.name);
+      mbLog("Stale config detected, clearing for: " + client.name);
       setMetabaseConfigs(prev => { const n = { ...prev }; delete n[client.id]; return n; });
       mbAutoConnectRef.current[client.id] = false;
       return;
     }
-    if (existing.sessionToken || mbAutoConnectRef.current[client.id]) { console.log("[MB] Already connected or attempted:", client.name, !!existing.sessionToken); return; }
+    if (existing.sessionToken || mbAutoConnectRef.current[client.id]) { mbLog("Already connected or attempted: " + client.name + " token=" + !!existing.sessionToken); return; }
     mbAutoConnectRef.current[client.id] = true;
-    console.log("[MB] Auto-connecting:", client.name, "to", defaults.url);
+    mbLog("Auto-connecting: " + client.name + " to " + defaults.url);
 
     (async () => {
       setMbLoading(true); setMbError(""); setMbFetchStatus("Connecting...");
@@ -781,40 +783,54 @@ function AviroDashboard() {
           if (supaResp.ok) {
             cachedRows = await supaResp.json();
             cachedRows.forEach(r => cachedMonthSet.add(r.month));
-            console.log("[MB] Cached months from Supabase:", [...cachedMonthSet].sort());
+            mbLog("Cached from Supabase: " + cachedRows.length + " rows, months: " + [...cachedMonthSet].sort().join(", "));
+          } else {
+            mbLog("Supabase returned " + supaResp.status);
           }
-        } catch (e) { console.log("[MB] Supabase cache not available:", e.message); }
+        } catch (e) { mbLog("Supabase cache error: " + e.message); }
 
         // 2) Authenticate with Metabase
         setMbFetchStatus("Authenticating...");
+        mbLog("Authenticating with " + defaults.url + "...");
         const authResp = await mbProxyCall(defaults.url, "/api/session", "POST", { username: defaults.username, password: defaults.password });
-        if (!authResp.id) { setMbError(authResp.message || authResp.error || JSON.stringify(authResp)); setMbLoading(false); setMbFetchStatus(""); return; }
+        if (!authResp.id) {
+          const errMsg = authResp.message || authResp.error || JSON.stringify(authResp);
+          mbLog("AUTH FAILED: " + errMsg);
+          setMbError(errMsg); setMbLoading(false); setMbFetchStatus(""); return;
+        }
         const token = authResp.id;
-        console.log("[MB] Auth success, token obtained");
+        mbLog("Auth success, token: " + token.substring(0, 8) + "...");
 
         // 3) Fetch ALL data from Metabase (cards don't support date parameters)
         setMbFetchStatus("Fetching all data...");
+        mbLog("Fetching cards " + defaults.depositCard + " (deposits) and " + defaults.withdrawalCard + " (withdrawals)...");
         const [depRows, wdRows] = await Promise.all([
           defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", {}, token) : [],
           defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, token) : [],
         ]);
         const depArr = Array.isArray(depRows) ? depRows : [];
         const wdArr = Array.isArray(wdRows) ? wdRows : [];
-        console.log("[MB] Fetched:", depArr.length, "deposit rows,", wdArr.length, "withdrawal rows");
-        if (depArr.length > 0) console.log("[MB] Deposit row keys:", Object.keys(depArr[0]));
-        if (depArr.length > 0) console.log("[MB] First deposit row:", JSON.stringify(depArr[0]));
-        if (wdArr.length > 0) console.log("[MB] Withdrawal row keys:", Object.keys(wdArr[0]));
-        if (wdArr.length > 0) console.log("[MB] First withdrawal row:", JSON.stringify(wdArr[0]));
+        mbLog("Fetched: " + depArr.length + " deposit rows, " + wdArr.length + " withdrawal rows");
+
+        // If not arrays, log what we got back
+        if (!Array.isArray(depRows)) mbLog("DEPOSIT RESPONSE (not array): " + JSON.stringify(depRows).substring(0, 300));
+        if (!Array.isArray(wdRows)) mbLog("WITHDRAWAL RESPONSE (not array): " + JSON.stringify(wdRows).substring(0, 300));
+
+        if (depArr.length > 0) mbLog("Deposit keys: " + Object.keys(depArr[0]).join(", "));
+        if (depArr.length > 0) mbLog("First deposit row: " + JSON.stringify(depArr[0]).substring(0, 400));
+        if (wdArr.length > 0) mbLog("Withdrawal keys: " + Object.keys(wdArr[0]).join(", "));
+        if (wdArr.length > 0) mbLog("First withdrawal row: " + JSON.stringify(wdArr[0]).substring(0, 400));
 
         // 4) Parse rows — extract month from date field if available
         const dateFieldName = defaults.dateFieldName || "Created At";
+        let dateFieldDetected = "";
         const extractMonth = (row) => {
           // Try explicit field names first
           const tryFields = [dateFieldName, "Created At", "Created At: Month", "Date", "Transaction Date", "created_at", "date", "month", "Month"];
           for (const f of tryFields) {
             if (row[f]) {
               const d = new Date(row[f]);
-              if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+              if (!isNaN(d.getTime())) { if (!dateFieldDetected) { dateFieldDetected = f; mbLog("Date field matched: '" + f + "' = " + row[f]); } return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
             }
           }
           // Fallback: scan ALL keys for any value that parses as a date
@@ -823,13 +839,13 @@ function AviroDashboard() {
             if (typeof val === "string" && val.length >= 7 && val.length <= 30) {
               const d = new Date(val);
               if (!isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2100) {
-                console.log("[MB] Auto-detected date field:", key, "=", val);
+                if (!dateFieldDetected) { dateFieldDetected = key; mbLog("Auto-detected date field: '" + key + "' = " + val); }
                 return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
               }
             }
           }
           // If no date field, use current month as fallback
-          console.log("[MB] WARNING: No date field found in row, keys:", Object.keys(row).join(", "));
+          if (!dateFieldDetected) mbLog("WARNING: No date found in row. Keys: " + Object.keys(row).join(", ") + " | Values: " + Object.values(row).map(v => typeof v + ":" + String(v).substring(0, 30)).join(", "));
           return curMonth;
         };
 
@@ -847,33 +863,31 @@ function AviroDashboard() {
 
         let newRows = [...parseMbRowsWithDate(depArr, "deposit"), ...parseMbRowsWithDate(wdArr, "withdrawal")];
         const monthsInData = [...new Set(newRows.map(r => r.month))].sort();
-        console.log("[MB] Months found in data:", monthsInData);
-        console.log("[MB] Total parsed rows:", newRows.length);
+        mbLog("Months found: " + monthsInData.join(", ") + " (" + newRows.length + " total rows)");
 
         // 5) Save new rows to Supabase (upsert)
         if (newRows.length > 0) {
           setMbFetchStatus("Saving to database...");
-          // Delete existing rows for all months we got data for, then insert fresh
           for (const m of monthsInData) {
             try {
               await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${m}`, {
                 method: "DELETE",
                 headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
               });
-            } catch (e) { console.log("[MB] Delete old rows failed for", m, e.message); }
+            } catch (e) { mbLog("Delete failed for " + m + ": " + e.message); }
           }
-          // Insert in batches of 50
           const insertRows = newRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
           for (let i = 0; i < insertRows.length; i += 50) {
             try {
-              await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, {
+              const insResp = await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, {
                 method: "POST",
-                headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
+                headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
                 body: JSON.stringify(insertRows.slice(i, i + 50)),
               });
-            } catch (e) { console.log("[MB] Insert batch failed:", e.message); }
+              if (!insResp.ok) mbLog("Supabase insert batch " + i + " failed: " + insResp.status + " " + await insResp.text());
+            } catch (e) { mbLog("Insert batch failed: " + e.message); }
           }
-          console.log("[MB] Saved", insertRows.length, "rows to Supabase");
+          mbLog("Saved " + insertRows.length + " rows to Supabase");
         }
 
         // 6) Merge cached + new into full row set
@@ -894,12 +908,12 @@ function AviroDashboard() {
         const prevAgg = aggregateSummary(allRows, prevMonth, prevMonth);
         setMbPrevData(prev => ({ ...prev, [client.id]: prevAgg }));
 
-        console.log("[MB] Current month:", curAgg.deposits, "deps,", curAgg.withdrawals, "wds");
+        mbLog("DONE — Current " + curMonth + ": deps=" + curAgg.deposits + " wds=" + curAgg.withdrawals + " | Prev " + prevMonth + ": deps=" + prevAgg.deposits + " wds=" + prevAgg.withdrawals);
 
         const newConfig = { ...defaults, sessionToken: token };
         setMetabaseConfigs(prev => ({ ...prev, [client.id]: newConfig }));
         setMbFetchStatus("");
-      } catch (e) { console.error("[MB] Error:", e); setMbError("Failed: " + e.message); setMbFetchStatus(""); mbAutoConnectRef.current[client.id] = false; }
+      } catch (e) { console.error("[MB] Error:", e); mbLog("ERROR: " + e.message); setMbError("Failed: " + e.message); setMbFetchStatus(""); mbAutoConnectRef.current[client.id] = false; }
       setMbLoading(false);
     })();
   }, [selectedRevenueClient, hasLoaded]);
@@ -6571,6 +6585,19 @@ function AviroDashboard() {
                     {mbConnected && <button onClick={refreshData} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Refresh</button>}
                   </div>
                 </div>
+
+                {/* Debug Log Panel */}
+                {mbDebugLog.length > 0 && (
+                  <div style={{ background: "rgba(0,0,0,0.5)", borderRadius: 8, padding: "8px 12px", marginBottom: 12, border: "1px solid rgba(100,100,100,0.3)", maxHeight: 200, overflowY: "auto" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: "#22c55e", textTransform: "uppercase" }}>Metabase Debug Log</span>
+                      <button onClick={() => setMbDebugLog([])} style={{ fontSize: 9, background: "transparent", border: "none", color: "#ef4444", cursor: "pointer" }}>Clear</button>
+                    </div>
+                    {mbDebugLog.map((line, i) => (
+                      <div key={i} style={{ fontSize: 9, fontFamily: "monospace", color: line.includes("ERROR") || line.includes("FAILED") || line.includes("WARNING") ? "#ef4444" : line.includes("DONE") ? "#22c55e" : "#94a3b8", lineHeight: 1.6, wordBreak: "break-all" }}>{line}</div>
+                    ))}
+                  </div>
+                )}
 
                 {/* ===== CURRENT MONTH ===== */}
                 <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.accent}20`, padding: 20, marginBottom: 14 }}>
