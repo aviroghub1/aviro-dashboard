@@ -6521,19 +6521,31 @@ function AviroDashboard() {
                   defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
                   defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", {}, mbConfig.sessionToken) : [],
                 ]);
+                const depArr = Array.isArray(depRows) ? depRows : [];
+                const wdArr = Array.isArray(wdRows) ? wdRows : [];
+                mbLog("REFRESH: " + depArr.length + " deposit rows, " + wdArr.length + " withdrawal rows");
+                if (!Array.isArray(depRows)) mbLog("DEPOSIT RESPONSE (not array): " + JSON.stringify(depRows).substring(0, 300));
+                if (!Array.isArray(wdRows)) mbLog("WITHDRAWAL RESPONSE (not array): " + JSON.stringify(wdRows).substring(0, 300));
+                if (depArr.length > 0) mbLog("Deposit keys: " + Object.keys(depArr[0]).join(", "));
+                if (depArr.length > 0) mbLog("First deposit: " + JSON.stringify(depArr[0]).substring(0, 500));
+                if (wdArr.length > 0) mbLog("Withdrawal keys: " + Object.keys(wdArr[0]).join(", "));
+                if (wdArr.length > 0) mbLog("First withdrawal: " + JSON.stringify(wdArr[0]).substring(0, 500));
+
                 const dateFieldName = defaults.dateFieldName || "Created At";
+                let dateDetected = "";
                 const extractMo = (row) => {
                   const tryFields = [dateFieldName, "Created At", "Created At: Month", "Date", "Transaction Date", "created_at", "date", "month", "Month"];
                   for (const f of tryFields) {
-                    if (row[f]) { const dt = new Date(row[f]); if (!isNaN(dt.getTime())) return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; }
+                    if (row[f]) { const dt = new Date(row[f]); if (!isNaN(dt.getTime())) { if (!dateDetected) { dateDetected = f; mbLog("Date field: '" + f + "' = " + row[f]); } return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; } }
                   }
                   for (const key of Object.keys(row)) {
                     const val = row[key];
                     if (typeof val === "string" && val.length >= 7 && val.length <= 30) {
                       const dt = new Date(val);
-                      if (!isNaN(dt.getTime()) && dt.getFullYear() > 2000 && dt.getFullYear() < 2100) return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+                      if (!isNaN(dt.getTime()) && dt.getFullYear() > 2000 && dt.getFullYear() < 2100) { if (!dateDetected) { dateDetected = key; mbLog("Auto-detected date: '" + key + "' = " + val); } return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; }
                     }
                   }
+                  if (!dateDetected) mbLog("WARNING: No date in row. Values: " + Object.entries(row).map(([k,v]) => k + "=" + String(v).substring(0, 40)).join(" | "));
                   return curMonth;
                 };
                 const parseFresh = (rows, txType) => (rows || []).map(r => ({
@@ -6544,15 +6556,16 @@ function AviroDashboard() {
                   gross_amount: Math.abs(parseFloat(r["Sum of Amount"]) || 0),
                   fee_amount: Math.abs(parseFloat(r["Sum of Fee"]) || 0),
                 }));
-                const freshRows = [...parseFresh(Array.isArray(depRows) ? depRows : [], "deposit"), ...parseFresh(Array.isArray(wdRows) ? wdRows : [], "withdrawal")];
-                const freshMonths = [...new Set(freshRows.map(r => r.month))];
+                const freshRows = [...parseFresh(depArr, "deposit"), ...parseFresh(wdArr, "withdrawal")];
+                const freshMonths = [...new Set(freshRows.map(r => r.month))].sort();
+                mbLog("Months found: " + freshMonths.join(", ") + " (" + freshRows.length + " total rows)");
                 // Save to Supabase
                 for (const m of freshMonths) {
                   try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${m}`, { method: "DELETE", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }); } catch (e) {}
                 }
                 const insertRows = freshRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
                 for (let i = 0; i < insertRows.length; i += 50) {
-                  try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, { method: "POST", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(insertRows.slice(i, i + 50)) }); } catch (e) {}
+                  try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, { method: "POST", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" }, body: JSON.stringify(insertRows.slice(i, i + 50)) }); } catch (e) {}
                 }
                 const freshMonthSet = new Set(freshMonths);
                 const updatedRows = [...allRows.filter(r => !freshMonthSet.has(r.month)), ...freshRows];
@@ -6563,8 +6576,9 @@ function AviroDashboard() {
                 setCubePayMonthlyData(prev => ({ ...prev, [client.id]: agg }));
                 const prevAgg = aggregateSummary(updatedRows, prevMonth, prevMonth);
                 setMbPrevData(prev => ({ ...prev, [client.id]: prevAgg }));
+                mbLog("DONE — Cur " + curMonth + ": deps=" + agg.deposits + " wds=" + agg.withdrawals + " | Prev " + prevMonth + ": deps=" + prevAgg.deposits + " wds=" + prevAgg.withdrawals);
                 setMbFetchStatus("");
-              } catch (e) { setMbFetchStatus("Error: " + e.message); }
+              } catch (e) { mbLog("REFRESH ERROR: " + e.message); setMbFetchStatus("Error: " + e.message); }
             };
 
             const curDealRev = revByDealForNH(curNetHold);
