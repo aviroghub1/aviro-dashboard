@@ -809,13 +809,27 @@ function AviroDashboard() {
         // 4) Parse rows — extract month from date field if available
         const dateFieldName = defaults.dateFieldName || "Created At";
         const extractMonth = (row) => {
-          // Try common date field names
-          const dateVal = row[dateFieldName] || row["Created At"] || row["Date"] || row["Transaction Date"] || row["created_at"] || row["date"];
-          if (dateVal) {
-            const d = new Date(dateVal);
-            if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          // Try explicit field names first
+          const tryFields = [dateFieldName, "Created At", "Created At: Month", "Date", "Transaction Date", "created_at", "date", "month", "Month"];
+          for (const f of tryFields) {
+            if (row[f]) {
+              const d = new Date(row[f]);
+              if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            }
+          }
+          // Fallback: scan ALL keys for any value that parses as a date
+          for (const key of Object.keys(row)) {
+            const val = row[key];
+            if (typeof val === "string" && val.length >= 7 && val.length <= 30) {
+              const d = new Date(val);
+              if (!isNaN(d.getTime()) && d.getFullYear() > 2000 && d.getFullYear() < 2100) {
+                console.log("[MB] Auto-detected date field:", key, "=", val);
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+              }
+            }
           }
           // If no date field, use current month as fallback
+          console.log("[MB] WARNING: No date field found in row, keys:", Object.keys(row).join(", "));
           return curMonth;
         };
 
@@ -6495,8 +6509,17 @@ function AviroDashboard() {
                 ]);
                 const dateFieldName = defaults.dateFieldName || "Created At";
                 const extractMo = (row) => {
-                  const dv = row[dateFieldName] || row["Created At"] || row["Date"] || row["Transaction Date"] || row["created_at"];
-                  if (dv) { const dt = new Date(dv); if (!isNaN(dt.getTime())) return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; }
+                  const tryFields = [dateFieldName, "Created At", "Created At: Month", "Date", "Transaction Date", "created_at", "date", "month", "Month"];
+                  for (const f of tryFields) {
+                    if (row[f]) { const dt = new Date(row[f]); if (!isNaN(dt.getTime())) return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; }
+                  }
+                  for (const key of Object.keys(row)) {
+                    const val = row[key];
+                    if (typeof val === "string" && val.length >= 7 && val.length <= 30) {
+                      const dt = new Date(val);
+                      if (!isNaN(dt.getTime()) && dt.getFullYear() > 2000 && dt.getFullYear() < 2100) return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+                    }
+                  }
                   return curMonth;
                 };
                 const parseFresh = (rows, txType) => (rows || []).map(r => ({
@@ -6752,7 +6775,7 @@ function AviroDashboard() {
                               {(mu.tiers || []).map((tier, ti) => (
                                 <div key={ti} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 6, marginBottom: 4 }}>
                                   <div><label style={{ ...labelStyle4, fontSize: 9 }}>Up To ($)</label><input value={tier.upTo || ""} onChange={e => { const t = [...(mu.tiers || [])]; t[ti] = { ...t[ti], upTo: e.target.value }; updateMu("tiers", t); }} placeholder="100000" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
-                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Rate (%)</label><input value={tier.rate || ""} onChange={e => { const t = [...(mu.tiers || [])]; t[ti] = { ...t[ti], rate: e.target.value }; updateMu("tiers", t); }} placeholder="2.0" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Mark Up (%)</label><input value={tier.rate || ""} onChange={e => { const t = [...(mu.tiers || [])]; t[ti] = { ...t[ti], rate: e.target.value }; updateMu("tiers", t); }} placeholder="2.0" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
                                   <button onClick={() => updateMu("tiers", (mu.tiers || []).filter((_, i) => i !== ti))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, alignSelf: "end", padding: "4px" }}>✕</button>
                                 </div>
                               ))}
@@ -6765,7 +6788,7 @@ function AviroDashboard() {
                               {(mu.targets || []).map((tgt, tgi) => (
                                 <div key={tgi} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 6, marginBottom: 4 }}>
                                   <div><label style={{ ...labelStyle4, fontSize: 9 }}>Threshold ($)</label><input value={tgt.threshold || ""} onChange={e => { const t = [...(mu.targets || [])]; t[tgi] = { ...t[tgi], threshold: e.target.value }; updateMu("targets", t); }} placeholder="100000" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
-                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Rate (%)</label><input value={tgt.rate || ""} onChange={e => { const t = [...(mu.targets || [])]; t[tgi] = { ...t[tgi], rate: e.target.value }; updateMu("targets", t); }} placeholder="1.5" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Mark Up (%)</label><input value={tgt.rate || ""} onChange={e => { const t = [...(mu.targets || [])]; t[tgi] = { ...t[tgi], rate: e.target.value }; updateMu("targets", t); }} placeholder="1.5" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
                                   <button onClick={() => updateMu("targets", (mu.targets || []).filter((_, i) => i !== tgi))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, alignSelf: "end", padding: "4px" }}>✕</button>
                                 </div>
                               ))}
