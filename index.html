@@ -6031,33 +6031,16 @@ function AviroDashboard() {
               </tr>
             </thead>
             <tbody>
-              {currencies.map(curr => {
-                const currMethods = methods.filter(m => m.currency === curr);
-                const currTotal = { count: 0, amount: 0, fee: 0, net: 0 };
-                currMethods.forEach(m => { currTotal.count += m.count; currTotal.amount += m.amount; currTotal.fee += m.fee; currTotal.net += m.net; });
-                return [
-                  ...currMethods.map((m, i) => (
-                    <tr key={`${curr}-${i}`} style={{ borderBottom: `1px solid ${c.border}15` }}>
-                      <td style={{ padding: "7px 12px", color: c.textSecondary, fontWeight: 500 }}>{m.currency}</td>
-                      <td style={{ padding: "7px 12px", color: c.text, fontWeight: 500 }}>{m.name}</td>
-                      <td style={{ padding: "7px 12px", color: c.textSecondary, textAlign: "right" }}>{fmtInt(m.count)}</td>
-                      <td style={{ padding: "7px 12px", color: accentColor, textAlign: "right", fontWeight: 600 }}>{fmt(m.amount)}</td>
-                      <td style={{ padding: "7px 12px", color: "#ef4444", textAlign: "right" }}>{fmt(m.fee)}</td>
-                      <td style={{ padding: "7px 12px", color: c.text, textAlign: "right", fontWeight: 600 }}>{fmt(m.net)}</td>
-                    </tr>
-                  )),
-                  currencies.length > 1 && (
-                    <tr key={`${curr}-subtotal`} style={{ borderBottom: `2px solid ${c.border}40`, background: `${accentColor}08` }}>
-                      <td style={{ padding: "7px 12px", fontWeight: 700, color: accentColor, fontSize: 10 }}>{curr} SUBTOTAL</td>
-                      <td style={{ padding: "7px 12px" }}></td>
-                      <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 700, color: c.text }}>{fmtInt(currTotal.count)}</td>
-                      <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 700, color: accentColor }}>{fmt(currTotal.amount)}</td>
-                      <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 700, color: "#ef4444" }}>{fmt(currTotal.fee)}</td>
-                      <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 700, color: c.text }}>{fmt(currTotal.net)}</td>
-                    </tr>
-                  )
-                ];
-              })}
+              {methods.map((m, i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${c.border}15` }}>
+                  <td style={{ padding: "7px 12px", color: c.textSecondary, fontWeight: 500 }}>{m.currency}</td>
+                  <td style={{ padding: "7px 12px", color: c.text, fontWeight: 500 }}>{m.name}</td>
+                  <td style={{ padding: "7px 12px", color: c.textSecondary, textAlign: "right" }}>{fmtInt(m.count)}</td>
+                  <td style={{ padding: "7px 12px", color: accentColor, textAlign: "right", fontWeight: 600 }}>{fmt(m.amount)}</td>
+                  <td style={{ padding: "7px 12px", color: "#ef4444", textAlign: "right" }}>{fmt(m.fee)}</td>
+                  <td style={{ padding: "7px 12px", color: c.text, textAlign: "right", fontWeight: 600 }}>{fmt(m.net)}</td>
+                </tr>
+              ))}
               {/* Grand total row */}
               <tr style={{ borderTop: `2px solid ${c.border}`, background: `${accentColor}10` }}>
                 <td colSpan={2} style={{ padding: "10px 12px", fontWeight: 800, color: c.text, fontSize: 11 }}>TOTAL</td>
