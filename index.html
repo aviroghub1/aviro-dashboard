@@ -88,6 +88,11 @@ const GATEWAY_CLIENTS = [
   { name: "Yeet", status: "onboarding", statusColor: "#f59e0b" },
 ];
 
+// Metabase connection configs — keyed by client name (matched case-insensitive)
+const METABASE_DEFAULTS = {
+  "elite bet": { url: "https://reports.elitebet.bookiebase.ie", username: "David@aviro-group.com", password: "Elitebet1$", depositCard: 57, withdrawalCard: 58, dateFieldId: 443 },
+};
+
 // Simple FX rates to EUR (update as needed)
 // Default FX rates — will be overridden by state
 const DEFAULT_FX_RATES = { EUR: 1, GBP: 1.17, USD: 0.92, CAD: 0.67, AUD: 0.60, SEK: 0.087, NOK: 0.087, BRL: 0.17, BTC: 55000 };
@@ -553,121 +558,28 @@ function AviroDashboard() {
   const [primaryTZ, setPrimaryTZ] = useState("GST"); // GST, BST, CEST - user's primary timezone
 
   // ===== REVENUE STATE =====
-  const BRANDS = [
-    { id: "elitebet", name: "EliteBet", source: "metabase", color: "#6366f1",
-      mb: { url: "https://reports.elitebet.bookiebase.ie", username: "David@aviro-group.com", password: "Elitebet1$" } },
-    { id: "bet40", name: "Bet-40", source: "metabase", color: "#f59e0b",
-      mb: { url: "https://reports.bet-40.bookiebase.ie", username: "David@aviro-group.com", password: "AviroCashier1$" } },
-    { id: "puntersvip", name: "PuntersVIP", source: "metabase", color: "#22c55e",
-      mb: { url: "https://reports.puntersvip.bookiebase.ie", username: "David@aviro-group.com", password: "AviroCashier1$" } },
-    { id: "ggpoker", name: "GG Poker", source: "cubepay", color: "#ec4899" },
-    { id: "rocketbet", name: "RocketBet", source: "none", color: "#6b7280" },
-  ];
-  const [revSelectedBrand, setRevSelectedBrand] = useState("elitebet");
-  const [revData, setRevData] = useState({}); // { brandId: { totals: {deposits,withdrawals,depFees,wdFees}, depositMethods: [{name,currency,count,amount,fee,net}], withdrawalMethods: [{name,currency,count,amount,fee,net}] } }
-  const [revStatus, setRevStatus] = useState({}); // { brandId: { status: "", error: "", lastSync: "" } }
-  const [revMbTokens, setRevMbTokens] = useState({}); // { brandId: "session-token" }
-  const [revMbCards, setRevMbCards] = useState({}); // { brandId: [{ id, name, description }] }
-  const [revMbConfig, setRevMbConfig] = useState({}); // { brandId: { depositCard: id, withdrawalCard: id } }
-  const [revDebug, setRevDebug] = useState([]); // debug log lines
-  const revLog = useCallback((msg) => { console.log("[REV]", msg); setRevDebug(prev => [...prev.slice(-50), new Date().toLocaleTimeString() + " " + msg]); }, []);
-
-  // Metabase proxy helper
-  const mbProxy = useCallback(async (baseUrl, path, method, body, token) => {
-    const payload = { metabaseUrl: baseUrl, path, method: method || "GET", body: body || undefined, sessionToken: token || undefined };
-    const resp = await fetch("/.netlify/functions/metabase-proxy", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
-    });
-    const data = await resp.json();
-    return data;
-  }, []);
-
-  // Connect to Metabase — authenticate and list cards
-  const mbConnectBrand = useCallback(async (brand) => {
-    if (!brand.mb) return;
-    revLog("Connecting " + brand.name + " to " + brand.mb.url + "...");
-    setRevStatus(prev => ({ ...prev, [brand.id]: { status: "Authenticating...", error: "" } }));
-    try {
-      const auth = await mbProxy(brand.mb.url, "/api/session", "POST", { username: brand.mb.username, password: brand.mb.password });
-      if (!auth || !auth.id) {
-        const err = (auth && (auth.message || auth.error)) || "Auth failed";
-        revLog(brand.name + " AUTH FAILED: " + err);
-        setRevStatus(prev => ({ ...prev, [brand.id]: { status: "", error: err } }));
-        return;
-      }
-      revLog(brand.name + " authenticated OK");
-      setRevMbTokens(prev => ({ ...prev, [brand.id]: auth.id }));
-
-      // Fetch all saved questions/cards
-      setRevStatus(prev => ({ ...prev, [brand.id]: { status: "Loading cards...", error: "" } }));
-      const cards = await mbProxy(brand.mb.url, "/api/card", "GET", null, auth.id);
-      if (Array.isArray(cards)) {
-        const cardList = cards.map(c2 => ({ id: c2.id, name: c2.name, description: c2.description || "", collection: (c2.collection && c2.collection.name) || "" }));
-        revLog(brand.name + ": found " + cardList.length + " cards");
-        setRevMbCards(prev => ({ ...prev, [brand.id]: cardList }));
-        setRevStatus(prev => ({ ...prev, [brand.id]: { status: "Connected — select cards", error: "" } }));
-      } else {
-        revLog(brand.name + " card list error: " + JSON.stringify(cards).substring(0, 200));
-        setRevStatus(prev => ({ ...prev, [brand.id]: { status: "", error: "Failed to load cards" } }));
-      }
-    } catch (e) {
-      revLog(brand.name + " ERROR: " + e.message);
-      setRevStatus(prev => ({ ...prev, [brand.id]: { status: "", error: e.message } }));
-    }
-  }, [mbProxy, revLog]);
-
-  // Fetch data from selected cards — pulls raw data exactly as Metabase returns it
-  const mbFetchData = useCallback(async (brand) => {
-    const token = revMbTokens[brand.id];
-    const config = revMbConfig[brand.id];
-    if (!token || !config || !brand.mb) return;
-    revLog(brand.name + ": fetching cards " + config.depositCard + " / " + config.withdrawalCard);
-    setRevStatus(prev => ({ ...prev, [brand.id]: { ...prev[brand.id], status: "Fetching data..." } }));
-    try {
-      const [depResp, wdResp] = await Promise.all([
-        config.depositCard ? mbProxy(brand.mb.url, "/api/card/" + config.depositCard + "/query/json", "POST", {}, token) : [],
-        config.withdrawalCard ? mbProxy(brand.mb.url, "/api/card/" + config.withdrawalCard + "/query/json", "POST", {}, token) : [],
-      ]);
-      const depRows = Array.isArray(depResp) ? depResp : [];
-      const wdRows = Array.isArray(wdResp) ? wdResp : [];
-      revLog(brand.name + ": " + depRows.length + " dep rows, " + wdRows.length + " wd rows");
-      if (depRows.length > 0) revLog("Dep keys: " + Object.keys(depRows[0]).join(", "));
-      if (wdRows.length > 0) revLog("Wd keys: " + Object.keys(wdRows[0]).join(", "));
-
-      // Parse deposit rows exactly as they come
-      const parseRows = (rows) => rows.map(r => ({
-        currency: r["Currency"] || "",
-        name: r["Core Account - Account → Account"] || r["Account"] || r["Method"] || "Unknown",
-        count: parseInt(r["Count"]) || 0,
-        amount: Math.abs(parseFloat(r["Sum of Amount"]) || 0),
-        fee: Math.abs(parseFloat(r["Sum of Fee"]) || 0),
-        net: Math.abs(parseFloat(r["Sum of Net Amount"]) || parseFloat(r["Sum of Amount"]) || 0),
-      })).sort((a, b) => b.amount - a.amount);
-
-      const depositMethods = parseRows(depRows);
-      const withdrawalMethods = parseRows(wdRows);
-
-      const totalDeps = depositMethods.reduce((s, m) => s + m.amount, 0);
-      const totalDepFees = depositMethods.reduce((s, m) => s + m.fee, 0);
-      const totalWds = withdrawalMethods.reduce((s, m) => s + m.amount, 0);
-      const totalWdFees = withdrawalMethods.reduce((s, m) => s + m.fee, 0);
-
-      revLog(brand.name + ": Deposits=" + totalDeps.toFixed(2) + " (" + depositMethods.length + " methods) | Withdrawals=" + totalWds.toFixed(2) + " (" + withdrawalMethods.length + " methods)");
-
-      setRevData(prev => ({
-        ...prev,
-        [brand.id]: {
-          totals: { deposits: totalDeps, withdrawals: totalWds, depFees: totalDepFees, wdFees: totalWdFees },
-          depositMethods,
-          withdrawalMethods,
-        }
-      }));
-      setRevStatus(prev => ({ ...prev, [brand.id]: { status: "", error: "", lastSync: new Date().toISOString() } }));
-    } catch (e) {
-      revLog(brand.name + " FETCH ERROR: " + e.message);
-      setRevStatus(prev => ({ ...prev, [brand.id]: { ...prev[brand.id], status: "", error: e.message } }));
-    }
-  }, [revMbTokens, revMbConfig, mbProxy, revLog]);
+  const [revenueSubSection, setRevenueSubSection] = useState("overview"); // overview, cubepay, gatewayrev, bettingrev
+  const [cubePayDeals, setCubePayDeals] = useState({}); // { clientId: [{ id, type, ...dealConfig }] }
+  const [cubePayMonthlyData, setCubePayMonthlyData] = useState({}); // { clientId: { deposits, withdrawals, depositFees, withdrawalFees } } — placeholder until Metabase
+  const [cubePayOperatingCosts, setCubePayOperatingCosts] = useState({}); // { "YYYY-MM": { clientId: amount } }
+  const [cubePayPlaceholderCostPct, setCubePayPlaceholderCostPct] = useState({}); // { clientId: "15" } — rough % used during month
+  const [providerGroups, setProviderGroups] = useState([]); // [{ id, name, providerServiceIds: [] }]
+  const [gatewayRevFees, setGatewayRevFees] = useState({}); // { clientId: { monthlyFee, currency, hidden } }
+  const [selectedRevenueClient, setSelectedRevenueClient] = useState(null);
+  const [metabaseConfigs, setMetabaseConfigs] = useState({}); // { clientId: { url, username, password, sessionToken, cards: [], selectedDepositCard, selectedWithdrawalCard } }
+  const [mbLoading, setMbLoading] = useState(false);
+  const [mbError, setMbError] = useState("");
+  const [mbShowSetup, setMbShowSetup] = useState(false);
+  const [mbCards, setMbCards] = useState([]);
+  const [mbFetchStatus, setMbFetchStatus] = useState("");
+  const [pvBreakdownOpen, setPvBreakdownOpen] = useState(false);
+  const [cubePayProvOpen, setCubePayProvOpen] = useState(false);
+  const [mbCurrentData, setMbCurrentData] = useState({}); // { clientId: { deposits, withdrawals, depositFees, withdrawalFees } }
+  const [mbPrevData, setMbPrevData] = useState({}); // same structure for previous month
+  const [mbSummaryRows, setMbSummaryRows] = useState({}); // { clientId: [{ month, tx_type, currency, method, tx_count, gross_amount, fee_amount }] }
+  const [mbCachedMonths, setMbCachedMonths] = useState({}); // { clientId: Set of "YYYY-MM" strings }
+  const [mbDateFrom, setMbDateFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
+  const [mbDateTo, setMbDateTo] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
 
   // ===== SETTINGS STATE =====
   const [fxRates, setFxRates] = useState(DEFAULT_FX_RATES); // { currency: rateToEUR }
@@ -693,12 +605,12 @@ function AviroDashboard() {
         entityIntraAgreements, entityCorpAgreements,
         bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
         supabaseUrl, supabaseKey,
+        cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
         fxRates, fxBaseCurrency, fxLastUpdated,
-        revData, revStatus, revMbConfig,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, fxRates, fxBaseCurrency, fxLastUpdated, revData, revStatus, revMbConfig]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -759,18 +671,200 @@ function AviroDashboard() {
         if (s.providers) setProviders(s.providers);
         if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
         if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
+        if (s.cubePayDeals) setCubePayDeals(s.cubePayDeals);
+        if (s.cubePayMonthlyData) setCubePayMonthlyData(s.cubePayMonthlyData);
+        if (s.cubePayOperatingCosts) setCubePayOperatingCosts(s.cubePayOperatingCosts);
+        if (s.cubePayPlaceholderCostPct) setCubePayPlaceholderCostPct(s.cubePayPlaceholderCostPct);
+        if (s.providerGroups) setProviderGroups(s.providerGroups);
+        if (s.gatewayRevFees) setGatewayRevFees(s.gatewayRevFees);
+        if (s.metabaseConfigs) setMetabaseConfigs(s.metabaseConfigs);
         if (s.fxRates) setFxRates(s.fxRates);
         if (s.fxBaseCurrency) setFxBaseCurrency(s.fxBaseCurrency);
         if (s.fxLastUpdated) setFxLastUpdated(s.fxLastUpdated);
-        if (s.revData) setRevData(s.revData);
-        if (s.revStatus) setRevStatus(s.revStatus);
-        if (s.revMbConfig) setRevMbConfig(s.revMbConfig);
       }
     } catch (e) { console.warn("Load state failed:", e); }
     setHasLoaded(true);
   }, []);
 
+  // ===== METABASE HELPERS =====
+  const mbProxyCall = useCallback(async (baseUrl, path, method, body, token) => {
+    const resp = await fetch("/.netlify/functions/metabase-proxy", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ metabaseUrl: baseUrl, path, method: method || "GET", body, sessionToken: token }),
+    });
+    return resp.json();
+  }, []);
 
+  // Parse Metabase summary rows into individual Supabase-ready records
+  const parseMbRows = useCallback((rows, txType, monthStr) => {
+    return (rows || []).map(r => ({
+      month: monthStr,
+      tx_type: txType,
+      currency: r["Currency"] || "EUR",
+      method: r["Core Account - Account → Account"] || "Unknown",
+      tx_count: parseInt(r["Count"]) || 0,
+      gross_amount: Math.abs(parseFloat(r["Sum of Amount"]) || 0),
+      fee_amount: Math.abs(parseFloat(r["Sum of Fee"]) || 0),
+    }));
+  }, []);
+
+  // Aggregate summary rows for a date range into display-ready data
+  const aggregateSummary = useCallback((rows, fromMonth, toMonth) => {
+    const filtered = rows.filter(r => r.month >= fromMonth && r.month <= toMonth);
+    const depMethods = {}, wdMethods = {};
+    let totalDeps = 0, totalWds = 0, totalDepFees = 0, totalWdFees = 0;
+    filtered.forEach(r => {
+      const grossEUR = toEUR(r.gross_amount, r.currency);
+      const feesEUR = toEUR(r.fee_amount, r.currency);
+      if (r.tx_type === "deposit") {
+        totalDeps += grossEUR; totalDepFees += feesEUR;
+        if (!depMethods[r.method]) depMethods[r.method] = { gross: 0, fees: 0, count: 0 };
+        depMethods[r.method].gross += grossEUR; depMethods[r.method].fees += feesEUR; depMethods[r.method].count += r.tx_count;
+      } else {
+        totalWds += grossEUR; totalWdFees += feesEUR;
+        if (!wdMethods[r.method]) wdMethods[r.method] = { gross: 0, fees: 0, count: 0 };
+        wdMethods[r.method].gross += grossEUR; wdMethods[r.method].fees += feesEUR; wdMethods[r.method].count += r.tx_count;
+      }
+    });
+    return {
+      deposits: totalDeps.toFixed(2), withdrawals: totalWds.toFixed(2),
+      depositFees: totalDepFees.toFixed(2), withdrawalFees: totalWdFees.toFixed(2),
+      depositMethods: depMethods, withdrawalMethods: wdMethods,
+    };
+  }, [toEUR]);
+
+  // ===== AUTO-CONNECT METABASE =====
+  const mbAutoConnectRef = useRef({});
+  useEffect(() => {
+    if (!selectedRevenueClient || !hasLoaded) return;
+    const client = gatewayClients.find(cl => cl.id === selectedRevenueClient);
+    if (!client) { console.log("[MB] No client found for id:", selectedRevenueClient); return; }
+    const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
+    if (!defaults) { console.log("[MB] No defaults for:", client.name); return; }
+    // Clear any stale config with wrong URL and reset attempt tracker
+    const existing = metabaseConfigs[client.id] || {};
+    if (existing.url && existing.url !== defaults.url) {
+      console.log("[MB] Stale config detected, clearing for:", client.name);
+      setMetabaseConfigs(prev => { const n = { ...prev }; delete n[client.id]; return n; });
+      mbAutoConnectRef.current[client.id] = false;
+      return;
+    }
+    if (existing.sessionToken || mbAutoConnectRef.current[client.id]) { console.log("[MB] Already connected or attempted:", client.name, !!existing.sessionToken); return; }
+    mbAutoConnectRef.current[client.id] = true;
+    console.log("[MB] Auto-connecting:", client.name, "to", defaults.url);
+
+    (async () => {
+      setMbLoading(true); setMbError(""); setMbFetchStatus("Connecting...");
+      try {
+        const now = new Date();
+        const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+        // 1) Load ALL cached rows from Supabase for this client
+        let cachedRows = [];
+        const cachedMonthSet = new Set();
+        try {
+          setMbFetchStatus("Loading cached data...");
+          const supaResp = await fetch(`${SUPA_URL}/rest/v1/metabase_summary?select=*&client_name=eq.${encodeURIComponent(client.name)}&order=month.desc`, {
+            headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+          });
+          if (supaResp.ok) {
+            cachedRows = await supaResp.json();
+            cachedRows.forEach(r => cachedMonthSet.add(r.month));
+            console.log("[MB] Cached months from Supabase:", [...cachedMonthSet].sort());
+          }
+        } catch (e) { console.log("[MB] Supabase cache not available:", e.message); }
+
+        // 2) Authenticate with Metabase
+        setMbFetchStatus("Authenticating...");
+        const authResp = await mbProxyCall(defaults.url, "/api/session", "POST", { username: defaults.username, password: defaults.password });
+        if (!authResp.id) { setMbError(authResp.message || authResp.error || JSON.stringify(authResp)); setMbLoading(false); setMbFetchStatus(""); return; }
+        const token = authResp.id;
+        console.log("[MB] Auth success, token obtained");
+
+        // 3) Build list of months to fetch: always current month + any missing months going back 6 months
+        const monthsToFetch = [];
+        for (let i = 0; i < 6; i++) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          if (m === curMonth || !cachedMonthSet.has(m)) monthsToFetch.push(m);
+        }
+        console.log("[MB] Months to fetch from Metabase:", monthsToFetch);
+
+        // 4) Date filter builder
+        const dateParams = (monthStr) => defaults.dateFieldId ? [{
+          type: "date/month-year",
+          target: ["dimension", ["field", defaults.dateFieldId, null]],
+          value: monthStr,
+        }] : [];
+
+        // 5) Fetch each missing month
+        let newRows = [];
+        for (const m of monthsToFetch) {
+          setMbFetchStatus(`Fetching ${m}...`);
+          const [depRows, wdRows] = await Promise.all([
+            defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateParams(m) }, token) : [],
+            defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateParams(m) }, token) : [],
+          ]);
+          const depRecords = parseMbRows(Array.isArray(depRows) ? depRows : [], "deposit", m);
+          const wdRecords = parseMbRows(Array.isArray(wdRows) ? wdRows : [], "withdrawal", m);
+          newRows = [...newRows, ...depRecords, ...wdRecords];
+          console.log("[MB]", m, ":", depRecords.length, "dep rows,", wdRecords.length, "wd rows");
+        }
+
+        // 6) Save new rows to Supabase (upsert)
+        if (newRows.length > 0) {
+          setMbFetchStatus("Saving to database...");
+          // Delete existing rows for fetched months first, then insert fresh
+          for (const m of monthsToFetch) {
+            try {
+              await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${m}`, {
+                method: "DELETE",
+                headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` }
+              });
+            } catch (e) { console.log("[MB] Delete old rows failed for", m, e.message); }
+          }
+          // Insert in batches of 50
+          const insertRows = newRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
+          for (let i = 0; i < insertRows.length; i += 50) {
+            try {
+              await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, {
+                method: "POST",
+                headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
+                body: JSON.stringify(insertRows.slice(i, i + 50)),
+              });
+            } catch (e) { console.log("[MB] Insert batch failed:", e.message); }
+          }
+          console.log("[MB] Saved", insertRows.length, "rows to Supabase");
+        }
+
+        // 7) Merge cached + new into full row set
+        // Remove old rows for re-fetched months from cachedRows, add newRows
+        const fetchedMonthSet = new Set(monthsToFetch);
+        const allRows = [...cachedRows.filter(r => !fetchedMonthSet.has(r.month)), ...newRows];
+        setMbSummaryRows(prev => ({ ...prev, [client.id]: allRows }));
+        const allMonths = new Set(allRows.map(r => r.month));
+        setMbCachedMonths(prev => ({ ...prev, [client.id]: allMonths }));
+
+        // 8) Build current month display data
+        const curAgg = aggregateSummary(allRows, curMonth, curMonth);
+        setMbCurrentData(prev => ({ ...prev, [client.id]: curAgg }));
+        setCubePayMonthlyData(prev => ({ ...prev, [client.id]: curAgg }));
+
+        // Set previous month data too
+        const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+        const prevAgg = aggregateSummary(allRows, prevMonth, prevMonth);
+        setMbPrevData(prev => ({ ...prev, [client.id]: prevAgg }));
+
+        console.log("[MB] Current month:", curAgg.deposits, "deps,", curAgg.withdrawals, "wds");
+
+        const newConfig = { ...defaults, sessionToken: token };
+        setMetabaseConfigs(prev => ({ ...prev, [client.id]: newConfig }));
+        setMbFetchStatus("");
+      } catch (e) { console.error("[MB] Error:", e); setMbError("Failed: " + e.message); setMbFetchStatus(""); }
+      setMbLoading(false);
+    })();
+  }, [selectedRevenueClient, hasLoaded]);
 
   // Computed: entities grouped by category (replaces old hardcoded CORPORATE_ENTITIES)
   const CORPORATE_ENTITIES = {};
@@ -5954,7 +6048,8 @@ function AviroDashboard() {
       { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #6366f1, #8b5cf6)", defaultSection: "clients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #f59e0b, #ef4444)", defaultSection: null },
       { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #10b981, #059669)", defaultSection: "entities" },
-      { key: "revenue", title: "Revenue", desc: "Brand Data & Revenue Analytics", icon: "signal", gradient: "linear-gradient(135deg, #ec4899, #be185d)", defaultSection: "revenue" },
+      { key: "revenue", title: "Revenue", desc: "Revenue Tracking & Analytics", icon: "signal", gradient: "linear-gradient(135deg, #ec4899, #be185d)", defaultSection: "revenue" },
+      { key: "finance", title: "Finance", desc: "Financial Management & Reporting", icon: "flow", gradient: "linear-gradient(135deg, #14b8a6, #0d9488)", defaultSection: null },
       { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)", defaultSection: "calendar" },
       { key: "settings", title: "Settings", desc: "FX Rates, Connections & Configuration", icon: "bank", gradient: "linear-gradient(135deg, #6b7280, #4b5563)", defaultSection: "settings" },
     ];
@@ -5993,19 +6088,6 @@ function AviroDashboard() {
     );
   };
 
-  // ===== REVENUE (placeholder — full version in development locally) =====
-  const renderRevenue = () => {
-    return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 48, maxWidth: 500, margin: "0 auto" }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: c.text, marginBottom: 8 }}>Revenue Data</div>
-          <div style={{ fontSize: 13, color: c.textMuted, lineHeight: 1.6 }}>This section is being rebuilt with Metabase integration and will be available shortly.</div>
-        </div>
-      </div>
-    );
-  };
-
   // ===== SETTINGS =====
   const renderSettings = () => {
     const inputStyle5 = { fontSize: 12, padding: "8px 12px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
@@ -6035,7 +6117,7 @@ function AviroDashboard() {
 
     const fetchLiveRates = async () => {
       try {
-        console.log("Fetching live FX rates...");
+        setMbFetchStatus("Fetching live FX rates...");
         const resp = await fetch("https://api.exchangerate-api.com/v4/latest/EUR");
         const data = await resp.json();
         if (data && data.rates) {
@@ -6050,10 +6132,12 @@ function AviroDashboard() {
           });
           setFxRates(updated);
           setFxLastUpdated(new Date().toISOString());
-          console.log("FX rates updated!");
+          setMbFetchStatus("FX rates updated!");
+          setTimeout(() => setMbFetchStatus(""), 3000);
         }
       } catch (e) {
-        console.log("FX fetch failed: " + e.message);
+        setMbFetchStatus("FX fetch failed: " + e.message);
+        setTimeout(() => setMbFetchStatus(""), 5000);
       }
     };
 
@@ -6072,6 +6156,7 @@ function AviroDashboard() {
               <div style={{ fontSize: 12, color: c.textMuted }}>All rates expressed as 1 unit of currency = X EUR {fxLastUpdated && <span style={{ marginLeft: 8, fontSize: 10, color: c.accent }}>Last updated: {new Date(fxLastUpdated).toLocaleString()}</span>}</div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              {mbFetchStatus && <span style={{ fontSize: 11, color: mbFetchStatus.includes("fail") ? "#ef4444" : "#22c55e", alignSelf: "center" }}>{mbFetchStatus}</span>}
               <button onClick={fetchLiveRates} style={{ fontSize: 12, padding: "8px 20px", borderRadius: 8, cursor: "pointer", border: "none", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff", fontWeight: 600, boxShadow: "0 2px 8px rgba(99,102,241,0.3)" }}>Fetch Live Rates</button>
             </div>
           </div>
@@ -6118,10 +6203,872 @@ function AviroDashboard() {
           </div>
         </div>
 
+        {/* Metabase Connections — future: move metabase config management here */}
+        <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 24, opacity: 0.5 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 4 }}>Metabase Connections</div>
+          <div style={{ fontSize: 12, color: c.textMuted }}>Manage data source connections for revenue tracking. Currently hard-coded — settings management coming soon.</div>
+        </div>
       </div>
     );
   };
 
+  // ===== REVENUE =====
+  const renderRevenue = () => {
+    const sub = revenueSubSection;
+    const setSub = setRevenueSubSection;
+    const inputStyle4 = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const labelStyle4 = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
+    const DEAL_TYPES = ["Net Hold", "Provider Mark Up", "Profit Share"];
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    // Filter clients for Cube Pay — exclude Tech Only and Onboarding
+    const cubePayClients = gatewayClients.filter(cl => cl.clientType !== "Tech Only" && cl.status !== "Onboarding");
+    // All clients for Gateway.io revenue (including Tech Only)
+    const allGatewayRevClients = gatewayClients;
+
+    // Helper: get all provider services as flat list
+    const allProviderServices = [];
+    providers.forEach(p => (p.services || []).forEach(s => allProviderServices.push({ provId: p.id, provName: p.name, svcId: s.id, svcName: s.name || p.name, ...s })));
+
+    // Helper: calculate net hold for a client
+    const calcNetHold = (clientId) => {
+      const data = cubePayMonthlyData[clientId] || {};
+      const deps = parseFloat(data.deposits) || 0;
+      const wds = parseFloat(data.withdrawals) || 0;
+      const depFees = parseFloat(data.depositFees) || 0;
+      const wdFees = parseFloat(data.withdrawalFees) || 0;
+      return deps - wds - depFees - wdFees;
+    };
+
+    // Helper: calculate revenue for a deal
+    const calcDealRevenue = (deal, clientId) => {
+      if (deal.type === "Net Hold") {
+        const nh = calcNetHold(clientId);
+        const pct = parseFloat(deal.netHoldPct) || 0;
+        return nh * (pct / 100);
+      }
+      if (deal.type === "Provider Mark Up") {
+        // Sum markups across methods
+        return (deal.markups || []).reduce((sum, mu) => {
+          const vol = parseFloat(mu.volume) || 0;
+          const rate = parseFloat(mu.rate) || 0;
+          // Volume discount logic
+          if (mu.discountType === "Tiers" && (mu.tiers || []).length > 0) {
+            let remaining = vol;
+            let total = 0;
+            const sortedTiers = [...(mu.tiers || [])].sort((a, b) => (parseFloat(a.upTo) || Infinity) - (parseFloat(b.upTo) || Infinity));
+            let prevLimit = 0;
+            sortedTiers.forEach(tier => {
+              const limit = parseFloat(tier.upTo) || Infinity;
+              const tierRate = parseFloat(tier.rate) || 0;
+              const tierVol = Math.min(remaining, limit - prevLimit);
+              if (tierVol > 0) { total += tierVol * (tierRate / 100); remaining -= tierVol; }
+              prevLimit = limit;
+            });
+            if (remaining > 0) total += remaining * (rate / 100);
+            return sum + total;
+          }
+          if (mu.discountType === "Targets" && (mu.targets || []).length > 0) {
+            const sortedTargets = [...(mu.targets || [])].sort((a, b) => (parseFloat(b.threshold) || 0) - (parseFloat(a.threshold) || 0));
+            let appliedRate = rate;
+            for (const tgt of sortedTargets) {
+              if (vol >= (parseFloat(tgt.threshold) || 0)) { appliedRate = parseFloat(tgt.rate) || rate; break; }
+            }
+            return sum + vol * (appliedRate / 100);
+          }
+          return sum + vol * (rate / 100);
+        }, 0);
+      }
+      if (deal.type === "Profit Share") {
+        const nh = calcNetHold(clientId);
+        const costsPct = parseFloat(cubePayPlaceholderCostPct[clientId]) || 0;
+        const actualCosts = parseFloat((cubePayOperatingCosts[currentMonth] || {})[clientId]) || 0;
+        const costs = actualCosts > 0 ? actualCosts : nh * (costsPct / 100);
+        const sharePct = parseFloat(deal.profitSharePct) || 0;
+        return (nh - costs) * (sharePct / 100);
+      }
+      return 0;
+    };
+
+    // KPI calculations
+    const totalVolume = cubePayClients.reduce((sum, cl) => {
+      const d = cubePayMonthlyData[cl.id] || {};
+      return sum + (parseFloat(d.deposits) || 0) + (parseFloat(d.withdrawals) || 0);
+    }, 0);
+    const totalFees = cubePayClients.reduce((sum, cl) => {
+      const d = cubePayMonthlyData[cl.id] || {};
+      return sum + (parseFloat(d.depositFees) || 0) + (parseFloat(d.withdrawalFees) || 0);
+    }, 0);
+    const totalCubePayRevenue = cubePayClients.reduce((sum, cl) => {
+      return sum + (cubePayDeals[cl.id] || []).reduce((ds, deal) => ds + calcDealRevenue(deal, cl.id), 0);
+    }, 0);
+
+    const fmtCurrency = (v) => "$" + (v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Sub-tab nav
+    const subTabs = [
+      { key: "overview", label: "Overview" },
+      { key: "cubepay", label: "Cube Pay" },
+      { key: "gatewayrev", label: "Gateway.io" },
+      { key: "bettingrev", label: "Our Betting Brands" },
+    ];
+
+    // ===== CUBE PAY CLIENT DETAIL =====
+    const renderCubePayClient = (client) => {
+      const deals = cubePayDeals[client.id] || [];
+      const data = cubePayMonthlyData[client.id] || {};
+      const clientRevenue = deals.reduce((s, d) => s + calcDealRevenue(d, client.id), 0);
+      const hasProfitShare = deals.some(d => d.type === "Profit Share");
+      const deps = parseFloat(data.deposits) || 0;
+      const wds = parseFloat(data.withdrawals) || 0;
+      const totalProcessed = deps + wds;
+      const netHold = calcNetHold(client.id);
+
+      // Provider volume breakdown from markup deals
+      const providerVolumes = {};
+      deals.filter(d => d.type === "Provider Mark Up").forEach(d => {
+        (d.markups || []).forEach(mu => {
+          const vol = parseFloat(mu.volume) || 0;
+          if (!mu.providerSvcId || vol === 0) return;
+          const isGroup = mu.providerSvcId.startsWith("grp-");
+          const label = isGroup ? (providerGroups.find(pg => `grp-${pg.id}` === mu.providerSvcId) || {}).name || "Group" : (() => { const ps = allProviderServices.find(s => s.svcId === mu.providerSvcId); return ps ? `${ps.provName} — ${ps.svcName}` : mu.providerSvcId; })();
+          providerVolumes[label] = (providerVolumes[label] || 0) + vol;
+        });
+      });
+
+      const addDeal = (type) => {
+        const base = { id: `deal-${Date.now()}`, type };
+        if (type === "Net Hold") base.netHoldPct = "";
+        if (type === "Provider Mark Up") base.markups = [];
+        if (type === "Profit Share") base.profitSharePct = "";
+        setCubePayDeals({ ...cubePayDeals, [client.id]: [...deals, base] });
+      };
+      const updateDeal = (dealId, field, val) => {
+        setCubePayDeals({ ...cubePayDeals, [client.id]: deals.map(d => d.id === dealId ? { ...d, [field]: val } : d) });
+      };
+      const removeDeal = (dealId) => {
+        setCubePayDeals({ ...cubePayDeals, [client.id]: deals.filter(d => d.id !== dealId) });
+      };
+      const updateData = (field, val) => {
+        setCubePayMonthlyData({ ...cubePayMonthlyData, [client.id]: { ...data, [field]: val } });
+      };
+
+      return (
+        <div>
+          <button onClick={() => setSelectedRevenueClient(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 12, marginBottom: 16 }}>← Back to Cube Pay</button>
+
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 4px" }}>{client.name}</h3>
+            <p style={{ color: c.textSecondary, fontSize: 12, margin: 0 }}>{deals.length} deal{deals.length !== 1 ? "s" : ""} configured · Current month</p>
+          </div>
+
+          {/* KPI Cards — pretty gradient style */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+            <div style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(34,197,94,0.04))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Revenue</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#22c55e" }}>{fmtCurrency(clientRevenue)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04))", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 14, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: c.accent, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Deposits</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: c.accent }}>{fmtCurrency(deps)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 14, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Withdrawals</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(wds)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(236,72,153,0.12), rgba(236,72,153,0.04))", border: "1px solid rgba(236,72,153,0.25)", borderRadius: 14, padding: "18px 14px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: "#ec4899", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Processed</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#ec4899" }}>{fmtCurrency(totalProcessed)}</div>
+            </div>
+          </div>
+
+          {/* Provider Volume Breakdown — collapsible */}
+          {Object.keys(providerVolumes).length > 0 && (() => {
+            const sortedPV = Object.entries(providerVolumes).sort((a, b) => b[1] - a[1]);
+            const maxVol = sortedPV.length > 0 ? sortedPV[0][1] : 1;
+            return (
+              <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, marginBottom: 16, overflow: "hidden" }}>
+                <div onClick={() => setPvBreakdownOpen(!pvBreakdownOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Provider Breakdown</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 11, color: c.textMuted }}>{sortedPV.length} provider{sortedPV.length !== 1 ? "s" : ""}</span>
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{pvBreakdownOpen ? "▴" : "▾"}</span>
+                  </div>
+                </div>
+                {pvBreakdownOpen && (
+                  <div style={{ padding: "0 18px 16px" }}>
+                    {sortedPV.map(([label, vol]) => (
+                      <div key={label} style={{ marginBottom: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, color: c.text }}>{label}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: c.accent }}>{fmtCurrency(vol)}</span>
+                        </div>
+                        <div style={{ height: 6, background: c.surface, borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${(vol / maxVol) * 100}%`, background: `linear-gradient(90deg, ${c.accent}, #8b5cf6)`, borderRadius: 3, transition: "width 0.3s" }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Transaction Data — Metabase powered */}
+          {(() => {
+            const mbConfig = metabaseConfigs[client.id] || {};
+            const mbConnected = !!mbConfig.sessionToken;
+            const hasNetHoldDeal = deals.some(d => d.type === "Net Hold" || d.type === "Profit Share");
+            const allRows = mbSummaryRows[client.id] || [];
+            const cachedMonths = mbCachedMonths[client.id] || new Set();
+
+            // Aggregate data for the selected date range
+            const txData = allRows.length > 0 ? aggregateSummary(allRows, mbDateFrom, mbDateTo) : (mbCurrentData[client.id] || data);
+            const viewDeps = parseFloat(txData.deposits) || 0;
+            const viewWds = parseFloat(txData.withdrawals) || 0;
+            const viewDepFees = parseFloat(txData.depositFees) || 0;
+            const viewWdFees = parseFloat(txData.withdrawalFees) || 0;
+            const depMethods = txData.depositMethods || {};
+            const wdMethods = txData.withdrawalMethods || {};
+
+            // Combine all methods for unified breakdown
+            const allMethodNames = [...new Set([...Object.keys(depMethods), ...Object.keys(wdMethods)])];
+            const methodBreakdown = allMethodNames.map(m => ({
+              name: m,
+              deposits: (depMethods[m] || {}).gross || 0,
+              withdrawals: (wdMethods[m] || {}).gross || 0,
+              depFees: (depMethods[m] || {}).fees || 0,
+              wdFees: (wdMethods[m] || {}).fees || 0,
+              depCount: (depMethods[m] || {}).count || 0,
+              wdCount: (wdMethods[m] || {}).count || 0,
+            })).sort((a, b) => (b.deposits + b.withdrawals) - (a.deposits + a.withdrawals));
+            const maxMethodVol = methodBreakdown.length > 0 ? Math.max(...methodBreakdown.map(m => m.deposits + m.withdrawals)) : 1;
+
+            // Quick-select month presets
+            const now = new Date();
+            const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+            const prevMonthD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevMonth = `${prevMonthD.getFullYear()}-${String(prevMonthD.getMonth() + 1).padStart(2, "0")}`;
+            const isCurrentMonth = mbDateFrom === curMonth && mbDateTo === curMonth;
+            const isPrevMonth = mbDateFrom === prevMonth && mbDateTo === prevMonth;
+            const availableMonths = [...cachedMonths].sort().reverse();
+
+            // Refresh handler — re-fetches selected date range from Metabase
+            const refreshData = async () => {
+              const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
+              if (!defaults || !mbConfig.sessionToken) return;
+              setMbFetchStatus("Refreshing...");
+              try {
+                const dateParams = (monthStr) => defaults.dateFieldId ? [{ type: "date/month-year", target: ["dimension", ["field", defaults.dateFieldId, null]], value: monthStr }] : [];
+                // Build list of months in the selected range
+                const rangeMonths = [];
+                let d = new Date(mbDateFrom + "-01");
+                const endD = new Date(mbDateTo + "-01");
+                while (d <= endD) {
+                  rangeMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+                  d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+                }
+                let freshRows = [];
+                for (const m of rangeMonths) {
+                  setMbFetchStatus(`Refreshing ${m}...`);
+                  const [depRows, wdRows] = await Promise.all([
+                    defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateParams(m) }, mbConfig.sessionToken) : [],
+                    defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateParams(m) }, mbConfig.sessionToken) : [],
+                  ]);
+                  freshRows = [...freshRows, ...parseMbRows(Array.isArray(depRows) ? depRows : [], "deposit", m), ...parseMbRows(Array.isArray(wdRows) ? wdRows : [], "withdrawal", m)];
+                }
+                // Save to Supabase
+                const rangeSet = new Set(rangeMonths);
+                for (const m of rangeMonths) {
+                  try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${m}`, { method: "DELETE", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }); } catch (e) {}
+                }
+                const insertRows = freshRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
+                for (let i = 0; i < insertRows.length; i += 50) {
+                  try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, { method: "POST", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(insertRows.slice(i, i + 50)) }); } catch (e) {}
+                }
+                // Update local state
+                const updatedRows = [...allRows.filter(r => !rangeSet.has(r.month)), ...freshRows];
+                setMbSummaryRows(prev => ({ ...prev, [client.id]: updatedRows }));
+                const agg = aggregateSummary(updatedRows, mbDateFrom, mbDateTo);
+                if (isCurrentMonth) { setMbCurrentData(prev => ({ ...prev, [client.id]: agg })); setCubePayMonthlyData(prev => ({ ...prev, [client.id]: agg })); }
+                setMbFetchStatus("");
+              } catch (e) { setMbFetchStatus("Error: " + e.message); }
+            };
+
+            // Fetch older months on demand when date range changes
+            const fetchOlderMonth = async (monthStr) => {
+              const defaults = METABASE_DEFAULTS[client.name.toLowerCase()];
+              if (!defaults || !mbConfig.sessionToken) return;
+              setMbFetchStatus(`Fetching ${monthStr}...`);
+              try {
+                const dateParams = defaults.dateFieldId ? [{ type: "date/month-year", target: ["dimension", ["field", defaults.dateFieldId, null]], value: monthStr }] : [];
+                const [depRows, wdRows] = await Promise.all([
+                  defaults.depositCard ? mbProxyCall(defaults.url, `/api/card/${defaults.depositCard}/query/json`, "POST", { parameters: dateParams }, mbConfig.sessionToken) : [],
+                  defaults.withdrawalCard ? mbProxyCall(defaults.url, `/api/card/${defaults.withdrawalCard}/query/json`, "POST", { parameters: dateParams }, mbConfig.sessionToken) : [],
+                ]);
+                const newRows = [...parseMbRows(Array.isArray(depRows) ? depRows : [], "deposit", monthStr), ...parseMbRows(Array.isArray(wdRows) ? wdRows : [], "withdrawal", monthStr)];
+                // Save to Supabase
+                const insertRows = newRows.map(r => ({ client_name: client.name, ...r, synced_at: new Date().toISOString() }));
+                try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary?client_name=eq.${encodeURIComponent(client.name)}&month=eq.${monthStr}`, { method: "DELETE", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` } }); } catch (e) {}
+                for (let i = 0; i < insertRows.length; i += 50) {
+                  try { await fetch(`${SUPA_URL}/rest/v1/metabase_summary`, { method: "POST", headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(insertRows.slice(i, i + 50)) }); } catch (e) {}
+                }
+                const updatedRows = [...allRows, ...newRows];
+                setMbSummaryRows(prev => ({ ...prev, [client.id]: updatedRows }));
+                setMbCachedMonths(prev => ({ ...prev, [client.id]: new Set([...cachedMonths, monthStr]) }));
+                setMbFetchStatus("");
+              } catch (e) { setMbFetchStatus("Error: " + e.message); }
+            };
+
+            return (
+              <div style={{ marginBottom: 16 }}>
+                {/* Status Bar */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "8px 14px", background: c.card, borderRadius: 10, border: `1px solid ${mbConnected ? "rgba(34,197,94,0.15)" : c.border}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: mbConnected ? "#22c55e" : mbLoading ? "#f59e0b" : "#6b7280", animation: mbLoading ? "pulse 1.5s infinite" : "none" }} />
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{mbLoading ? "Loading data..." : mbConnected ? "Live — Metabase" : "No data source"}</span>
+                    {mbFetchStatus && <span style={{ fontSize: 10, color: mbFetchStatus.startsWith("Error") ? "#ef4444" : "#22c55e", marginLeft: 4 }}>{mbFetchStatus}</span>}
+                    {mbError && <span style={{ fontSize: 10, color: "#ef4444", marginLeft: 4 }}>{mbError}</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {cachedMonths.size > 0 && <span style={{ fontSize: 9, color: c.textMuted }}>{cachedMonths.size} months cached</span>}
+                    {mbConnected && <button onClick={refreshData} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.1)", color: "#22c55e", fontWeight: 600 }}>Refresh</button>}
+                  </div>
+                </div>
+
+                {/* Date Range Picker */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, padding: "10px 14px", background: c.card, borderRadius: 10, border: `1px solid ${c.border}`, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Period:</span>
+                  <button onClick={() => { setMbDateFrom(curMonth); setMbDateTo(curMonth); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", border: `1px solid ${isCurrentMonth ? c.accent : c.border}`, background: isCurrentMonth ? "rgba(99,102,241,0.15)" : "transparent", color: isCurrentMonth ? c.accent : c.textSecondary, fontWeight: 600 }}>This Month</button>
+                  <button onClick={() => { setMbDateFrom(prevMonth); setMbDateTo(prevMonth); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", border: `1px solid ${isPrevMonth ? c.accent : c.border}`, background: isPrevMonth ? "rgba(99,102,241,0.15)" : "transparent", color: isPrevMonth ? c.accent : c.textSecondary, fontWeight: 600 }}>Last Month</button>
+                  <span style={{ fontSize: 10, color: c.textMuted, margin: "0 2px" }}>|</span>
+                  <input type="month" value={mbDateFrom} onChange={e => setMbDateFrom(e.target.value)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+                  <span style={{ fontSize: 10, color: c.textMuted }}>to</span>
+                  <input type="month" value={mbDateTo} onChange={e => setMbDateTo(e.target.value)} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" }} />
+                  {/* Show warning if selected range includes months not yet fetched */}
+                  {(() => {
+                    const missing = [];
+                    let d = new Date(mbDateFrom + "-01");
+                    const endD = new Date(mbDateTo + "-01");
+                    while (d <= endD) {
+                      const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                      if (!cachedMonths.has(m)) missing.push(m);
+                      d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+                    }
+                    if (missing.length === 0) return null;
+                    return (
+                      <button onClick={async () => { for (const m of missing) await fetchOlderMonth(m); }} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", border: "1px solid rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.1)", color: "#f59e0b", fontWeight: 600 }}>
+                        Fetch {missing.length} missing month{missing.length > 1 ? "s" : ""}
+                      </button>
+                    );
+                  })()}
+                </div>
+
+                {/* Gross Totals */}
+                <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 18, marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>Transaction Summary (Gross)</div>
+                    <div style={{ fontSize: 10, color: c.textMuted }}>{mbDateFrom === mbDateTo ? mbDateFrom : `${mbDateFrom} — ${mbDateTo}`}</div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: hasNetHoldDeal ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 12 }}>
+                    <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(99,102,241,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(99,102,241,0.15)" }}>
+                      <div style={{ fontSize: 9, color: c.accent, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Deposits</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: c.accent }}>{fmtCurrency(viewDeps)}</div>
+                    </div>
+                    <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(245,158,11,0.15)" }}>
+                      <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Withdrawals</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(viewWds)}</div>
+                    </div>
+                    <div style={{ background: "linear-gradient(135deg, rgba(236,72,153,0.1), rgba(236,72,153,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(236,72,153,0.15)" }}>
+                      <div style={{ fontSize: 9, color: "#ec4899", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Total Processed</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: "#ec4899" }}>{fmtCurrency(viewDeps + viewWds)}</div>
+                    </div>
+                    {hasNetHoldDeal && (
+                      <div style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.03))", borderRadius: 10, padding: 14, textAlign: "center", border: "1px solid rgba(34,197,94,0.15)" }}>
+                        <div style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Net Hold</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: (viewDeps - viewWds - viewDepFees - viewWdFees) >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(viewDeps - viewWds - viewDepFees - viewWdFees)}</div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Fee totals row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
+                    <div style={{ background: c.surface, borderRadius: 8, padding: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>DEPOSIT FEES</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(viewDepFees)}</div>
+                    </div>
+                    <div style={{ background: c.surface, borderRadius: 8, padding: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>WITHDRAWAL FEES</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(viewWdFees)}</div>
+                    </div>
+                    <div style={{ background: c.surface, borderRadius: 8, padding: 8, textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>TOTAL FEES</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: c.textSecondary }}>{fmtCurrency(viewDepFees + viewWdFees)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Method Breakdown */}
+                {methodBreakdown.length > 0 && (
+                  <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, overflow: "hidden" }}>
+                    <div onClick={() => setCubePayProvOpen(!cubePayProvOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Payment Method Breakdown</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 11, color: c.textMuted }}>{methodBreakdown.length} method{methodBreakdown.length !== 1 ? "s" : ""}</span>
+                        <span style={{ fontSize: 10, color: c.textMuted }}>{cubePayProvOpen ? "▴" : "▾"}</span>
+                      </div>
+                    </div>
+                    {cubePayProvOpen && (
+                      <div style={{ padding: "0 18px 16px" }}>
+                        {/* Table header */}
+                        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${c.border}` }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Method</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", textAlign: "right" }}>Deposits</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", textAlign: "right" }}>Withdrawals</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", textAlign: "right" }}>Total</div>
+                        </div>
+                        {methodBreakdown.map(m => (
+                          <div key={m.name} style={{ marginBottom: 8 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                              <div>
+                                <span style={{ fontSize: 12, color: c.text, fontWeight: 500 }}>{m.name}</span>
+                                <span style={{ fontSize: 9, color: c.textMuted, marginLeft: 6 }}>{m.depCount + m.wdCount} txns</span>
+                              </div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: c.accent, textAlign: "right" }}>{fmtCurrency(m.deposits)}</div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#f59e0b", textAlign: "right" }}>{fmtCurrency(m.withdrawals)}</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: c.text, textAlign: "right" }}>{fmtCurrency(m.deposits + m.withdrawals)}</div>
+                            </div>
+                            <div style={{ height: 5, background: c.surface, borderRadius: 3, overflow: "hidden", display: "flex" }}>
+                              <div style={{ height: "100%", width: `${(m.deposits / maxMethodVol) * 100}%`, background: `linear-gradient(90deg, ${c.accent}, #818cf8)`, transition: "width 0.3s" }} />
+                              <div style={{ height: "100%", width: `${(m.withdrawals / maxMethodVol) * 100}%`, background: `linear-gradient(90deg, #f59e0b, #fbbf24)`, transition: "width 0.3s" }} />
+                            </div>
+                          </div>
+                        ))}
+                        {/* Totals row */}
+                        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, paddingTop: 8, borderTop: `1px solid ${c.border}`, marginTop: 4 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Total</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textAlign: "right" }}>{fmtCurrency(viewDeps)}</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", textAlign: "right" }}>{fmtCurrency(viewWds)}</div>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: c.text, textAlign: "right" }}>{fmtCurrency(viewDeps + viewWds)}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Deal Information */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>Deal Information</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {DEAL_TYPES.map(dt => (
+                <button key={dt} onClick={() => addDeal(dt)} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontWeight: 600, border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, transition: "all 0.15s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = `${c.accent}25`; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = `${c.accent}10`; }}>+ {dt}</button>
+              ))}
+            </div>
+          </div>
+
+          {deals.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No deals configured. Add a deal type above.</div>}
+
+          {deals.map(deal => (
+            <div key={deal.id} style={{ background: c.card, borderRadius: 14, border: `1px solid ${deal.type === "Net Hold" ? "rgba(34,197,94,0.2)" : deal.type === "Provider Mark Up" ? "rgba(99,102,241,0.2)" : "rgba(245,158,11,0.2)"}`, padding: 18, marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 6, background: deal.type === "Net Hold" ? "rgba(34,197,94,0.15)" : deal.type === "Provider Mark Up" ? "rgba(99,102,241,0.15)" : "rgba(245,158,11,0.15)", color: deal.type === "Net Hold" ? "#22c55e" : deal.type === "Provider Mark Up" ? c.accent : "#f59e0b" }}>{deal.type}</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: calcDealRevenue(deal, client.id) >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(calcDealRevenue(deal, client.id))}</span>
+                </div>
+                <button onClick={() => removeDeal(deal.id)} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Remove</button>
+              </div>
+
+              {/* Net Hold config */}
+              {deal.type === "Net Hold" && (
+                <div style={{ display: "flex", alignItems: "end", gap: 12 }}>
+                  <div>
+                    <label style={labelStyle4}>Cube Pay % of Net Hold</label>
+                    <input value={deal.netHoldPct || ""} onChange={e => updateDeal(deal.id, "netHoldPct", e.target.value)} placeholder="e.g. 20" style={{ ...inputStyle4, width: 120 }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: c.textMuted, paddingBottom: 6 }}>Net Hold {fmtCurrency(netHold)} × {deal.netHoldPct || "0"}% = <strong style={{ color: "#22c55e" }}>{fmtCurrency(calcDealRevenue(deal, client.id))}</strong></div>
+                </div>
+              )}
+
+              {/* Provider Mark Up config */}
+              {deal.type === "Provider Mark Up" && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: c.textMuted }}>Configure markup per provider method</div>
+                    <button onClick={() => updateDeal(deal.id, "markups", [...(deal.markups || []), { id: `mu-${Date.now()}`, providerSvcId: "", rate: "", volume: "", discountType: "", tiers: [], targets: [] }])} style={{ fontSize: 10, padding: "5px 12px", borderRadius: 6, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Add Method</button>
+                  </div>
+                  {(deal.markups || []).map((mu, mi) => {
+                    const updateMu = (field, val) => {
+                      const newMarkups = [...(deal.markups || [])];
+                      newMarkups[mi] = { ...newMarkups[mi], [field]: val };
+                      updateDeal(deal.id, "markups", newMarkups);
+                    };
+                    return (
+                      <div key={mu.id} style={{ background: c.surface, borderRadius: 10, padding: 14, marginBottom: 8, border: `1px solid ${c.border}` }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8, marginBottom: 8 }}>
+                          <div>
+                            <label style={labelStyle4}>Provider / Method</label>
+                            <select value={mu.providerSvcId || ""} onChange={e => updateMu("providerSvcId", e.target.value)} style={{ ...inputStyle4, width: "100%" }}>
+                              <option value="">— Select —</option>
+                              {allProviderServices.map(ps => <option key={ps.svcId} value={ps.svcId}>{ps.provName} — {ps.svcName}</option>)}
+                              {providerGroups.map(pg => <option key={`grp-${pg.id}`} value={`grp-${pg.id}`}>📦 {pg.name} (Group)</option>)}
+                            </select>
+                          </div>
+                          <div><label style={labelStyle4}>Mark Up (%)</label><input value={mu.rate || ""} onChange={e => updateMu("rate", e.target.value)} placeholder="%" style={{ ...inputStyle4, width: "100%" }} /></div>
+                          <div><label style={labelStyle4}>Volume ($)</label><input value={mu.volume || ""} onChange={e => updateMu("volume", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: "100%" }} /></div>
+                          <button onClick={() => updateDeal(deal.id, "markups", (deal.markups || []).filter((_, i) => i !== mi))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 14, alignSelf: "end", padding: "6px" }}>✕</button>
+                        </div>
+
+                        {/* Volume Discount */}
+                        <div style={{ marginTop: 6 }}>
+                          <label style={labelStyle4}>Volume Discount</label>
+                          <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                            {["None", "Tiers", "Targets"].map(dt => (
+                              <button key={dt} onClick={() => updateMu("discountType", dt === "None" ? "" : dt)} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: (mu.discountType || "") === (dt === "None" ? "" : dt) ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: (mu.discountType || "") === (dt === "None" ? "" : dt) ? `${c.accent}20` : "transparent", color: (mu.discountType || "") === (dt === "None" ? "" : dt) ? c.accent : c.textMuted }}>{dt}</button>
+                            ))}
+                          </div>
+
+                          {mu.discountType === "Tiers" && (
+                            <div>
+                              {(mu.tiers || []).map((tier, ti) => (
+                                <div key={ti} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 6, marginBottom: 4 }}>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Up To ($)</label><input value={tier.upTo || ""} onChange={e => { const t = [...(mu.tiers || [])]; t[ti] = { ...t[ti], upTo: e.target.value }; updateMu("tiers", t); }} placeholder="100000" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Rate (%)</label><input value={tier.rate || ""} onChange={e => { const t = [...(mu.tiers || [])]; t[ti] = { ...t[ti], rate: e.target.value }; updateMu("tiers", t); }} placeholder="2.0" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <button onClick={() => updateMu("tiers", (mu.tiers || []).filter((_, i) => i !== ti))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, alignSelf: "end", padding: "4px" }}>✕</button>
+                                </div>
+                              ))}
+                              <button onClick={() => updateMu("tiers", [...(mu.tiers || []), { upTo: "", rate: "" }])} style={{ fontSize: 10, color: c.accent, background: "transparent", border: `1px dashed ${c.accent}40`, borderRadius: 4, padding: "3px 10px", cursor: "pointer", marginTop: 4 }}>+ Add Tier</button>
+                            </div>
+                          )}
+
+                          {mu.discountType === "Targets" && (
+                            <div>
+                              {(mu.targets || []).map((tgt, tgi) => (
+                                <div key={tgi} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 6, marginBottom: 4 }}>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Threshold ($)</label><input value={tgt.threshold || ""} onChange={e => { const t = [...(mu.targets || [])]; t[tgi] = { ...t[tgi], threshold: e.target.value }; updateMu("targets", t); }} placeholder="100000" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <div><label style={{ ...labelStyle4, fontSize: 9 }}>Rate (%)</label><input value={tgt.rate || ""} onChange={e => { const t = [...(mu.targets || [])]; t[tgi] = { ...t[tgi], rate: e.target.value }; updateMu("targets", t); }} placeholder="1.5" style={{ ...inputStyle4, width: "100%", fontSize: 11 }} /></div>
+                                  <button onClick={() => updateMu("targets", (mu.targets || []).filter((_, i) => i !== tgi))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, alignSelf: "end", padding: "4px" }}>✕</button>
+                                </div>
+                              ))}
+                              <button onClick={() => updateMu("targets", [...(mu.targets || []), { threshold: "", rate: "" }])} style={{ fontSize: 10, color: c.accent, background: "transparent", border: `1px dashed ${c.accent}40`, borderRadius: 4, padding: "3px 10px", cursor: "pointer", marginTop: 4 }}>+ Add Target</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Profit Share config — includes operating costs inline */}
+              {deal.type === "Profit Share" && (
+                <div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "end", marginBottom: 14 }}>
+                    <div>
+                      <label style={labelStyle4}>Cube Pay Profit Share %</label>
+                      <input value={deal.profitSharePct || ""} onChange={e => updateDeal(deal.id, "profitSharePct", e.target.value)} placeholder="e.g. 20" style={{ ...inputStyle4, width: 120 }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: c.textMuted, paddingBottom: 6 }}>({fmtCurrency(netHold)} net hold - costs) × {deal.profitSharePct || "0"}%</div>
+                  </div>
+                  <div style={{ background: c.surface, borderRadius: 10, padding: 14, border: `1px solid ${c.border}` }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", marginBottom: 8 }}>Operating Costs</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div>
+                        <label style={labelStyle4}>Placeholder Cost % (used during month)</label>
+                        <input value={cubePayPlaceholderCostPct[client.id] || ""} onChange={e => setCubePayPlaceholderCostPct({ ...cubePayPlaceholderCostPct, [client.id]: e.target.value })} placeholder="e.g. 15" style={{ ...inputStyle4, width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={labelStyle4}>Actual Costs for {currentMonth} ($)</label>
+                        <input value={(cubePayOperatingCosts[currentMonth] || {})[client.id] || ""} onChange={e => setCubePayOperatingCosts({ ...cubePayOperatingCosts, [currentMonth]: { ...(cubePayOperatingCosts[currentMonth] || {}), [client.id]: e.target.value } })} placeholder="Enter after month ends" style={{ ...inputStyle4, width: "100%" }} />
+                      </div>
+                    </div>
+                    {(() => {
+                      const actualCost = parseFloat((cubePayOperatingCosts[currentMonth] || {})[client.id]) || 0;
+                      const placeholderPct = parseFloat(cubePayPlaceholderCostPct[client.id]) || 0;
+                      const estimatedCost = actualCost > 0 ? actualCost : netHold * (placeholderPct / 100);
+                      return (
+                        <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div style={{ fontSize: 10, color: actualCost > 0 ? "#22c55e" : placeholderPct > 0 ? "#f59e0b" : c.textMuted }}>
+                            {actualCost > 0 ? "Using actual costs" : placeholderPct > 0 ? `Using ${placeholderPct}% estimate` : "No costs configured"}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: c.text }}>Costs: {fmtCurrency(estimatedCost)} · Profit: <span style={{ color: "#22c55e" }}>{fmtCurrency(calcDealRevenue(deal, client.id))}</span></div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    // ===== CUBE PAY LIST VIEW =====
+    const renderCubePay = () => {
+      if (selectedRevenueClient) {
+        const cl = cubePayClients.find(c2 => c2.id === selectedRevenueClient);
+        if (cl) return renderCubePayClient(cl);
+      }
+
+      // Per-provider volume totals across all clients
+      const provTotals = {};
+      cubePayClients.forEach(cl => {
+        (cubePayDeals[cl.id] || []).filter(d => d.type === "Provider Mark Up").forEach(d => {
+          (d.markups || []).forEach(mu => {
+            const vol = parseFloat(mu.volume) || 0;
+            if (!mu.providerSvcId || vol === 0) return;
+            const isGroup = mu.providerSvcId.startsWith("grp-");
+            const label = isGroup ? (providerGroups.find(pg => `grp-${pg.id}` === mu.providerSvcId) || {}).name || "Group" : (() => { const ps = allProviderServices.find(s => s.svcId === mu.providerSvcId); return ps ? `${ps.provName} — ${ps.svcName}` : mu.providerSvcId; })();
+            provTotals[label] = (provTotals[label] || 0) + vol;
+          });
+        });
+      });
+      const sortedProvTotals = Object.entries(provTotals).sort((a, b) => b[1] - a[1]);
+      const maxProvVol = sortedProvTotals.length > 0 ? sortedProvTotals[0][1] : 1;
+
+      // Totals
+      const totalDeposits = cubePayClients.reduce((s, cl) => s + (parseFloat((cubePayMonthlyData[cl.id] || {}).deposits) || 0), 0);
+      const totalWithdrawals = cubePayClients.reduce((s, cl) => s + (parseFloat((cubePayMonthlyData[cl.id] || {}).withdrawals) || 0), 0);
+
+      return (
+        <div>
+          {/* KPI Cards — gradient style */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 24 }}>
+            <div style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.04))", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Revenue</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#22c55e" }}>{fmtCurrency(totalCubePayRevenue)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04))", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: c.accent, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Deposits</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: c.accent }}>{fmtCurrency(totalDeposits)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04))", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Withdrawals</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(totalWithdrawals)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(236,72,153,0.12), rgba(236,72,153,0.04))", border: "1px solid rgba(236,72,153,0.25)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: "#ec4899", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Processed</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#ec4899" }}>{fmtCurrency(totalVolume)}</div>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(20,184,166,0.12), rgba(20,184,166,0.04))", border: "1px solid rgba(20,184,166,0.25)", borderRadius: 14, padding: "20px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: "#14b8a6", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Total Fees</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#14b8a6" }}>{fmtCurrency(totalFees)}</div>
+            </div>
+          </div>
+
+          {/* Provider Breakdown — collapsible bar chart */}
+          {(() => {
+            return (
+              <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, marginBottom: 20, overflow: "hidden" }}>
+                <div onClick={() => setCubePayProvOpen(!cubePayProvOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", cursor: "pointer" }}
+                  onMouseEnter={e => e.currentTarget.style.background = c.surfaceHover} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>Provider Breakdown</div>
+                    {sortedProvTotals.length > 0 && <span style={{ fontSize: 10, color: c.textMuted, background: c.surface, padding: "2px 8px", borderRadius: 4 }}>{sortedProvTotals.length} provider{sortedProvTotals.length !== 1 ? "s" : ""}</span>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: c.accent }}>{fmtCurrency(sortedProvTotals.reduce((s, [, v]) => s + v, 0))} total</span>
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{cubePayProvOpen ? "▴" : "▾"}</span>
+                  </div>
+                </div>
+                {cubePayProvOpen && (
+                  <div style={{ padding: "0 18px 16px" }}>
+                    {sortedProvTotals.length === 0 && <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: 12 }}>No provider volume data yet. Configure Provider Mark Up deals on individual clients.</div>}
+                    {sortedProvTotals.map(([label, vol]) => (
+                      <div key={label} style={{ marginBottom: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, color: c.text, fontWeight: 500 }}>{label}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: c.accent }}>{fmtCurrency(vol)}</span>
+                        </div>
+                        <div style={{ height: 8, background: c.surface, borderRadius: 4, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${(vol / maxProvVol) * 100}%`, background: `linear-gradient(90deg, ${c.accent}, #8b5cf6)`, borderRadius: 4, transition: "width 0.4s" }} />
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Provider Groups management */}
+                    <div style={{ borderTop: `1px solid ${c.border}`, marginTop: 12, paddingTop: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: c.textMuted }}>MANAGE PROVIDER GROUPS</div>
+                        <button onClick={() => setProviderGroups([...providerGroups, { id: `pg-${Date.now()}`, name: "", providerServiceIds: [] }])} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 4, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Create Group</button>
+                      </div>
+                      {providerGroups.map((pg, pgi) => (
+                        <div key={pg.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 10, marginBottom: 6 }}>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                            <input value={pg.name} onChange={e => { const g = [...providerGroups]; g[pgi] = { ...g[pgi], name: e.target.value }; setProviderGroups(g); }} placeholder="Group name (e.g. Rapyd Combined)" style={{ ...inputStyle4, flex: 1 }} />
+                            <button onClick={() => setProviderGroups(providerGroups.filter(g => g.id !== pg.id))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                          </div>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {allProviderServices.map(ps => {
+                              const sel = (pg.providerServiceIds || []).includes(ps.svcId);
+                              return <button key={ps.svcId} onClick={() => { const g = [...providerGroups]; const ids = sel ? (pg.providerServiceIds || []).filter(id => id !== ps.svcId) : [...(pg.providerServiceIds || []), ps.svcId]; g[pgi] = { ...g[pgi], providerServiceIds: ids }; setProviderGroups(g); }} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer", border: sel ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: sel ? `${c.accent}20` : "transparent", color: sel ? c.accent : c.textMuted }}>{ps.provName} — {ps.svcName}</button>;
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Client List */}
+          <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 10 }}>Clients ({cubePayClients.length})</div>
+          {cubePayClients.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No eligible clients. Clients marked "Tech Only" or "Onboarding" are excluded.</div>}
+          {cubePayClients.map(cl => {
+            const deals = cubePayDeals[cl.id] || [];
+            const rev = deals.reduce((s, d) => s + calcDealRevenue(d, cl.id), 0);
+            const data = cubePayMonthlyData[cl.id] || {};
+            const vol = (parseFloat(data.deposits) || 0) + (parseFloat(data.withdrawals) || 0);
+            return (
+              <div key={cl.id} onClick={() => setSelectedRevenueClient(cl.id)} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 16, marginBottom: 6, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "border-color 0.15s" }} onMouseEnter={e => e.currentTarget.style.borderColor = c.accent} onMouseLeave={e => e.currentTarget.style.borderColor = c.border}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{cl.name}</div>
+                  <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{deals.length} deal{deals.length !== 1 ? "s" : ""} · Vol: {fmtCurrency(vol)}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: rev >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(rev)}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>revenue</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
+    // ===== GATEWAY.IO REVENUE =====
+    const renderGatewayRev = () => {
+      const totalGatewayFees = allGatewayRevClients.reduce((sum, cl) => {
+        const cfg = gatewayRevFees[cl.id] || {};
+        if (cfg.hidden) return sum;
+        return sum + (parseFloat(cfg.monthlyFee) || 0);
+      }, 0);
+
+      return (
+        <div>
+          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 24, fontWeight: 800, color: "#22c55e" }}>{fmtCurrency(totalGatewayFees)}</div>
+            <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Total Monthly Gateway Fees</div>
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 10 }}>Client Monthly Fees ({allGatewayRevClients.length})</div>
+
+          {allGatewayRevClients.map(cl => {
+            const cfg = gatewayRevFees[cl.id] || {};
+            const updateFee = (field, val) => setGatewayRevFees({ ...gatewayRevFees, [cl.id]: { ...cfg, [field]: val } });
+            return (
+              <div key={cl.id} style={{ background: cfg.hidden ? `${c.card}80` : c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 14, marginBottom: 6, opacity: cfg.hidden ? 0.5 : 1, display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{cl.name}</div>
+                  <div style={{ fontSize: 10, color: c.textMuted }}>{cl.clientType || "Standard"}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <select value={cfg.currency || "USD"} onChange={e => updateFee("currency", e.target.value)} style={{ ...inputStyle4, width: 70, fontSize: 11 }}>
+                    {["USD", "EUR", "GBP"].map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                  </select>
+                  <input value={cfg.monthlyFee || ""} onChange={e => updateFee("monthlyFee", e.target.value)} placeholder="0.00" style={{ ...inputStyle4, width: 100, textAlign: "right" }} />
+                  <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontSize: 10, color: c.textMuted }}>
+                    <input type="checkbox" checked={!!cfg.hidden} onChange={e => updateFee("hidden", e.target.checked)} style={{ accentColor: c.accent }} />
+                    Hide
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
+    // ===== BETTING BRANDS REVENUE =====
+    const renderBettingRev = () => {
+      return (
+        <div>
+          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 40, textAlign: "center" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🎰</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: c.text, margin: "0 0 8px" }}>Our Betting Brands</h3>
+            <p style={{ color: c.textMuted, fontSize: 13, margin: "0 0 16px", lineHeight: 1.6 }}>This section will connect directly to back office systems to pull revenue data from our betting brands — the same approach as the Ledger project.</p>
+            <div style={{ display: "inline-block", background: c.surface, borderRadius: 8, padding: "8px 16px", fontSize: 11, color: c.accent, fontWeight: 600 }}>Back Office Integration — Coming Soon</div>
+          </div>
+        </div>
+      );
+    };
+
+    // ===== REVENUE OVERVIEW =====
+    const renderRevenueOverview = () => {
+      const totalGatewayFees = allGatewayRevClients.reduce((sum, cl) => {
+        const cfg = gatewayRevFees[cl.id] || {};
+        if (cfg.hidden) return sum;
+        return sum + (parseFloat(cfg.monthlyFee) || 0);
+      }, 0);
+      const totalRev = totalCubePayRevenue + totalGatewayFees;
+
+      return (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 24 }}>
+            <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#22c55e" }}>{fmtCurrency(totalRev)}</div>
+              <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Total Revenue</div>
+            </div>
+            <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: c.accent }}>{fmtCurrency(totalCubePayRevenue)}</div>
+              <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Cube Pay Revenue</div>
+            </div>
+            <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 20, textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#f59e0b" }}>{fmtCurrency(totalGatewayFees)}</div>
+              <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Gateway.io Fees</div>
+            </div>
+          </div>
+
+          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 12 }}>Revenue Breakdown</div>
+            {cubePayClients.map(cl => {
+              const deals = cubePayDeals[cl.id] || [];
+              const rev = deals.reduce((s, d) => s + calcDealRevenue(d, cl.id), 0);
+              if (rev === 0 && deals.length === 0) return null;
+              return (
+                <div key={cl.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${c.border}` }}>
+                  <span style={{ fontSize: 12, color: c.text }}>{cl.name} <span style={{ color: c.textMuted, fontSize: 10 }}>(Cube Pay)</span></span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: rev >= 0 ? "#22c55e" : "#ef4444" }}>{fmtCurrency(rev)}</span>
+                </div>
+              );
+            })}
+            {allGatewayRevClients.filter(cl => !((gatewayRevFees[cl.id] || {}).hidden) && parseFloat((gatewayRevFees[cl.id] || {}).monthlyFee) > 0).map(cl => (
+              <div key={`gw-${cl.id}`} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${c.border}` }}>
+                <span style={{ fontSize: 12, color: c.text }}>{cl.name} <span style={{ color: c.textMuted, fontSize: 10 }}>(Gateway Fee)</span></span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#f59e0b" }}>{fmtCurrency(parseFloat((gatewayRevFees[cl.id] || {}).monthlyFee) || 0)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 6px 0" }}>Revenue</h2>
+        <p style={{ color: c.textSecondary, fontSize: 13, margin: "0 0 20px 0" }}>Track revenue across Cube Pay, Gateway.io fees, and Betting Brands</p>
+
+        {/* Sub-tabs */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 24, background: c.surface, borderRadius: 10, padding: 4 }}>
+          {subTabs.map(tab => (
+            <button key={tab.key} onClick={() => { setSub(tab.key); setSelectedRevenueClient(null); }} style={{ flex: 1, padding: "10px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, background: sub === tab.key ? c.accent : "transparent", color: sub === tab.key ? "#fff" : c.textMuted, transition: "all 0.15s" }}>{tab.label}</button>
+          ))}
+        </div>
+
+        {sub === "overview" && renderRevenueOverview()}
+        {sub === "cubepay" && renderCubePay()}
+        {sub === "gatewayrev" && renderGatewayRev()}
+        {sub === "bettingrev" && renderBettingRev()}
+      </div>
+    );
+  };
 
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
@@ -6160,7 +7107,7 @@ function AviroDashboard() {
     { section: "banks", icon: "bank", label: "Bank Accounts", group: "corporate" },
     { section: "brands", icon: "grid", label: "Gaming Brands", group: "corporate" },
     { section: "revenue_header", label: "REVENUE", isHeader: true, group: "revenue" },
-    { section: "revenue", icon: "signal", label: "Revenue Data", group: "revenue" },
+    { section: "revenue", icon: "signal", label: "Revenue Dashboard", group: "revenue" },
     { section: "settings_header", label: "SETTINGS", isHeader: true, group: "settings" },
     { section: "settings", icon: "bank", label: "Settings", group: "settings" },
   ];
@@ -6360,4 +7307,8 @@ function AviroDashboard() {
     </div>
   );
 }
-</script></body></html>
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(AviroDashboard));
+</script>
+</body>
+</html>
