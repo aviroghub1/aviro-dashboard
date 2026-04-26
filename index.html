@@ -552,6 +552,18 @@ function AviroDashboard() {
   const [calSubSection, setCalSubSection] = useState("day"); // day, notes
   const [primaryTZ, setPrimaryTZ] = useState("GST"); // GST, BST, CEST - user's primary timezone
 
+  // ===== REVENUE STATE =====
+  const BRANDS = [
+    { id: "elitebet", name: "EliteBet", source: "metabase", color: "#6366f1" },
+    { id: "bet40", name: "Bet-40", source: "metabase", color: "#f59e0b" },
+    { id: "puntersvip", name: "PuntersVIP", source: "metabase", color: "#22c55e" },
+    { id: "ggpoker", name: "GG Poker", source: "cubepay", color: "#ec4899" },
+    { id: "rocketbet", name: "RocketBet", source: "none", color: "#6b7280" },
+  ];
+  const [revSelectedBrand, setRevSelectedBrand] = useState("elitebet");
+  const [revData, setRevData] = useState({}); // { brandId: { "YYYY-MM": { totals: {deposits,withdrawals,depFees,wdFees}, methods: [{name,deposits,withdrawals,depFees,wdFees}] } } }
+  const [revStatus, setRevStatus] = useState({}); // { brandId: { status: "", error: "", lastSync: "" } }
+
   // ===== SETTINGS STATE =====
   const [fxRates, setFxRates] = useState(DEFAULT_FX_RATES); // { currency: rateToEUR }
   const [fxBaseCurrency, setFxBaseCurrency] = useState("EUR");
@@ -577,10 +589,11 @@ function AviroDashboard() {
         bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
         supabaseUrl, supabaseKey,
         fxRates, fxBaseCurrency, fxLastUpdated,
+        revData, revStatus,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, fxRates, fxBaseCurrency, fxLastUpdated]);
+  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, fxRates, fxBaseCurrency, fxLastUpdated, revData, revStatus]);
 
   // Auto-save whenever state changes (debounced)
   useEffect(() => {
@@ -644,6 +657,8 @@ function AviroDashboard() {
         if (s.fxRates) setFxRates(s.fxRates);
         if (s.fxBaseCurrency) setFxBaseCurrency(s.fxBaseCurrency);
         if (s.fxLastUpdated) setFxLastUpdated(s.fxLastUpdated);
+        if (s.revData) setRevData(s.revData);
+        if (s.revStatus) setRevStatus(s.revStatus);
       }
     } catch (e) { console.warn("Load state failed:", e); }
     setHasLoaded(true);
@@ -5833,7 +5848,7 @@ function AviroDashboard() {
       { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #6366f1, #8b5cf6)", defaultSection: "clients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #f59e0b, #ef4444)", defaultSection: null },
       { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #10b981, #059669)", defaultSection: "entities" },
-      { key: "finance", title: "Finance", desc: "Financial Management & Reporting", icon: "flow", gradient: "linear-gradient(135deg, #14b8a6, #0d9488)", defaultSection: null },
+      { key: "revenue", title: "Revenue", desc: "Brand Data & Revenue Analytics", icon: "signal", gradient: "linear-gradient(135deg, #ec4899, #be185d)", defaultSection: "revenue" },
       { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)", defaultSection: "calendar" },
       { key: "settings", title: "Settings", desc: "FX Rates, Connections & Configuration", icon: "bank", gradient: "linear-gradient(135deg, #6b7280, #4b5563)", defaultSection: "settings" },
     ];
@@ -5867,6 +5882,198 @@ function AviroDashboard() {
               {card.defaultSection && <div style={{ marginTop: 12, fontSize: 12, color: c.accent, fontWeight: 600 }}>Open →</div>}
             </div>
           ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ===== REVENUE =====
+  const renderRevenue = () => {
+    const now = new Date();
+    const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+    const brand = BRANDS.find(b => b.id === revSelectedBrand) || BRANDS[0];
+    const brandData = revData[brand.id] || {};
+    const brandStatus = revStatus[brand.id] || {};
+    const curData = brandData[curMonth] || { totals: { deposits: 0, withdrawals: 0, depFees: 0, wdFees: 0 }, methods: [] };
+    const prevData = brandData[prevMonth] || { totals: { deposits: 0, withdrawals: 0, depFees: 0, wdFees: 0 }, methods: [] };
+
+    const fmt = (v) => (v || 0).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const sourceLabel = brand.source === "metabase" ? "Metabase" : brand.source === "cubepay" ? "Cube Pay" : "No Source";
+    const sourceColor = brand.source === "metabase" ? "#6366f1" : brand.source === "cubepay" ? "#ec4899" : "#6b7280";
+
+    // Get all months available for this brand, sorted
+    const availableMonths = Object.keys(brandData).sort().reverse();
+
+    return (
+      <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 80px)" }}>
+        {/* LEFT SIDEBAR — Brand List */}
+        <div style={{ width: 220, flexShrink: 0, background: c.card, borderRight: `1px solid ${c.border}`, padding: "20px 0" }}>
+          <div style={{ padding: "0 16px 16px", borderBottom: `1px solid ${c.border}`, marginBottom: 12 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Revenue</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: c.text }}>Data</div>
+          </div>
+          {BRANDS.map(b => {
+            const isActive = b.id === revSelectedBrand;
+            const bStatus = revStatus[b.id] || {};
+            const bData = revData[b.id] || {};
+            const hasData = Object.keys(bData).length > 0;
+            return (
+              <div key={b.id} onClick={() => setRevSelectedBrand(b.id)}
+                style={{ padding: "12px 16px", cursor: "pointer", borderLeft: isActive ? `3px solid ${b.color}` : "3px solid transparent", background: isActive ? `${b.color}10` : "transparent", transition: "all 0.15s", marginBottom: 2 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: isActive ? 700 : 500, color: isActive ? c.text : c.textSecondary }}>{b.name}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
+                      {b.source === "metabase" ? "Metabase" : b.source === "cubepay" ? "Cube Pay" : "—"}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {hasData && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e" }} />}
+                    {bStatus.error && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} />}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* RIGHT — Brand Data View */}
+        <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
+          {/* Brand Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: brand.color }} />
+                <h2 style={{ fontSize: 24, fontWeight: 800, color: c.text, margin: 0 }}>{brand.name}</h2>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 6, background: `${sourceColor}15`, color: sourceColor, border: `1px solid ${sourceColor}30` }}>{sourceLabel}</span>
+                {brandStatus.lastSync && <span style={{ fontSize: 10, color: c.textMuted }}>Last sync: {new Date(brandStatus.lastSync).toLocaleString()}</span>}
+                {brandStatus.error && <span style={{ fontSize: 10, color: "#ef4444" }}>{brandStatus.error}</span>}
+              </div>
+            </div>
+            {brand.source !== "none" && (
+              <button style={{ fontSize: 11, padding: "8px 18px", borderRadius: 8, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>
+                Sync Data
+              </button>
+            )}
+          </div>
+
+          {/* Current Month Summary */}
+          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.accent}20`, padding: 20, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 16 }}>Current Month — {curMonth}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+              {[
+                { label: "Deposits", value: curData.totals.deposits, color: c.accent },
+                { label: "Withdrawals", value: curData.totals.withdrawals, color: "#f59e0b" },
+                { label: "Fees", value: curData.totals.depFees + curData.totals.wdFees, color: "#ef4444" },
+                { label: "Net Hold", value: curData.totals.deposits - curData.totals.withdrawals - curData.totals.depFees - curData.totals.wdFees, color: "#22c55e" },
+              ].map(kpi => (
+                <div key={kpi.label} style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
+                  <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>{kpi.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: kpi.color }}>{fmt(kpi.value)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Previous Month Summary */}
+          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 16, marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>Previous Month — {prevMonth}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+              {[
+                { label: "Deposits", value: prevData.totals.deposits, color: c.accent },
+                { label: "Withdrawals", value: prevData.totals.withdrawals, color: "#f59e0b" },
+                { label: "Fees", value: prevData.totals.depFees + prevData.totals.wdFees, color: "#ef4444" },
+                { label: "Net Hold", value: prevData.totals.deposits - prevData.totals.withdrawals - prevData.totals.depFees - prevData.totals.wdFees, color: "#22c55e" },
+              ].map(kpi => (
+                <div key={kpi.label} style={{ background: c.surface, borderRadius: 10, padding: 12, border: `1px solid ${c.border}` }}>
+                  <div style={{ fontSize: 9, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginBottom: 6 }}>{kpi.label}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: kpi.color }}>{fmt(kpi.value)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Method Breakdown — Current Month */}
+          {curData.methods.length > 0 && (
+            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 14 }}>Method Breakdown — {curMonth}</div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${c.border}` }}>
+                    <th style={{ textAlign: "left", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Method</th>
+                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Deposits</th>
+                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Withdrawals</th>
+                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Fees</th>
+                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {curData.methods.map((m, i) => (
+                    <tr key={i} style={{ borderBottom: `1px solid ${c.border}20` }}>
+                      <td style={{ padding: "8px 12px", color: c.text, fontWeight: 500 }}>{m.name}</td>
+                      <td style={{ padding: "8px 12px", color: c.accent, textAlign: "right", fontWeight: 600 }}>{fmt(m.deposits)}</td>
+                      <td style={{ padding: "8px 12px", color: "#f59e0b", textAlign: "right", fontWeight: 600 }}>{fmt(m.withdrawals)}</td>
+                      <td style={{ padding: "8px 12px", color: "#ef4444", textAlign: "right", fontWeight: 600 }}>{fmt(m.depFees + m.wdFees)}</td>
+                      <td style={{ padding: "8px 12px", color: "#22c55e", textAlign: "right", fontWeight: 700 }}>{fmt(m.deposits - m.withdrawals - m.depFees - m.wdFees)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* No Data State */}
+          {Object.keys(brandData).length === 0 && (
+            <div style={{ background: c.card, borderRadius: 14, border: `1px dashed ${c.border}`, padding: 40, textAlign: "center" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 6 }}>No data yet</div>
+              <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 16 }}>
+                {brand.source === "none" ? "This brand has no data source configured." : `Connect to ${sourceLabel} to pull transaction data for ${brand.name}.`}
+              </div>
+              {brand.source !== "none" && (
+                <button style={{ fontSize: 12, padding: "10px 24px", borderRadius: 8, cursor: "pointer", border: "none", background: c.accent, color: "#fff", fontWeight: 600 }}>
+                  Connect & Sync
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Monthly History */}
+          {availableMonths.length > 0 && (
+            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 14 }}>Monthly History</div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${c.border}` }}>
+                    <th style={{ textAlign: "left", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Month</th>
+                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Deposits</th>
+                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Withdrawals</th>
+                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Fees</th>
+                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Net Hold</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {availableMonths.map(m => {
+                    const md = brandData[m];
+                    const t = md.totals;
+                    return (
+                      <tr key={m} style={{ borderBottom: `1px solid ${c.border}20` }}>
+                        <td style={{ padding: "8px 12px", color: c.text, fontWeight: 600 }}>{m}</td>
+                        <td style={{ padding: "8px 12px", color: c.accent, textAlign: "right" }}>{fmt(t.deposits)}</td>
+                        <td style={{ padding: "8px 12px", color: "#f59e0b", textAlign: "right" }}>{fmt(t.withdrawals)}</td>
+                        <td style={{ padding: "8px 12px", color: "#ef4444", textAlign: "right" }}>{fmt(t.depFees + t.wdFees)}</td>
+                        <td style={{ padding: "8px 12px", color: "#22c55e", textAlign: "right", fontWeight: 700 }}>{fmt(t.deposits - t.withdrawals - t.depFees - t.wdFees)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -5994,6 +6201,7 @@ function AviroDashboard() {
     david: { label: "DAVID CALENDAR", sections: ["calendar", "quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
     gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
+    revenue: { label: "REVENUE", sections: ["revenue"] },
     settings: { label: "SETTINGS", sections: ["settings"] },
   };
 
@@ -6024,13 +6232,15 @@ function AviroDashboard() {
     { section: "moneyflow", icon: "flow", label: "Corporate Flow", group: "corporate" },
     { section: "banks", icon: "bank", label: "Bank Accounts", group: "corporate" },
     { section: "brands", icon: "grid", label: "Gaming Brands", group: "corporate" },
+    { section: "revenue_header", label: "REVENUE", isHeader: true, group: "revenue" },
+    { section: "revenue", icon: "signal", label: "Revenue Data", group: "revenue" },
     { section: "settings_header", label: "SETTINGS", isHeader: true, group: "settings" },
     { section: "settings", icon: "bank", label: "Settings", group: "settings" },
   ];
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, settings: renderSettings };
+  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, revenue: renderRevenue, settings: renderSettings };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
