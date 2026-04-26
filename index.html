@@ -564,7 +564,7 @@ function AviroDashboard() {
     { id: "rocketbet", name: "RocketBet", source: "none", color: "#6b7280" },
   ];
   const [revSelectedBrand, setRevSelectedBrand] = useState("elitebet");
-  const [revData, setRevData] = useState({}); // { brandId: { "YYYY-MM": { totals: {deposits,withdrawals,depFees,wdFees}, methods: [{name,deposits,withdrawals,depFees,wdFees}] } } }
+  const [revData, setRevData] = useState({}); // { brandId: { totals: {deposits,withdrawals,depFees,wdFees}, depositMethods: [{name,currency,count,amount,fee,net}], withdrawalMethods: [{name,currency,count,amount,fee,net}] } }
   const [revStatus, setRevStatus] = useState({}); // { brandId: { status: "", error: "", lastSync: "" } }
   const [revMbTokens, setRevMbTokens] = useState({}); // { brandId: "session-token" }
   const [revMbCards, setRevMbCards] = useState({}); // { brandId: [{ id, name, description }] }
@@ -616,12 +616,12 @@ function AviroDashboard() {
     }
   }, [mbProxy, revLog]);
 
-  // Fetch data from selected cards
+  // Fetch data from selected cards — pulls raw data exactly as Metabase returns it
   const mbFetchData = useCallback(async (brand) => {
     const token = revMbTokens[brand.id];
     const config = revMbConfig[brand.id];
     if (!token || !config || !brand.mb) return;
-    revLog(brand.name + ": fetching data from cards " + config.depositCard + " / " + config.withdrawalCard + "...");
+    revLog(brand.name + ": fetching cards " + config.depositCard + " / " + config.withdrawalCard);
     setRevStatus(prev => ({ ...prev, [brand.id]: { ...prev[brand.id], status: "Fetching data..." } }));
     try {
       const [depResp, wdResp] = await Promise.all([
@@ -632,40 +632,35 @@ function AviroDashboard() {
       const wdRows = Array.isArray(wdResp) ? wdResp : [];
       revLog(brand.name + ": " + depRows.length + " dep rows, " + wdRows.length + " wd rows");
       if (depRows.length > 0) revLog("Dep keys: " + Object.keys(depRows[0]).join(", "));
-      if (depRows.length > 0) revLog("First dep: " + JSON.stringify(depRows[0]).substring(0, 400));
       if (wdRows.length > 0) revLog("Wd keys: " + Object.keys(wdRows[0]).join(", "));
-      if (wdRows.length > 0) revLog("First wd: " + JSON.stringify(wdRows[0]).substring(0, 400));
 
-      // Parse — group by method, compute totals
-      // For now put everything in current month (we'll add date breakout once we see the data shape)
-      const now = new Date();
-      const curMonth = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+      // Parse deposit rows exactly as they come
+      const parseRows = (rows) => rows.map(r => ({
+        currency: r["Currency"] || "",
+        name: r["Core Account - Account → Account"] || r["Account"] || r["Method"] || "Unknown",
+        count: parseInt(r["Count"]) || 0,
+        amount: Math.abs(parseFloat(r["Sum of Amount"]) || 0),
+        fee: Math.abs(parseFloat(r["Sum of Fee"]) || 0),
+        net: Math.abs(parseFloat(r["Sum of Net Amount"]) || parseFloat(r["Sum of Amount"]) || 0),
+      })).sort((a, b) => b.amount - a.amount);
 
-      const methodMap = {};
-      const addToMethod = (rows, isDep) => {
-        (rows || []).forEach(r => {
-          const name = r["Core Account - Account → Account"] || r["Account"] || r["Method"] || "Unknown";
-          if (!methodMap[name]) methodMap[name] = { name, deposits: 0, withdrawals: 0, depFees: 0, wdFees: 0 };
-          const amt = Math.abs(parseFloat(r["Sum of Amount"]) || 0);
-          const fee = Math.abs(parseFloat(r["Sum of Fee"]) || 0);
-          if (isDep) { methodMap[name].deposits += amt; methodMap[name].depFees += fee; }
-          else { methodMap[name].withdrawals += amt; methodMap[name].wdFees += fee; }
-        });
-      };
-      addToMethod(depRows, true);
-      addToMethod(wdRows, false);
+      const depositMethods = parseRows(depRows);
+      const withdrawalMethods = parseRows(wdRows);
 
-      const methods = Object.values(methodMap).sort((a, b) => (b.deposits + b.withdrawals) - (a.deposits + a.withdrawals));
-      const totals = methods.reduce((acc, m) => ({
-        deposits: acc.deposits + m.deposits, withdrawals: acc.withdrawals + m.withdrawals,
-        depFees: acc.depFees + m.depFees, wdFees: acc.wdFees + m.wdFees,
-      }), { deposits: 0, withdrawals: 0, depFees: 0, wdFees: 0 });
+      const totalDeps = depositMethods.reduce((s, m) => s + m.amount, 0);
+      const totalDepFees = depositMethods.reduce((s, m) => s + m.fee, 0);
+      const totalWds = withdrawalMethods.reduce((s, m) => s + m.amount, 0);
+      const totalWdFees = withdrawalMethods.reduce((s, m) => s + m.fee, 0);
 
-      revLog(brand.name + " totals: deps=" + totals.deposits.toFixed(2) + " wds=" + totals.withdrawals.toFixed(2) + " (" + methods.length + " methods)");
+      revLog(brand.name + ": Deposits=" + totalDeps.toFixed(2) + " (" + depositMethods.length + " methods) | Withdrawals=" + totalWds.toFixed(2) + " (" + withdrawalMethods.length + " methods)");
 
       setRevData(prev => ({
         ...prev,
-        [brand.id]: { ...prev[brand.id], [curMonth]: { totals, methods } }
+        [brand.id]: {
+          totals: { deposits: totalDeps, withdrawals: totalWds, depFees: totalDepFees, wdFees: totalWdFees },
+          depositMethods,
+          withdrawalMethods,
+        }
       }));
       setRevStatus(prev => ({ ...prev, [brand.id]: { status: "", error: "", lastSync: new Date().toISOString() } }));
     } catch (e) {
@@ -6000,25 +5995,82 @@ function AviroDashboard() {
 
   // ===== REVENUE =====
   const renderRevenue = () => {
-    const now = new Date();
-    const curMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
     const brand = BRANDS.find(b => b.id === revSelectedBrand) || BRANDS[0];
     const brandData = revData[brand.id] || {};
     const brandStatus = revStatus[brand.id] || {};
-    const curData = brandData[curMonth] || { totals: { deposits: 0, withdrawals: 0, depFees: 0, wdFees: 0 }, methods: [] };
-    const prevData = brandData[prevMonth] || { totals: { deposits: 0, withdrawals: 0, depFees: 0, wdFees: 0 }, methods: [] };
+    const totals = brandData.totals || { deposits: 0, withdrawals: 0, depFees: 0, wdFees: 0 };
+    const depositMethods = brandData.depositMethods || [];
+    const withdrawalMethods = brandData.withdrawalMethods || [];
+    const hasData = depositMethods.length > 0 || withdrawalMethods.length > 0;
 
     const fmt = (v) => (v || 0).toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtInt = (v) => (v || 0).toLocaleString("en");
     const sourceLabel = brand.source === "metabase" ? "Metabase" : brand.source === "cubepay" ? "Cube Pay" : "No Source";
     const sourceColor = brand.source === "metabase" ? "#6366f1" : brand.source === "cubepay" ? "#ec4899" : "#6b7280";
     const mbToken = revMbTokens[brand.id];
     const mbCfg = revMbConfig[brand.id];
     const brandCards = revMbCards[brand.id] || [];
 
-    // Get all months available for this brand, sorted
-    const availableMonths = Object.keys(brandData).sort().reverse();
+    // Helper to render a method breakdown table (deposits or withdrawals)
+    const renderMethodTable = (title, methods, accentColor) => {
+      if (!methods || methods.length === 0) return null;
+      // Group by currency for subtotals
+      const currencies = [...new Set(methods.map(m => m.currency))].sort();
+      return (
+        <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: accentColor, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 14 }}>{title}</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead>
+              <tr style={{ borderBottom: `2px solid ${c.border}` }}>
+                <th style={{ textAlign: "left", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Currency</th>
+                <th style={{ textAlign: "left", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Account</th>
+                <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Count</th>
+                <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Amount</th>
+                <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Fee</th>
+                <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Net Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currencies.map(curr => {
+                const currMethods = methods.filter(m => m.currency === curr);
+                const currTotal = { count: 0, amount: 0, fee: 0, net: 0 };
+                currMethods.forEach(m => { currTotal.count += m.count; currTotal.amount += m.amount; currTotal.fee += m.fee; currTotal.net += m.net; });
+                return [
+                  ...currMethods.map((m, i) => (
+                    <tr key={`${curr}-${i}`} style={{ borderBottom: `1px solid ${c.border}15` }}>
+                      <td style={{ padding: "7px 12px", color: c.textSecondary, fontWeight: 500 }}>{m.currency}</td>
+                      <td style={{ padding: "7px 12px", color: c.text, fontWeight: 500 }}>{m.name}</td>
+                      <td style={{ padding: "7px 12px", color: c.textSecondary, textAlign: "right" }}>{fmtInt(m.count)}</td>
+                      <td style={{ padding: "7px 12px", color: accentColor, textAlign: "right", fontWeight: 600 }}>{fmt(m.amount)}</td>
+                      <td style={{ padding: "7px 12px", color: "#ef4444", textAlign: "right" }}>{fmt(m.fee)}</td>
+                      <td style={{ padding: "7px 12px", color: c.text, textAlign: "right", fontWeight: 600 }}>{fmt(m.net)}</td>
+                    </tr>
+                  )),
+                  currencies.length > 1 && (
+                    <tr key={`${curr}-subtotal`} style={{ borderBottom: `2px solid ${c.border}40`, background: `${accentColor}08` }}>
+                      <td style={{ padding: "7px 12px", fontWeight: 700, color: accentColor, fontSize: 10 }}>{curr} SUBTOTAL</td>
+                      <td style={{ padding: "7px 12px" }}></td>
+                      <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 700, color: c.text }}>{fmtInt(currTotal.count)}</td>
+                      <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 700, color: accentColor }}>{fmt(currTotal.amount)}</td>
+                      <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 700, color: "#ef4444" }}>{fmt(currTotal.fee)}</td>
+                      <td style={{ padding: "7px 12px", textAlign: "right", fontWeight: 700, color: c.text }}>{fmt(currTotal.net)}</td>
+                    </tr>
+                  )
+                ];
+              })}
+              {/* Grand total row */}
+              <tr style={{ borderTop: `2px solid ${c.border}`, background: `${accentColor}10` }}>
+                <td colSpan={2} style={{ padding: "10px 12px", fontWeight: 800, color: c.text, fontSize: 11 }}>TOTAL</td>
+                <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 800, color: c.text }}>{fmtInt(methods.reduce((s, m) => s + m.count, 0))}</td>
+                <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 800, color: accentColor }}>{fmt(methods.reduce((s, m) => s + m.amount, 0))}</td>
+                <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 800, color: "#ef4444" }}>{fmt(methods.reduce((s, m) => s + m.fee, 0))}</td>
+                <td style={{ padding: "10px 12px", textAlign: "right", fontWeight: 800, color: c.text }}>{fmt(methods.reduce((s, m) => s + m.net, 0))}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    };
 
     return (
       <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 80px)" }}>
@@ -6032,7 +6084,7 @@ function AviroDashboard() {
             const isActive = b.id === revSelectedBrand;
             const bStatus = revStatus[b.id] || {};
             const bData = revData[b.id] || {};
-            const hasData = Object.keys(bData).length > 0;
+            const bHasData = (bData.depositMethods && bData.depositMethods.length > 0) || (bData.withdrawalMethods && bData.withdrawalMethods.length > 0);
             return (
               <div key={b.id} onClick={() => setRevSelectedBrand(b.id)}
                 style={{ padding: "12px 16px", cursor: "pointer", borderLeft: isActive ? `3px solid ${b.color}` : "3px solid transparent", background: isActive ? `${b.color}10` : "transparent", transition: "all 0.15s", marginBottom: 2 }}>
@@ -6044,7 +6096,7 @@ function AviroDashboard() {
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    {hasData && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e" }} />}
+                    {bHasData && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e" }} />}
                     {bStatus.error && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} />}
                   </div>
                 </div>
@@ -6126,55 +6178,34 @@ function AviroDashboard() {
             </div>
           )}
 
-          {/* Current Month Summary */}
-          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.accent}20`, padding: 20, marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 16 }}>Current Month — {curMonth}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
-              {[
-                { label: "Deposits", value: curData.totals.deposits, color: c.accent },
-                { label: "Withdrawals", value: curData.totals.withdrawals, color: "#f59e0b" },
-                { label: "Fees", value: curData.totals.depFees + curData.totals.wdFees, color: "#ef4444" },
-                { label: "Net Hold", value: curData.totals.deposits - curData.totals.withdrawals - curData.totals.depFees - curData.totals.wdFees, color: "#22c55e" },
-              ].map(kpi => (
-                <div key={kpi.label} style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
-                  <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>{kpi.label}</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: kpi.color }}>{fmt(kpi.value)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Method Breakdown — Current Month */}
-          {curData.methods.length > 0 && (
-            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 14 }}>Method Breakdown — {curMonth}</div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${c.border}` }}>
-                    <th style={{ textAlign: "left", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Method</th>
-                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Deposits</th>
-                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Withdrawals</th>
-                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Fees</th>
-                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Net</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {curData.methods.map((m, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid ${c.border}20` }}>
-                      <td style={{ padding: "8px 12px", color: c.text, fontWeight: 500 }}>{m.name}</td>
-                      <td style={{ padding: "8px 12px", color: c.accent, textAlign: "right", fontWeight: 600 }}>{fmt(m.deposits)}</td>
-                      <td style={{ padding: "8px 12px", color: "#f59e0b", textAlign: "right", fontWeight: 600 }}>{fmt(m.withdrawals)}</td>
-                      <td style={{ padding: "8px 12px", color: "#ef4444", textAlign: "right", fontWeight: 600 }}>{fmt(m.depFees + m.wdFees)}</td>
-                      <td style={{ padding: "8px 12px", color: "#22c55e", textAlign: "right", fontWeight: 700 }}>{fmt(m.deposits - m.withdrawals - m.depFees - m.wdFees)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Summary KPIs */}
+          {hasData && (
+            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.accent}20`, padding: 20, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 16 }}>Summary</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+                {[
+                  { label: "Total Deposits", value: totals.deposits, color: c.accent },
+                  { label: "Total Withdrawals", value: totals.withdrawals, color: "#f59e0b" },
+                  { label: "Total Fees", value: totals.depFees + totals.wdFees, color: "#ef4444" },
+                  { label: "Net Hold", value: totals.deposits - totals.withdrawals - totals.depFees - totals.wdFees, color: "#22c55e" },
+                ].map(kpi => (
+                  <div key={kpi.label} style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
+                    <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>{kpi.label}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: kpi.color }}>{fmt(kpi.value)}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
+          {/* Deposits Method Breakdown */}
+          {renderMethodTable("Deposits Summary", depositMethods, c.accent)}
+
+          {/* Withdrawals Method Breakdown */}
+          {renderMethodTable("Withdrawals Summary", withdrawalMethods, "#f59e0b")}
+
           {/* No Data State */}
-          {Object.keys(brandData).length === 0 && !mbToken && (
+          {!hasData && !mbToken && (
             <div style={{ background: c.card, borderRadius: 14, border: `1px dashed ${c.border}`, padding: 40, textAlign: "center" }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 6 }}>No data yet</div>
@@ -6186,39 +6217,6 @@ function AviroDashboard() {
                   Connect to Metabase
                 </button>
               )}
-            </div>
-          )}
-
-          {/* Monthly History */}
-          {availableMonths.length > 0 && (
-            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 14 }}>Monthly History</div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${c.border}` }}>
-                    <th style={{ textAlign: "left", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Month</th>
-                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Deposits</th>
-                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Withdrawals</th>
-                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Fees</th>
-                    <th style={{ textAlign: "right", padding: "8px 12px", color: c.textMuted, fontWeight: 600, fontSize: 10 }}>Net Hold</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {availableMonths.map(m => {
-                    const md = brandData[m];
-                    const t = md.totals;
-                    return (
-                      <tr key={m} style={{ borderBottom: `1px solid ${c.border}20` }}>
-                        <td style={{ padding: "8px 12px", color: c.text, fontWeight: 600 }}>{m}</td>
-                        <td style={{ padding: "8px 12px", color: c.accent, textAlign: "right" }}>{fmt(t.deposits)}</td>
-                        <td style={{ padding: "8px 12px", color: "#f59e0b", textAlign: "right" }}>{fmt(t.withdrawals)}</td>
-                        <td style={{ padding: "8px 12px", color: "#ef4444", textAlign: "right" }}>{fmt(t.depFees + t.wdFees)}</td>
-                        <td style={{ padding: "8px 12px", color: "#22c55e", textAlign: "right", fontWeight: 700 }}>{fmt(t.deposits - t.withdrawals - t.depFees - t.wdFees)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
             </div>
           )}
         </div>
@@ -6580,8 +6578,4 @@ function AviroDashboard() {
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(AviroDashboard));
-</script>
-</body>
-</html>
+</script></body></html>
