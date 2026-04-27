@@ -618,10 +618,10 @@ function AviroDashboard() {
     // Save to Supabase for shared access
     try {
       setSaveStatus("saving");
-      const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared", {
-        method: "PATCH",
-        headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
-        body: JSON.stringify({ state: state, updated_at: new Date().toISOString(), updated_by: "dashboard" }),
+      const res = await fetch(DB_URL + "/rest/v1/dashboard_state", {
+        method: "POST",
+        headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ id: "shared", state: state, updated_at: new Date().toISOString(), updated_by: "dashboard" }),
       });
       if (res.ok) { setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
       else { console.warn("Supabase save failed:", res.status); setSaveStatus("error"); }
@@ -7278,7 +7278,8 @@ function AviroDashboard() {
               <div style={{ width: 32, height: 32, borderRadius: 8, background: c.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: c.accent }}>{getAuthUserName().charAt(0).toUpperCase()}</div>
               <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{getAuthUserName()}</span>
             </div>
-            {saveStatus && <span style={{ fontSize: 10, fontWeight: 600, color: saveStatus === "saved" ? "#22c55e" : saveStatus === "saving" ? "#f59e0b" : "#ef4444", animation: saveStatus === "saving" ? "pulse 1s infinite" : "none" }}>{saveStatus === "saving" ? "Syncing..." : saveStatus === "saved" ? "Saved" : "Sync error"}</span>}
+            {saveStatus && <span style={{ fontSize: 10, fontWeight: 600, color: saveStatus === "saved" ? "#22c55e" : saveStatus === "saving" ? "#f59e0b" : "#ef4444", animation: saveStatus === "saving" ? "pulse 1s infinite" : "none" }}>{saveStatus === "saving" ? "Syncing..." : saveStatus === "saved" ? "Saved to cloud" : "Sync error"}</span>}
+            {authUser.email === "david@aviro-group.com" && <button onClick={() => { saveState(); }} style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", color: "#fff", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Push to Cloud</button>}
             <button onClick={() => setShowChangePassword(!showChangePassword)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 500 }}>Change Password</button>
             {authUser.email === "david@aviro-group.com" && <button onClick={() => setShowUserAdmin(!showUserAdmin)} style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Manage Users</button>}
             <button onClick={handleLogout} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Sign Out</button>
