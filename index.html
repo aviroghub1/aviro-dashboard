@@ -593,97 +593,139 @@ function AviroDashboard() {
     return (parseFloat(amount) || 0) * (fxRates[(currency || "EUR").toUpperCase()] || 1);
   }, [fxRates]);
 
-  // ===== LOCALSTORAGE PERSISTENCE =====
+  // ===== SUPABASE + LOCALSTORAGE PERSISTENCE =====
   const STORAGE_KEY = "aviro_dashboard_state";
-  const saveState = useCallback(() => {
-    try {
-      const state = {
-        calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
-        signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems,
-        calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
-        corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
-        entityIntraAgreements, entityCorpAgreements,
-        bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
-        supabaseUrl, supabaseKey,
-        cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
-        fxRates, fxBaseCurrency, fxLastUpdated,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) { console.warn("Save state failed:", e); }
-  }, [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated]);
+  const DB_URL = "https://iosvevycvqviaonsxsnq.supabase.co";
+  const DB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvc3ZldnljdnF2aWFvbnN4c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA5NDMsImV4cCI6MjA5MTc0Njk0M30.IMpyt1CqwKUbM4aW0vyC0fxgNUvyNOSzk3aP9v_Iw-Q";
+  const [saveStatus, setSaveStatus] = useState(""); // "", "saving", "saved", "error"
 
-  // Auto-save whenever state changes (debounced)
+  const buildState = useCallback(() => ({
+    calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
+    signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems,
+    calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
+    corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
+    entityIntraAgreements, entityCorpAgreements,
+    bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
+    supabaseUrl, supabaseKey,
+    cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
+    fxRates, fxBaseCurrency, fxLastUpdated,
+  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated]);
+
+  const saveState = useCallback(async () => {
+    const state = buildState();
+    // Always save to localStorage as fast cache
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn("localStorage save failed:", e); }
+    // Save to Supabase for shared access
+    try {
+      setSaveStatus("saving");
+      const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared", {
+        method: "PATCH",
+        headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({ state: state, updated_at: new Date().toISOString(), updated_by: "dashboard" }),
+      });
+      if (res.ok) { setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
+      else { console.warn("Supabase save failed:", res.status); setSaveStatus("error"); }
+    } catch (e) { console.warn("Supabase save failed:", e); setSaveStatus("error"); }
+  }, [buildState]);
+
+  // Auto-save whenever state changes (debounced 2s to avoid hammering Supabase)
   useEffect(() => {
-    const t = setTimeout(saveState, 500);
+    const t = setTimeout(saveState, 2000);
     return () => clearTimeout(t);
   }, [saveState]);
 
-  // Load state on mount
+  // Apply state helper
+  const applyState = useCallback((s) => {
+    if (s.calEvents) setCalEvents(s.calEvents);
+    if (s.quickJobs) setQuickJobs(s.quickJobs);
+    if (s.delegatedTasks) setDelegatedTasks(s.delegatedTasks);
+    if (s.signalSlots) setSignalSlots(s.signalSlots);
+    if (s.signalDayStarted !== undefined) setSignalDayStarted(s.signalDayStarted);
+    if (s.signalDayFinished !== undefined) setSignalDayFinished(s.signalDayFinished);
+    if (s.signalSlotNotes) setSignalSlotNotes(s.signalSlotNotes);
+    if (s.signalCompleted) setSignalCompleted(s.signalCompleted);
+    if (s.globalNotes) setGlobalNotes(s.globalNotes);
+    if (s.personalJobs) setPersonalJobs(s.personalJobs);
+    if (s.unscheduledItems) setUnscheduledItems(s.unscheduledItems);
+    if (s.calNotes) setCalNotes(s.calNotes);
+    if (s.dayBanners) setDayBanners(s.dayBanners);
+    if (s.dailyProgress) setDailyProgress(s.dailyProgress);
+    if (s.primaryTZ) setPrimaryTZ(s.primaryTZ);
+    if (s.calSubSection) setCalSubSection(s.calSubSection);
+    if (s.corporateEntities) setCorporateEntities(s.corporateEntities);
+    if (s.entityOverrides) setEntityOverrides(s.entityOverrides);
+    if (s.entityDocs) setEntityDocs(s.entityDocs);
+    if (s.entityServiceProviders) setEntityServiceProviders(s.entityServiceProviders);
+    if (s.entitySeals) setEntitySeals(s.entitySeals);
+    if (s.entityFooters) setEntityFooters(s.entityFooters);
+    if (s.entityIntraAgreements) {
+      if (Array.isArray(s.entityIntraAgreements)) {
+        setEntityIntraAgreements(s.entityIntraAgreements);
+      } else if (typeof s.entityIntraAgreements === "object") {
+        const migrated = [];
+        Object.entries(s.entityIntraAgreements).forEach(([entityName, ags]) => {
+          if (Array.isArray(ags)) {
+            ags.forEach(ag => migrated.push({ ...ag, fromEntity: ag.fromEntity || entityName, toEntity: ag.toEntity || ag.counterpartyEntity || "" }));
+          }
+        });
+        setEntityIntraAgreements(migrated);
+      }
+    }
+    if (s.entityCorpAgreements) setEntityCorpAgreements(s.entityCorpAgreements);
+    if (s.bankRelationships) setBankRelationships(s.bankRelationships);
+    if (s.bankAccountsList) setBankAccountsList(s.bankAccountsList);
+    if (s.gamingBrands) setGamingBrands(s.gamingBrands);
+    if (s.gatewayClients) setGatewayClients(s.gatewayClients);
+    if (s.integrations) setIntegrations(s.integrations);
+    if (s.providers) setProviders(s.providers);
+    if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
+    if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
+    if (s.cubePayDeals) setCubePayDeals(s.cubePayDeals);
+    if (s.cubePayMonthlyData) setCubePayMonthlyData(s.cubePayMonthlyData);
+    if (s.cubePayOperatingCosts) setCubePayOperatingCosts(s.cubePayOperatingCosts);
+    if (s.cubePayPlaceholderCostPct) setCubePayPlaceholderCostPct(s.cubePayPlaceholderCostPct);
+    if (s.providerGroups) setProviderGroups(s.providerGroups);
+    if (s.gatewayRevFees) setGatewayRevFees(s.gatewayRevFees);
+    if (s.metabaseConfigs) setMetabaseConfigs(s.metabaseConfigs);
+    if (s.fxRates) setFxRates(s.fxRates);
+    if (s.fxBaseCurrency) setFxBaseCurrency(s.fxBaseCurrency);
+    if (s.fxLastUpdated) setFxLastUpdated(s.fxLastUpdated);
+  }, []);
+
+  // Load state on mount — try Supabase first, fall back to localStorage
   const [hasLoaded, setHasLoaded] = useState(false);
   useEffect(() => {
     if (hasLoaded) return;
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const s = JSON.parse(saved);
-        if (s.calEvents) setCalEvents(s.calEvents);
-        if (s.quickJobs) setQuickJobs(s.quickJobs);
-        if (s.delegatedTasks) setDelegatedTasks(s.delegatedTasks);
-        if (s.signalSlots) setSignalSlots(s.signalSlots);
-        if (s.signalDayStarted !== undefined) setSignalDayStarted(s.signalDayStarted);
-        if (s.signalDayFinished !== undefined) setSignalDayFinished(s.signalDayFinished);
-        if (s.signalSlotNotes) setSignalSlotNotes(s.signalSlotNotes);
-        if (s.signalCompleted) setSignalCompleted(s.signalCompleted);
-        if (s.globalNotes) setGlobalNotes(s.globalNotes);
-        if (s.personalJobs) setPersonalJobs(s.personalJobs);
-        if (s.unscheduledItems) setUnscheduledItems(s.unscheduledItems);
-        if (s.calNotes) setCalNotes(s.calNotes);
-        if (s.dayBanners) setDayBanners(s.dayBanners);
-        if (s.dailyProgress) setDailyProgress(s.dailyProgress);
-        if (s.primaryTZ) setPrimaryTZ(s.primaryTZ);
-        if (s.calSubSection) setCalSubSection(s.calSubSection);
-        if (s.corporateEntities) setCorporateEntities(s.corporateEntities);
-        if (s.entityOverrides) setEntityOverrides(s.entityOverrides);
-        if (s.entityDocs) setEntityDocs(s.entityDocs);
-        if (s.entityServiceProviders) setEntityServiceProviders(s.entityServiceProviders);
-        if (s.entitySeals) setEntitySeals(s.entitySeals);
-        if (s.entityFooters) setEntityFooters(s.entityFooters);
-        if (s.entityIntraAgreements) {
-          // Migrate from old per-entity object format to flat array format
-          if (Array.isArray(s.entityIntraAgreements)) {
-            setEntityIntraAgreements(s.entityIntraAgreements);
-          } else if (typeof s.entityIntraAgreements === "object") {
-            const migrated = [];
-            Object.entries(s.entityIntraAgreements).forEach(([entityName, ags]) => {
-              if (Array.isArray(ags)) {
-                ags.forEach(ag => migrated.push({ ...ag, fromEntity: ag.fromEntity || entityName, toEntity: ag.toEntity || ag.counterpartyEntity || "" }));
-              }
-            });
-            setEntityIntraAgreements(migrated);
+    const load = async () => {
+      let loaded = false;
+      // Try Supabase first (shared, authoritative)
+      try {
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state", {
+          headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+        });
+        if (res.ok) {
+          const rows = await res.json();
+          if (rows.length > 0 && rows[0].state && Object.keys(rows[0].state).length > 0) {
+            console.log("Loaded state from Supabase");
+            applyState(rows[0].state);
+            loaded = true;
           }
         }
-        if (s.entityCorpAgreements) setEntityCorpAgreements(s.entityCorpAgreements);
-        if (s.bankRelationships) setBankRelationships(s.bankRelationships);
-        if (s.bankAccountsList) setBankAccountsList(s.bankAccountsList);
-        if (s.gamingBrands) setGamingBrands(s.gamingBrands);
-        if (s.gatewayClients) setGatewayClients(s.gatewayClients);
-        if (s.integrations) setIntegrations(s.integrations);
-        if (s.providers) setProviders(s.providers);
-        if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
-        if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
-        if (s.cubePayDeals) setCubePayDeals(s.cubePayDeals);
-        if (s.cubePayMonthlyData) setCubePayMonthlyData(s.cubePayMonthlyData);
-        if (s.cubePayOperatingCosts) setCubePayOperatingCosts(s.cubePayOperatingCosts);
-        if (s.cubePayPlaceholderCostPct) setCubePayPlaceholderCostPct(s.cubePayPlaceholderCostPct);
-        if (s.providerGroups) setProviderGroups(s.providerGroups);
-        if (s.gatewayRevFees) setGatewayRevFees(s.gatewayRevFees);
-        if (s.metabaseConfigs) setMetabaseConfigs(s.metabaseConfigs);
-        if (s.fxRates) setFxRates(s.fxRates);
-        if (s.fxBaseCurrency) setFxBaseCurrency(s.fxBaseCurrency);
-        if (s.fxLastUpdated) setFxLastUpdated(s.fxLastUpdated);
+      } catch (e) { console.warn("Supabase load failed, trying localStorage:", e); }
+      // Fall back to localStorage
+      if (!loaded) {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            const s = JSON.parse(saved);
+            console.log("Loaded state from localStorage (Supabase was empty or unavailable)");
+            applyState(s);
+          }
+        } catch (e) { console.warn("localStorage load also failed:", e); }
       }
-    } catch (e) { console.warn("Load state failed:", e); }
-    setHasLoaded(true);
+      setHasLoaded(true);
+    };
+    load();
   }, []);
 
   // ===== METABASE HELPERS =====
@@ -7236,6 +7278,7 @@ function AviroDashboard() {
               <div style={{ width: 32, height: 32, borderRadius: 8, background: c.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: c.accent }}>{getAuthUserName().charAt(0).toUpperCase()}</div>
               <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{getAuthUserName()}</span>
             </div>
+            {saveStatus && <span style={{ fontSize: 10, fontWeight: 600, color: saveStatus === "saved" ? "#22c55e" : saveStatus === "saving" ? "#f59e0b" : "#ef4444", animation: saveStatus === "saving" ? "pulse 1s infinite" : "none" }}>{saveStatus === "saving" ? "Syncing..." : saveStatus === "saved" ? "Saved" : "Sync error"}</span>}
             <button onClick={() => setShowChangePassword(!showChangePassword)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 500 }}>Change Password</button>
             {authUser.email === "david@aviro-group.com" && <button onClick={() => setShowUserAdmin(!showUserAdmin)} style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Manage Users</button>}
             <button onClick={handleLogout} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Sign Out</button>
