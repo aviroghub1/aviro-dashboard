@@ -6287,11 +6287,17 @@ function AviroDashboard() {
         setPmClients(prev => prev.map(cl => cl.id === client.id ? { ...cl, [field]: value } : cl));
       };
 
+      const [showAddProject, setShowAddProject] = useState(false);
+      const [newProjName, setNewProjName] = useState("");
+      const [newProjDesc, setNewProjDesc] = useState("");
+      const [newProjDate, setNewProjDate] = useState("");
+      const [newProjStatus, setNewProjStatus] = useState("on-track");
+
       const addProject = () => {
-        const name = prompt("Project name (e.g. 'Become sole gateway'):");
-        if (!name) return;
-        const proj = { id: Date.now().toString(), name, status: "on-track", progress: 0, targetDate: "", description: "", tasks: [] };
+        if (!newProjName.trim()) return;
+        const proj = { id: Date.now().toString(), name: newProjName.trim(), status: newProjStatus, progress: 0, targetDate: newProjDate, description: newProjDesc, tasks: [] };
         updateClient("projects", [...(client.projects || []), proj]);
+        setNewProjName(""); setNewProjDesc(""); setNewProjDate(""); setNewProjStatus("on-track"); setShowAddProject(false);
       };
 
       const updateProject = (projId, field, value) => {
@@ -6429,9 +6435,43 @@ function AviroDashboard() {
             <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <span style={labelSt}>Projects</span>
-                <button onClick={addProject} style={{ fontSize: 10, padding: "5px 12px", borderRadius: 6, border: "none", background: c.accent, color: "#fff", cursor: "pointer", fontWeight: 600 }}>+ Project</button>
+                {!showAddProject && <button onClick={() => setShowAddProject(true)} style={{ fontSize: 10, padding: "5px 12px", borderRadius: 6, border: "none", background: c.accent, color: "#fff", cursor: "pointer", fontWeight: 600 }}>+ Project</button>}
               </div>
-              {(client.projects || []).length === 0 && (
+
+              {/* Add Project Form */}
+              {showAddProject && (
+                <div style={{ background: `${c.accent}08`, borderRadius: 12, border: `1px solid ${c.accent}30`, padding: 20, marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, marginBottom: 14 }}>New Project</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={labelSt}>Project Name *</label>
+                      <input value={newProjName} onChange={e => setNewProjName(e.target.value)} placeholder="e.g. Become sole gateway provider" style={{ ...inputSt, width: "100%" }} autoFocus />
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <label style={labelSt}>Description</label>
+                      <input value={newProjDesc} onChange={e => setNewProjDesc(e.target.value)} placeholder="Brief summary of goals and scope" style={{ ...inputSt, width: "100%" }} />
+                    </div>
+                    <div>
+                      <label style={labelSt}>Target Date</label>
+                      <input type="date" value={newProjDate} onChange={e => setNewProjDate(e.target.value)} style={{ ...inputSt, width: "100%" }} />
+                    </div>
+                    <div>
+                      <label style={labelSt}>Initial Status</label>
+                      <select value={newProjStatus} onChange={e => setNewProjStatus(e.target.value)} style={{ ...inputSt, width: "100%" }}>
+                        <option value="on-track">On Track</option>
+                        <option value="at-risk">At Risk</option>
+                        <option value="blocked">Blocked</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <button onClick={() => { setShowAddProject(false); setNewProjName(""); setNewProjDesc(""); setNewProjDate(""); setNewProjStatus("on-track"); }} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.textSecondary, cursor: "pointer", fontWeight: 600 }}>Cancel</button>
+                    <button onClick={addProject} disabled={!newProjName.trim()} style={{ fontSize: 11, padding: "7px 14px", borderRadius: 8, border: "none", background: newProjName.trim() ? c.accent : `${c.accent}40`, color: "#fff", cursor: newProjName.trim() ? "pointer" : "not-allowed", fontWeight: 600 }}>Add Project</button>
+                  </div>
+                </div>
+              )}
+
+              {(client.projects || []).length === 0 && !showAddProject && (
                 <div style={{ padding: 20, textAlign: "center", color: c.textMuted, fontSize: 12, fontStyle: "italic" }}>No projects yet. Add a strategic initiative like "Become sole gateway".</div>
               )}
               {(client.projects || []).map(proj => (
