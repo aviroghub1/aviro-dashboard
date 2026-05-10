@@ -595,8 +595,15 @@ function AviroDashboard() {
 
   // ===== PROJECT MANAGEMENT STATE =====
   const [pmSubSection, setPmSubSection] = useState("gw-clients"); // gw-clients, gw-product, betting
-  const [pmPipeline, setPmPipeline] = useState([]); // [{ id, name, section, stage, value, currency, notes, createdAt, movedAt, clickupLink }]
-  const [pmRoadmap, setPmRoadmap] = useState([]); // [{ id, name, section, status, progress, targetDate, description, clickupLink }]
+  const [pmPipeline, setPmPipeline] = useState([]); // legacy — kept for save compat
+  const [pmRoadmap, setPmRoadmap] = useState([]); // legacy — kept for save compat
+  const [pmClients, setPmClients] = useState([
+    { id: "gg-poker", name: "GG Poker", stage: "Active", agenda: "", clickupId: "86c7babc2", targetInitial: "", target3m: "", target6m: "", target12m: "", actualVolume: {}, activeDate: "", projects: [], color: "#ec4899" },
+    { id: "acr-poker", name: "ACR Poker", stage: "Onboarding", agenda: "", clickupId: "86c7beefy", targetInitial: "", target3m: "", target6m: "", target12m: "", actualVolume: {}, activeDate: "", projects: [], color: "#6366f1" },
+    { id: "rocketbet", name: "RocketBet", stage: "Active", agenda: "", clickupId: "86c7befx0", targetInitial: "", target3m: "", target6m: "", target12m: "", actualVolume: {}, activeDate: "", projects: [], color: "#f59e0b" },
+  ]);
+  const [pmSelectedClient, setPmSelectedClient] = useState("gg-poker");
+  const [pmClickUpTasks, setPmClickUpTasks] = useState({}); // { clientId: [tasks from ClickUp] }
 
   // ===== SUPABASE + LOCALSTORAGE PERSISTENCE =====
   const STORAGE_KEY = "aviro_dashboard_state";
@@ -614,8 +621,8 @@ function AviroDashboard() {
     supabaseUrl, supabaseKey,
     cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
     fxRates, fxBaseCurrency, fxLastUpdated,
-    pmPipeline, pmRoadmap,
-  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap]);
+    pmPipeline, pmRoadmap, pmClients,
+  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients]);
 
   const saveState = useCallback(async () => {
     const state = buildState();
@@ -698,6 +705,7 @@ function AviroDashboard() {
     if (s.fxLastUpdated) setFxLastUpdated(s.fxLastUpdated);
     if (s.pmPipeline) setPmPipeline(s.pmPipeline);
     if (s.pmRoadmap) setPmRoadmap(s.pmRoadmap);
+    if (s.pmClients) setPmClients(s.pmClients);
   }, []);
 
   // Load state on mount — try Supabase first, fall back to localStorage
@@ -6263,180 +6271,222 @@ function AviroDashboard() {
     );
   };
 
-  // ===== PROJECT MANAGEMENT =====
+  // ===== PROJECT MANAGEMENT — CLIENT WORKSPACE =====
   const renderProjectMgmt = () => {
-    // Map section name to sub key
     const subMap = { "pm-gw-clients": "gw-clients", "pm-gw-product": "gw-product", "pm-betting": "betting" };
     const sub = subMap[section] || "gw-clients";
 
-    const PM_STAGES = {
-      "gw-clients": ["Lead", "Discussion", "Proposal", "Onboarding", "Live", "Optimising"],
-      "gw-product": ["Idea", "Scoping", "In Development", "Testing", "Launched"],
-      "betting": ["Concept", "Planning", "Building", "Soft Launch", "Live"],
-    };
+    // Client Development view
+    if (sub === "gw-clients") {
+      const STAGES = ["Discussion", "Onboarding", "Integration", "Active", "Inactive"];
+      const stageColors2 = { "Discussion": "#8b5cf6", "Onboarding": "#f59e0b", "Integration": "#6366f1", "Active": "#22c55e", "Inactive": "#6b7280" };
+      const statusColors2 = { "on-track": "#22c55e", "at-risk": "#f59e0b", "blocked": "#ef4444", "completed": "#06b6d4" };
+      const client = pmClients.find(cl => cl.id === pmSelectedClient) || pmClients[0];
 
-    const PM_LABELS = {
-      "gw-clients": "Client Development",
-      "gw-product": "Product Development",
-      "betting": "Betting Sites",
-    };
+      const updateClient = (field, value) => {
+        setPmClients(prev => prev.map(cl => cl.id === client.id ? { ...cl, [field]: value } : cl));
+      };
 
-    const stages = PM_STAGES[sub] || [];
-    const items = pmPipeline.filter(p => p.section === sub);
-    const roadmapItems = pmRoadmap.filter(r => r.section === sub);
+      const addProject = () => {
+        const name = prompt("Project name (e.g. 'Become sole gateway'):");
+        if (!name) return;
+        const proj = { id: Date.now().toString(), name, status: "on-track", progress: 0, targetDate: "", description: "", tasks: [] };
+        updateClient("projects", [...(client.projects || []), proj]);
+      };
 
-    // Add pipeline item
-    const addPipelineItem = () => {
-      const name = prompt("Enter name:");
-      if (!name) return;
-      const item = { id: Date.now().toString(), name, section: sub, stage: stages[0], value: "", currency: "EUR", notes: "", createdAt: new Date().toISOString(), movedAt: new Date().toISOString(), clickupLink: "" };
-      setPmPipeline(prev => [...prev, item]);
-    };
+      const updateProject = (projId, field, value) => {
+        updateClient("projects", (client.projects || []).map(p => p.id === projId ? { ...p, [field]: value } : p));
+      };
 
-    // Move pipeline item to a new stage
-    const moveItem = (id, newStage) => {
-      setPmPipeline(prev => prev.map(p => p.id === id ? { ...p, stage: newStage, movedAt: new Date().toISOString() } : p));
-    };
+      const deleteProject = (projId) => {
+        if (!confirm("Delete this project?")) return;
+        updateClient("projects", (client.projects || []).filter(p => p.id !== projId));
+      };
 
-    // Update pipeline item field
-    const updateItem = (id, field, value) => {
-      setPmPipeline(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
-    };
+      const addClient = () => {
+        const name = prompt("New client name:");
+        if (!name) return;
+        const id = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
+        const colors = ["#ec4899", "#6366f1", "#f59e0b", "#22c55e", "#06b6d4", "#8b5cf6"];
+        setPmClients(prev => [...prev, { id, name, stage: "Discussion", agenda: "", clickupId: "", targetInitial: "", target3m: "", target6m: "", target12m: "", actualVolume: {}, activeDate: "", projects: [], color: colors[prev.length % colors.length] }]);
+        setPmSelectedClient(id);
+      };
 
-    // Delete pipeline item
-    const deleteItem = (id) => {
-      if (!confirm("Delete this item?")) return;
-      setPmPipeline(prev => prev.filter(p => p.id !== id));
-    };
+      // Volume tracking helpers
+      const getMonthsSinceActive = () => {
+        if (!client.activeDate) return 0;
+        const d = new Date(client.activeDate);
+        const now = new Date();
+        return Math.max(0, (now.getFullYear() - d.getFullYear()) * 12 + now.getMonth() - d.getMonth());
+      };
+      const monthsActive = getMonthsSinceActive();
+      const currentTarget = monthsActive <= 0 ? parseFloat(client.targetInitial) || 0 : monthsActive <= 3 ? parseFloat(client.target3m) || 0 : monthsActive <= 6 ? parseFloat(client.target6m) || 0 : parseFloat(client.target12m) || 0;
+      const totalActual = Object.values(client.actualVolume || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+      const successPct = currentTarget > 0 ? Math.min(100, Math.round((totalActual / currentTarget) * 100)) : 0;
+      const successColor = successPct >= 80 ? "#22c55e" : successPct >= 50 ? "#f59e0b" : "#ef4444";
 
-    // Add roadmap item
-    const addRoadmapItem = () => {
-      const name = prompt("Enter project name:");
-      if (!name) return;
-      const item = { id: Date.now().toString(), name, section: sub, status: "on-track", progress: 0, targetDate: "", description: "", clickupLink: "" };
-      setPmRoadmap(prev => [...prev, item]);
-    };
+      const fmt2 = (v) => (parseFloat(v) || 0).toLocaleString("en", { maximumFractionDigits: 0 });
+      const inputSt = { fontSize: 12, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+      const labelSt = { fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, display: "block" };
 
-    // Update roadmap item
-    const updateRoadmapItem = (id, field, value) => {
-      setPmRoadmap(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
-    };
-
-    // Delete roadmap item
-    const deleteRoadmapItem = (id) => {
-      if (!confirm("Delete this item?")) return;
-      setPmRoadmap(prev => prev.filter(r => r.id !== id));
-    };
-
-    // Days in stage helper
-    const daysInStage = (movedAt) => {
-      if (!movedAt) return 0;
-      return Math.floor((Date.now() - new Date(movedAt).getTime()) / 86400000);
-    };
-
-    const stageColors = ["#6366f1", "#8b5cf6", "#f59e0b", "#22c55e", "#10b981", "#06b6d4"];
-    const statusColors = { "on-track": "#22c55e", "at-risk": "#f59e0b", "blocked": "#ef4444", "completed": "#06b6d4" };
-
-    return (
-      <div>
-          {/* Section Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
-            <div>
-              <h2 style={{ fontSize: 22, fontWeight: 800, color: c.text, margin: "0 0 4px" }}>{PM_LABELS[sub]}</h2>
-              <p style={{ color: c.textSecondary, fontSize: 12, margin: 0 }}>Pipeline &amp; Roadmap</p>
+      return (
+        <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 80px)" }}>
+          {/* Client list sidebar */}
+          <div style={{ width: 200, flexShrink: 0, background: c.card, borderRight: `1px solid ${c.border}`, padding: "16px 0" }}>
+            <div style={{ padding: "0 12px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${c.border}`, marginBottom: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>Clients</span>
+              <button onClick={addClient} style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, border: "none", background: c.accent, color: "#fff", cursor: "pointer", fontWeight: 600 }}>+</button>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={addPipelineItem} style={{ fontSize: 11, padding: "8px 16px", borderRadius: 8, cursor: "pointer", border: "none", background: c.accent, color: "#fff", fontWeight: 600 }}>+ Pipeline Item</button>
-              <button onClick={addRoadmapItem} style={{ fontSize: 11, padding: "8px 16px", borderRadius: 8, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Roadmap Item</button>
-            </div>
-          </div>
-
-          {/* PIPELINE — Kanban columns */}
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Pipeline</div>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${stages.length}, 1fr)`, gap: 10, overflowX: "auto" }}>
-              {stages.map((stage, si) => {
-                const stageItems = items.filter(i => i.stage === stage);
-                const stageColor = stageColors[si % stageColors.length];
-                return (
-                  <div key={stage} style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, minHeight: 200 }}>
-                    {/* Column header */}
-                    <div style={{ padding: "12px 12px 8px", borderBottom: `2px solid ${stageColor}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: stageColor, textTransform: "uppercase" }}>{stage}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, background: c.card, borderRadius: 10, padding: "2px 7px" }}>{stageItems.length}</span>
-                    </div>
-                    {/* Cards */}
-                    <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                      {stageItems.map(item => (
-                        <div key={item.id} style={{ background: c.card, borderRadius: 8, border: `1px solid ${c.border}`, padding: "10px 12px", cursor: "default" }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 4 }}>{item.name}</div>
-                          {item.value && <div style={{ fontSize: 10, color: c.accent, fontWeight: 600, marginBottom: 4 }}>{item.currency} {item.value}</div>}
-                          <div style={{ fontSize: 9, color: c.textMuted, marginBottom: 6 }}>{daysInStage(item.movedAt)}d in stage</div>
-                          {/* Move buttons */}
-                          <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                            {stages.filter(s2 => s2 !== stage).map(s2 => (
-                              <button key={s2} onClick={() => moveItem(item.id, s2)} style={{ fontSize: 8, padding: "2px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.textSecondary, cursor: "pointer" }}>{s2}</button>
-                            ))}
-                          </div>
-                          {/* Edit row */}
-                          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-                            <input value={item.value || ""} onChange={e => updateItem(item.id, "value", e.target.value)} placeholder="Value" style={{ width: 60, fontSize: 9, padding: "3px 5px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text }} />
-                            <input value={item.notes || ""} onChange={e => updateItem(item.id, "notes", e.target.value)} placeholder="Notes..." style={{ flex: 1, fontSize: 9, padding: "3px 5px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text }} />
-                            <button onClick={() => deleteItem(item.id)} style={{ fontSize: 9, padding: "3px 6px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.1)", color: "#ef4444", cursor: "pointer" }}>x</button>
-                          </div>
-                        </div>
-                      ))}
-                      {stageItems.length === 0 && <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: 16, fontStyle: "italic" }}>No items</div>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ROADMAP */}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Roadmap</div>
-            {roadmapItems.length === 0 && (
-              <div style={{ background: c.card, borderRadius: 12, border: `1px dashed ${c.border}`, padding: 32, textAlign: "center" }}>
-                <div style={{ fontSize: 13, color: c.textMuted }}>No roadmap items yet. Click "+ Roadmap Item" to add a strategic initiative.</div>
+            {pmClients.map(cl => (
+              <div key={cl.id} onClick={() => setPmSelectedClient(cl.id)}
+                style={{ padding: "10px 12px", cursor: "pointer", borderLeft: cl.id === pmSelectedClient ? `3px solid ${cl.color}` : "3px solid transparent", background: cl.id === pmSelectedClient ? `${cl.color}10` : "transparent", transition: "all 0.15s", marginBottom: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: cl.id === pmSelectedClient ? 700 : 500, color: cl.id === pmSelectedClient ? c.text : c.textSecondary }}>{cl.name}</div>
+                <div style={{ fontSize: 9, color: stageColors2[cl.stage] || c.textMuted, fontWeight: 600, marginTop: 2 }}>{cl.stage}</div>
               </div>
-            )}
-            {roadmapItems.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {roadmapItems.map(item => (
-                  <div key={item.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: "16px 20px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: c.text, marginBottom: 4 }}>{item.name}</div>
-                        <input value={item.description || ""} onChange={e => updateRoadmapItem(item.id, "description", e.target.value)} placeholder="Description..." style={{ width: "100%", fontSize: 11, padding: "4px 0", border: "none", background: "transparent", color: c.textSecondary, outline: "none" }} />
-                      </div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        <select value={item.status} onChange={e => updateRoadmapItem(item.id, "status", e.target.value)} style={{ fontSize: 10, padding: "4px 8px", borderRadius: 6, border: `1px solid ${statusColors[item.status]}40`, background: `${statusColors[item.status]}10`, color: statusColors[item.status], fontWeight: 600, outline: "none" }}>
-                          <option value="on-track">On Track</option>
-                          <option value="at-risk">At Risk</option>
-                          <option value="blocked">Blocked</option>
-                          <option value="completed">Completed</option>
-                        </select>
-                        <button onClick={() => deleteRoadmapItem(item.id)} style={{ fontSize: 10, padding: "4px 8px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.1)", color: "#ef4444", cursor: "pointer" }}>x</button>
-                      </div>
-                    </div>
-                    {/* Progress bar + target date */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ height: 6, borderRadius: 3, background: c.surface, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${item.progress || 0}%`, background: statusColors[item.status], borderRadius: 3, transition: "width 0.3s" }} />
-                        </div>
-                      </div>
-                      <input type="range" min="0" max="100" value={item.progress || 0} onChange={e => updateRoadmapItem(item.id, "progress", parseInt(e.target.value))} style={{ width: 80 }} />
-                      <span style={{ fontSize: 10, fontWeight: 700, color: c.textSecondary, minWidth: 30 }}>{item.progress || 0}%</span>
-                      <input type="date" value={item.targetDate || ""} onChange={e => updateRoadmapItem(item.id, "targetDate", e.target.value)} style={{ fontSize: 10, padding: "3px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text }} />
-                    </div>
+            ))}
+          </div>
+
+          {/* Client workspace */}
+          <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: client.color }} />
+                  <h2 style={{ fontSize: 22, fontWeight: 800, color: c.text, margin: 0 }}>{client.name}</h2>
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <select value={client.stage} onChange={e => updateClient("stage", e.target.value)} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, border: `1px solid ${stageColors2[client.stage]}40`, background: `${stageColors2[client.stage]}10`, color: stageColors2[client.stage], fontWeight: 700, outline: "none" }}>
+                    {STAGES.map(s2 => <option key={s2} value={s2}>{s2}</option>)}
+                  </select>
+                  {client.clickupId && <a href={"https://app.clickup.com/t/" + client.clickupId} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, textDecoration: "none" }}>ClickUp</a>}
+                </div>
+              </div>
+            </div>
+
+            {/* Agenda / Summary */}
+            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
+              <label style={labelSt}>Agenda / Strategy</label>
+              <textarea value={client.agenda || ""} onChange={e => updateClient("agenda", e.target.value)} placeholder="Key objectives, current focus, next steps..." rows={3}
+                style={{ ...inputSt, width: "100%", resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }} />
+            </div>
+
+            {/* Volume Targets + Success Bar */}
+            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <span style={labelSt}>Volume Targets (Monthly)</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <label style={{ ...labelSt, marginBottom: 0 }}>Active Since</label>
+                  <input type="date" value={client.activeDate || ""} onChange={e => updateClient("activeDate", e.target.value)} style={{ ...inputSt, fontSize: 10, padding: "4px 8px" }} />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {[{ key: "targetInitial", label: "Initial" }, { key: "target3m", label: "3 Months" }, { key: "target6m", label: "6 Months" }, { key: "target12m", label: "12 Months" }].map(t => (
+                  <div key={t.key}>
+                    <label style={labelSt}>{t.label}</label>
+                    <input value={client[t.key] || ""} onChange={e => updateClient(t.key, e.target.value)} placeholder="0" style={{ ...inputSt, width: "100%" }} />
                   </div>
                 ))}
               </div>
-            )}
+              {/* Success bar */}
+              <div style={{ background: c.surface, borderRadius: 10, padding: 14, border: `1px solid ${c.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: c.text }}>Performance vs Target</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: successColor }}>{successPct}%</span>
+                </div>
+                <div style={{ height: 10, borderRadius: 5, background: `${c.border}40`, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${successPct}%`, background: successColor, borderRadius: 5, transition: "width 0.5s" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                  <span style={{ fontSize: 9, color: c.textMuted }}>Actual: {fmt2(totalActual)}</span>
+                  <span style={{ fontSize: 9, color: c.textMuted }}>Target: {fmt2(currentTarget)} ({monthsActive > 0 ? monthsActive + "mo active" : "not yet active"})</span>
+                </div>
+              </div>
+              {/* Monthly actual input */}
+              {client.activeDate && (
+                <div style={{ marginTop: 12 }}>
+                  <label style={labelSt}>Actual Volume by Month</label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {Array.from({ length: Math.min(12, Math.max(1, monthsActive + 1)) }, (_, i) => {
+                      const d = new Date(client.activeDate);
+                      d.setMonth(d.getMonth() + i);
+                      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                      const label = d.toLocaleString("en", { month: "short", year: "2-digit" });
+                      return (
+                        <div key={key} style={{ minWidth: 80 }}>
+                          <div style={{ fontSize: 8, color: c.textMuted, fontWeight: 600, marginBottom: 2 }}>{label}</div>
+                          <input value={(client.actualVolume || {})[key] || ""} onChange={e => { const av = { ...(client.actualVolume || {}), [key]: e.target.value }; updateClient("actualVolume", av); }}
+                            placeholder="0" style={{ ...inputSt, width: "100%", fontSize: 10, padding: "4px 6px" }} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Projects */}
+            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <span style={labelSt}>Projects</span>
+                <button onClick={addProject} style={{ fontSize: 10, padding: "5px 12px", borderRadius: 6, border: "none", background: c.accent, color: "#fff", cursor: "pointer", fontWeight: 600 }}>+ Project</button>
+              </div>
+              {(client.projects || []).length === 0 && (
+                <div style={{ padding: 20, textAlign: "center", color: c.textMuted, fontSize: 12, fontStyle: "italic" }}>No projects yet. Add a strategic initiative like "Become sole gateway".</div>
+              )}
+              {(client.projects || []).map(proj => (
+                <div key={proj.id} style={{ background: c.surface, borderRadius: 10, border: `1px solid ${c.border}`, padding: 16, marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 4 }}>{proj.name}</div>
+                      <input value={proj.description || ""} onChange={e => updateProject(proj.id, "description", e.target.value)} placeholder="Description..." style={{ width: "100%", fontSize: 11, padding: "3px 0", border: "none", background: "transparent", color: c.textSecondary, outline: "none" }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <select value={proj.status} onChange={e => updateProject(proj.id, "status", e.target.value)} style={{ fontSize: 10, padding: "4px 8px", borderRadius: 6, border: `1px solid ${statusColors2[proj.status]}40`, background: `${statusColors2[proj.status]}10`, color: statusColors2[proj.status], fontWeight: 600, outline: "none" }}>
+                        <option value="on-track">On Track</option>
+                        <option value="at-risk">At Risk</option>
+                        <option value="blocked">Blocked</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                      <input type="date" value={proj.targetDate || ""} onChange={e => updateProject(proj.id, "targetDate", e.target.value)} style={{ fontSize: 10, padding: "3px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.card, color: c.text }} />
+                      <button onClick={() => deleteProject(proj.id)} style={{ fontSize: 10, padding: "4px 8px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.1)", color: "#ef4444", cursor: "pointer" }}>x</button>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ flex: 1, height: 6, borderRadius: 3, background: c.card, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${proj.progress || 0}%`, background: statusColors2[proj.status], borderRadius: 3, transition: "width 0.3s" }} />
+                    </div>
+                    <input type="range" min="0" max="100" value={proj.progress || 0} onChange={e => updateProject(proj.id, "progress", parseInt(e.target.value))} style={{ width: 70 }} />
+                    <span style={{ fontSize: 10, fontWeight: 700, color: c.textSecondary, minWidth: 28 }}>{proj.progress || 0}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ClickUp Tasks placeholder */}
+            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <span style={labelSt}>ClickUp Tasks</span>
+                {client.clickupId && <a href={"https://app.clickup.com/t/" + client.clickupId} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, textDecoration: "none", fontWeight: 600 }}>Open in ClickUp</a>}
+              </div>
+              <div style={{ padding: 16, textAlign: "center", color: c.textMuted, fontSize: 12, border: `1px dashed ${c.border}`, borderRadius: 8 }}>
+                ClickUp task sync will appear here — pulling tasks from Gateway.io &amp; Cube Pay workspaces.
+              </div>
+            </div>
           </div>
+        </div>
+      );
+    }
+
+    // Product Development or Betting Sites — placeholder
+    const PM_LABELS = { "gw-product": "Product Development", "betting": "Betting Sites" };
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 48, maxWidth: 500, margin: "0 auto" }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>{sub === "gw-product" ? "🚀" : "🎰"}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: c.text, marginBottom: 8 }}>{PM_LABELS[sub]}</div>
+          <div style={{ fontSize: 13, color: c.textMuted, lineHeight: 1.6 }}>This section is coming soon.</div>
+        </div>
       </div>
     );
   };
