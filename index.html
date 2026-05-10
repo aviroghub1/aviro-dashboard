@@ -6272,6 +6272,14 @@ function AviroDashboard() {
   };
 
   // ===== PROJECT MANAGEMENT — CLIENT WORKSPACE =====
+  const [showAddObj, setShowAddObj] = useState(false);
+  const [newObjName, setNewObjName] = useState("");
+  const [newObjDesc, setNewObjDesc] = useState("");
+  const [newObjDate, setNewObjDate] = useState("");
+  const [newObjClickup, setNewObjClickup] = useState("");
+  const [openObjective, setOpenObjective] = useState(null);
+  const [newTaskName, setNewTaskName] = useState("");
+
   const renderProjectMgmt = () => {
     const subMap = { "pm-gw-clients": "gw-clients", "pm-gw-product": "gw-product", "pm-betting": "betting" };
     const sub = subMap[section] || "gw-clients";
@@ -6286,14 +6294,6 @@ function AviroDashboard() {
       const updateClient = (field, value) => {
         setPmClients(prev => prev.map(cl => cl.id === client.id ? { ...cl, [field]: value } : cl));
       };
-
-      const [showAddObj, setShowAddObj] = useState(false);
-      const [newObjName, setNewObjName] = useState("");
-      const [newObjDesc, setNewObjDesc] = useState("");
-      const [newObjDate, setNewObjDate] = useState("");
-      const [newObjClickup, setNewObjClickup] = useState("");
-      const [openObjective, setOpenObjective] = useState(null);
-      const [newTaskName, setNewTaskName] = useState("");
 
       const addObjective = () => {
         if (!newObjName.trim()) return;
@@ -6465,9 +6465,8 @@ function AviroDashboard() {
             </div>
 
             {/* Objectives */}
-            {openObjective ? (() => {
+            {openObjective && (client.projects || []).find(p => p.id === openObjective) ? (() => {
               const obj = (client.projects || []).find(p => p.id === openObjective);
-              if (!obj) { setOpenObjective(null); return null; }
               const doneTasks = (obj.tasks || []).filter(t => t.done).length;
               const totalTasks = (obj.tasks || []).length;
               const taskPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
