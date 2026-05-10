@@ -6098,7 +6098,7 @@ function AviroDashboard() {
       { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #6366f1, #8b5cf6)", defaultSection: "clients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #f59e0b, #ef4444)", defaultSection: null },
       { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #10b981, #059669)", defaultSection: "entities" },
-      { key: "projects", title: "Project Management", desc: "Pipelines & Strategic Roadmap", icon: "roadmap", gradient: "linear-gradient(135deg, #8b5cf6, #6366f1)", defaultSection: "projects" },
+      { key: "projects", title: "Project Management", desc: "Pipelines & Strategic Roadmap", icon: "roadmap", gradient: "linear-gradient(135deg, #8b5cf6, #6366f1)", defaultSection: "pm-gw-clients" },
       { key: "revenue", title: "Revenue", desc: "Revenue Tracking & Analytics", icon: "signal", gradient: "linear-gradient(135deg, #ec4899, #be185d)", defaultSection: "revenue" },
       { key: "finance", title: "Finance", desc: "Financial Management & Reporting", icon: "flow", gradient: "linear-gradient(135deg, #14b8a6, #0d9488)", defaultSection: null },
       { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)", defaultSection: "calendar" },
@@ -6265,8 +6265,9 @@ function AviroDashboard() {
 
   // ===== PROJECT MANAGEMENT =====
   const renderProjectMgmt = () => {
-    const sub = pmSubSection;
-    const setSub = setPmSubSection;
+    // Map section name to sub key
+    const subMap = { "pm-gw-clients": "gw-clients", "pm-gw-product": "gw-product", "pm-betting": "betting" };
+    const sub = subMap[section] || "gw-clients";
 
     const PM_STAGES = {
       "gw-clients": ["Lead", "Discussion", "Proposal", "Onboarding", "Live", "Optimising"],
@@ -6337,33 +6338,7 @@ function AviroDashboard() {
     const statusColors = { "on-track": "#22c55e", "at-risk": "#f59e0b", "blocked": "#ef4444", "completed": "#06b6d4" };
 
     return (
-      <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 80px)" }}>
-        {/* LEFT SIDEBAR */}
-        <div style={{ width: 220, flexShrink: 0, background: c.card, borderRight: `1px solid ${c.border}`, padding: "20px 0" }}>
-          <div style={{ padding: "0 16px 16px", borderBottom: `1px solid ${c.border}`, marginBottom: 12 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Project</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: c.text }}>Management</div>
-          </div>
-
-          {/* Gateway section */}
-          <div style={{ padding: "8px 16px 4px", fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.1em" }}>Gateway</div>
-          {[{ id: "gw-clients", label: "Client Development", icon: "👥" }, { id: "gw-product", label: "Product Development", icon: "🚀" }].map(item => (
-            <div key={item.id} onClick={() => setSub(item.id)}
-              style={{ padding: "10px 16px", cursor: "pointer", borderLeft: sub === item.id ? `3px solid ${c.accent}` : "3px solid transparent", background: sub === item.id ? `${c.accent}10` : "transparent", transition: "all 0.15s", marginBottom: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: sub === item.id ? 700 : 500, color: sub === item.id ? c.text : c.textSecondary }}>{item.icon} {item.label}</div>
-            </div>
-          ))}
-
-          {/* Betting Sites section */}
-          <div style={{ padding: "16px 16px 4px", fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", borderTop: `1px solid ${c.border}`, marginTop: 8 }}>Betting Sites</div>
-          <div onClick={() => setSub("betting")}
-            style={{ padding: "10px 16px", cursor: "pointer", borderLeft: sub === "betting" ? `3px solid #f59e0b` : "3px solid transparent", background: sub === "betting" ? "rgba(245,158,11,0.06)" : "transparent", transition: "all 0.15s" }}>
-            <div style={{ fontSize: 12, fontWeight: sub === "betting" ? 700 : 500, color: sub === "betting" ? c.text : c.textSecondary }}>🎰 Betting Sites</div>
-          </div>
-        </div>
-
-        {/* RIGHT — Content */}
-        <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
+      <div>
           {/* Section Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
             <div>
@@ -6462,7 +6437,6 @@ function AviroDashboard() {
               </div>
             )}
           </div>
-        </div>
       </div>
     );
   };
@@ -7330,7 +7304,7 @@ function AviroDashboard() {
     david: { label: "DAVID CALENDAR", sections: ["calendar", "quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
     gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
-    projects: { label: "PROJECT MANAGEMENT", sections: ["projects"] },
+    projects: { label: "PROJECT MANAGEMENT", sections: ["pm-gw-clients", "pm-gw-product", "pm-betting"] },
     revenue: { label: "REVENUE", sections: ["revenue"] },
     settings: { label: "SETTINGS", sections: ["settings"] },
   };
@@ -7362,8 +7336,12 @@ function AviroDashboard() {
     { section: "moneyflow", icon: "flow", label: "Corporate Flow", group: "corporate" },
     { section: "banks", icon: "bank", label: "Bank Accounts", group: "corporate" },
     { section: "brands", icon: "grid", label: "Gaming Brands", group: "corporate" },
-    { section: "projects_header", label: "PROJECTS", isHeader: true, group: "projects" },
-    { section: "projects", icon: "roadmap", label: "Project Management", group: "projects" },
+    { section: "projects_header", label: "PROJECT MANAGEMENT", isHeader: true, group: "projects" },
+    { section: "pm_gw_header", label: "GATEWAY", isHeader: true, group: "projects" },
+    { section: "pm-gw-clients", icon: "gateway", label: "Client Development", group: "projects" },
+    { section: "pm-gw-product", icon: "roadmap", label: "Product Development", group: "projects" },
+    { section: "pm_betting_header", label: "BETTING SITES", isHeader: true, group: "projects" },
+    { section: "pm-betting", icon: "grid", label: "Betting Sites", group: "projects" },
     { section: "revenue_header", label: "REVENUE", isHeader: true, group: "revenue" },
     { section: "revenue", icon: "signal", label: "Revenue Dashboard", group: "revenue" },
     { section: "settings_header", label: "SETTINGS", isHeader: true, group: "settings" },
@@ -7372,7 +7350,7 @@ function AviroDashboard() {
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, projects: renderProjectMgmt, revenue: renderRevenue, settings: renderSettings };
+  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, "pm-gw-clients": renderProjectMgmt, "pm-gw-product": renderProjectMgmt, "pm-betting": renderProjectMgmt, revenue: renderRevenue, settings: renderSettings };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
