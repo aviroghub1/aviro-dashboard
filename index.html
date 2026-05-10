@@ -593,6 +593,11 @@ function AviroDashboard() {
     return (parseFloat(amount) || 0) * (fxRates[(currency || "EUR").toUpperCase()] || 1);
   }, [fxRates]);
 
+  // ===== PROJECT MANAGEMENT STATE =====
+  const [pmSubSection, setPmSubSection] = useState("gw-clients"); // gw-clients, gw-product, betting
+  const [pmPipeline, setPmPipeline] = useState([]); // [{ id, name, section, stage, value, currency, notes, createdAt, movedAt, clickupLink }]
+  const [pmRoadmap, setPmRoadmap] = useState([]); // [{ id, name, section, status, progress, targetDate, description, clickupLink }]
+
   // ===== SUPABASE + LOCALSTORAGE PERSISTENCE =====
   const STORAGE_KEY = "aviro_dashboard_state";
   const DB_URL = "https://iosvevycvqviaonsxsnq.supabase.co";
@@ -609,7 +614,8 @@ function AviroDashboard() {
     supabaseUrl, supabaseKey,
     cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
     fxRates, fxBaseCurrency, fxLastUpdated,
-  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated]);
+    pmPipeline, pmRoadmap,
+  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap]);
 
   const saveState = useCallback(async () => {
     const state = buildState();
@@ -690,6 +696,8 @@ function AviroDashboard() {
     if (s.fxRates) setFxRates(s.fxRates);
     if (s.fxBaseCurrency) setFxBaseCurrency(s.fxBaseCurrency);
     if (s.fxLastUpdated) setFxLastUpdated(s.fxLastUpdated);
+    if (s.pmPipeline) setPmPipeline(s.pmPipeline);
+    if (s.pmRoadmap) setPmRoadmap(s.pmRoadmap);
   }, []);
 
   // Load state on mount — try Supabase first, fall back to localStorage
@@ -6090,6 +6098,7 @@ function AviroDashboard() {
       { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #6366f1, #8b5cf6)", defaultSection: "clients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #f59e0b, #ef4444)", defaultSection: null },
       { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #10b981, #059669)", defaultSection: "entities" },
+      { key: "projects", title: "Project Management", desc: "Pipelines & Strategic Roadmap", icon: "roadmap", gradient: "linear-gradient(135deg, #8b5cf6, #6366f1)", defaultSection: "projects" },
       { key: "revenue", title: "Revenue", desc: "Revenue Tracking & Analytics", icon: "signal", gradient: "linear-gradient(135deg, #ec4899, #be185d)", defaultSection: "revenue" },
       { key: "finance", title: "Finance", desc: "Financial Management & Reporting", icon: "flow", gradient: "linear-gradient(135deg, #14b8a6, #0d9488)", defaultSection: null },
       { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)", defaultSection: "calendar" },
@@ -6249,6 +6258,210 @@ function AviroDashboard() {
         <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 24, opacity: 0.5 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 4 }}>Metabase Connections</div>
           <div style={{ fontSize: 12, color: c.textMuted }}>Manage data source connections for revenue tracking. Currently hard-coded — settings management coming soon.</div>
+        </div>
+      </div>
+    );
+  };
+
+  // ===== PROJECT MANAGEMENT =====
+  const renderProjectMgmt = () => {
+    const sub = pmSubSection;
+    const setSub = setPmSubSection;
+
+    const PM_STAGES = {
+      "gw-clients": ["Lead", "Discussion", "Proposal", "Onboarding", "Live", "Optimising"],
+      "gw-product": ["Idea", "Scoping", "In Development", "Testing", "Launched"],
+      "betting": ["Concept", "Planning", "Building", "Soft Launch", "Live"],
+    };
+
+    const PM_LABELS = {
+      "gw-clients": "Client Development",
+      "gw-product": "Product Development",
+      "betting": "Betting Sites",
+    };
+
+    const stages = PM_STAGES[sub] || [];
+    const items = pmPipeline.filter(p => p.section === sub);
+    const roadmapItems = pmRoadmap.filter(r => r.section === sub);
+
+    // Add pipeline item
+    const addPipelineItem = () => {
+      const name = prompt("Enter name:");
+      if (!name) return;
+      const item = { id: Date.now().toString(), name, section: sub, stage: stages[0], value: "", currency: "EUR", notes: "", createdAt: new Date().toISOString(), movedAt: new Date().toISOString(), clickupLink: "" };
+      setPmPipeline(prev => [...prev, item]);
+    };
+
+    // Move pipeline item to a new stage
+    const moveItem = (id, newStage) => {
+      setPmPipeline(prev => prev.map(p => p.id === id ? { ...p, stage: newStage, movedAt: new Date().toISOString() } : p));
+    };
+
+    // Update pipeline item field
+    const updateItem = (id, field, value) => {
+      setPmPipeline(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+    };
+
+    // Delete pipeline item
+    const deleteItem = (id) => {
+      if (!confirm("Delete this item?")) return;
+      setPmPipeline(prev => prev.filter(p => p.id !== id));
+    };
+
+    // Add roadmap item
+    const addRoadmapItem = () => {
+      const name = prompt("Enter project name:");
+      if (!name) return;
+      const item = { id: Date.now().toString(), name, section: sub, status: "on-track", progress: 0, targetDate: "", description: "", clickupLink: "" };
+      setPmRoadmap(prev => [...prev, item]);
+    };
+
+    // Update roadmap item
+    const updateRoadmapItem = (id, field, value) => {
+      setPmRoadmap(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+    };
+
+    // Delete roadmap item
+    const deleteRoadmapItem = (id) => {
+      if (!confirm("Delete this item?")) return;
+      setPmRoadmap(prev => prev.filter(r => r.id !== id));
+    };
+
+    // Days in stage helper
+    const daysInStage = (movedAt) => {
+      if (!movedAt) return 0;
+      return Math.floor((Date.now() - new Date(movedAt).getTime()) / 86400000);
+    };
+
+    const stageColors = ["#6366f1", "#8b5cf6", "#f59e0b", "#22c55e", "#10b981", "#06b6d4"];
+    const statusColors = { "on-track": "#22c55e", "at-risk": "#f59e0b", "blocked": "#ef4444", "completed": "#06b6d4" };
+
+    return (
+      <div style={{ display: "flex", gap: 0, minHeight: "calc(100vh - 80px)" }}>
+        {/* LEFT SIDEBAR */}
+        <div style={{ width: 220, flexShrink: 0, background: c.card, borderRight: `1px solid ${c.border}`, padding: "20px 0" }}>
+          <div style={{ padding: "0 16px 16px", borderBottom: `1px solid ${c.border}`, marginBottom: 12 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Project</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: c.text }}>Management</div>
+          </div>
+
+          {/* Gateway section */}
+          <div style={{ padding: "8px 16px 4px", fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.1em" }}>Gateway</div>
+          {[{ id: "gw-clients", label: "Client Development", icon: "👥" }, { id: "gw-product", label: "Product Development", icon: "🚀" }].map(item => (
+            <div key={item.id} onClick={() => setSub(item.id)}
+              style={{ padding: "10px 16px", cursor: "pointer", borderLeft: sub === item.id ? `3px solid ${c.accent}` : "3px solid transparent", background: sub === item.id ? `${c.accent}10` : "transparent", transition: "all 0.15s", marginBottom: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: sub === item.id ? 700 : 500, color: sub === item.id ? c.text : c.textSecondary }}>{item.icon} {item.label}</div>
+            </div>
+          ))}
+
+          {/* Betting Sites section */}
+          <div style={{ padding: "16px 16px 4px", fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", borderTop: `1px solid ${c.border}`, marginTop: 8 }}>Betting Sites</div>
+          <div onClick={() => setSub("betting")}
+            style={{ padding: "10px 16px", cursor: "pointer", borderLeft: sub === "betting" ? `3px solid #f59e0b` : "3px solid transparent", background: sub === "betting" ? "rgba(245,158,11,0.06)" : "transparent", transition: "all 0.15s" }}>
+            <div style={{ fontSize: 12, fontWeight: sub === "betting" ? 700 : 500, color: sub === "betting" ? c.text : c.textSecondary }}>🎰 Betting Sites</div>
+          </div>
+        </div>
+
+        {/* RIGHT — Content */}
+        <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
+          {/* Section Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+            <div>
+              <h2 style={{ fontSize: 22, fontWeight: 800, color: c.text, margin: "0 0 4px" }}>{PM_LABELS[sub]}</h2>
+              <p style={{ color: c.textSecondary, fontSize: 12, margin: 0 }}>Pipeline &amp; Roadmap</p>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={addPipelineItem} style={{ fontSize: 11, padding: "8px 16px", borderRadius: 8, cursor: "pointer", border: "none", background: c.accent, color: "#fff", fontWeight: 600 }}>+ Pipeline Item</button>
+              <button onClick={addRoadmapItem} style={{ fontSize: 11, padding: "8px 16px", borderRadius: 8, cursor: "pointer", border: `1px solid ${c.accent}40`, background: `${c.accent}10`, color: c.accent, fontWeight: 600 }}>+ Roadmap Item</button>
+            </div>
+          </div>
+
+          {/* PIPELINE — Kanban columns */}
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Pipeline</div>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${stages.length}, 1fr)`, gap: 10, overflowX: "auto" }}>
+              {stages.map((stage, si) => {
+                const stageItems = items.filter(i => i.stage === stage);
+                const stageColor = stageColors[si % stageColors.length];
+                return (
+                  <div key={stage} style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, minHeight: 200 }}>
+                    {/* Column header */}
+                    <div style={{ padding: "12px 12px 8px", borderBottom: `2px solid ${stageColor}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: stageColor, textTransform: "uppercase" }}>{stage}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, background: c.card, borderRadius: 10, padding: "2px 7px" }}>{stageItems.length}</span>
+                    </div>
+                    {/* Cards */}
+                    <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                      {stageItems.map(item => (
+                        <div key={item.id} style={{ background: c.card, borderRadius: 8, border: `1px solid ${c.border}`, padding: "10px 12px", cursor: "default" }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 4 }}>{item.name}</div>
+                          {item.value && <div style={{ fontSize: 10, color: c.accent, fontWeight: 600, marginBottom: 4 }}>{item.currency} {item.value}</div>}
+                          <div style={{ fontSize: 9, color: c.textMuted, marginBottom: 6 }}>{daysInStage(item.movedAt)}d in stage</div>
+                          {/* Move buttons */}
+                          <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                            {stages.filter(s2 => s2 !== stage).map(s2 => (
+                              <button key={s2} onClick={() => moveItem(item.id, s2)} style={{ fontSize: 8, padding: "2px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.textSecondary, cursor: "pointer" }}>{s2}</button>
+                            ))}
+                          </div>
+                          {/* Edit row */}
+                          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+                            <input value={item.value || ""} onChange={e => updateItem(item.id, "value", e.target.value)} placeholder="Value" style={{ width: 60, fontSize: 9, padding: "3px 5px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text }} />
+                            <input value={item.notes || ""} onChange={e => updateItem(item.id, "notes", e.target.value)} placeholder="Notes..." style={{ flex: 1, fontSize: 9, padding: "3px 5px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text }} />
+                            <button onClick={() => deleteItem(item.id)} style={{ fontSize: 9, padding: "3px 6px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.1)", color: "#ef4444", cursor: "pointer" }}>x</button>
+                          </div>
+                        </div>
+                      ))}
+                      {stageItems.length === 0 && <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: 16, fontStyle: "italic" }}>No items</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ROADMAP */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Roadmap</div>
+            {roadmapItems.length === 0 && (
+              <div style={{ background: c.card, borderRadius: 12, border: `1px dashed ${c.border}`, padding: 32, textAlign: "center" }}>
+                <div style={{ fontSize: 13, color: c.textMuted }}>No roadmap items yet. Click "+ Roadmap Item" to add a strategic initiative.</div>
+              </div>
+            )}
+            {roadmapItems.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {roadmapItems.map(item => (
+                  <div key={item.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: "16px 20px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: c.text, marginBottom: 4 }}>{item.name}</div>
+                        <input value={item.description || ""} onChange={e => updateRoadmapItem(item.id, "description", e.target.value)} placeholder="Description..." style={{ width: "100%", fontSize: 11, padding: "4px 0", border: "none", background: "transparent", color: c.textSecondary, outline: "none" }} />
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <select value={item.status} onChange={e => updateRoadmapItem(item.id, "status", e.target.value)} style={{ fontSize: 10, padding: "4px 8px", borderRadius: 6, border: `1px solid ${statusColors[item.status]}40`, background: `${statusColors[item.status]}10`, color: statusColors[item.status], fontWeight: 600, outline: "none" }}>
+                          <option value="on-track">On Track</option>
+                          <option value="at-risk">At Risk</option>
+                          <option value="blocked">Blocked</option>
+                          <option value="completed">Completed</option>
+                        </select>
+                        <button onClick={() => deleteRoadmapItem(item.id)} style={{ fontSize: 10, padding: "4px 8px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.1)", color: "#ef4444", cursor: "pointer" }}>x</button>
+                      </div>
+                    </div>
+                    {/* Progress bar + target date */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ height: 6, borderRadius: 3, background: c.surface, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${item.progress || 0}%`, background: statusColors[item.status], borderRadius: 3, transition: "width 0.3s" }} />
+                        </div>
+                      </div>
+                      <input type="range" min="0" max="100" value={item.progress || 0} onChange={e => updateRoadmapItem(item.id, "progress", parseInt(e.target.value))} style={{ width: 80 }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, color: c.textSecondary, minWidth: 30 }}>{item.progress || 0}%</span>
+                      <input type="date" value={item.targetDate || ""} onChange={e => updateRoadmapItem(item.id, "targetDate", e.target.value)} style={{ fontSize: 10, padding: "3px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: c.surface, color: c.text }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -7117,6 +7330,7 @@ function AviroDashboard() {
     david: { label: "DAVID CALENDAR", sections: ["calendar", "quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
     gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
+    projects: { label: "PROJECT MANAGEMENT", sections: ["projects"] },
     revenue: { label: "REVENUE", sections: ["revenue"] },
     settings: { label: "SETTINGS", sections: ["settings"] },
   };
@@ -7148,6 +7362,8 @@ function AviroDashboard() {
     { section: "moneyflow", icon: "flow", label: "Corporate Flow", group: "corporate" },
     { section: "banks", icon: "bank", label: "Bank Accounts", group: "corporate" },
     { section: "brands", icon: "grid", label: "Gaming Brands", group: "corporate" },
+    { section: "projects_header", label: "PROJECTS", isHeader: true, group: "projects" },
+    { section: "projects", icon: "roadmap", label: "Project Management", group: "projects" },
     { section: "revenue_header", label: "REVENUE", isHeader: true, group: "revenue" },
     { section: "revenue", icon: "signal", label: "Revenue Dashboard", group: "revenue" },
     { section: "settings_header", label: "SETTINGS", isHeader: true, group: "settings" },
@@ -7156,7 +7372,7 @@ function AviroDashboard() {
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, revenue: renderRevenue, settings: renderSettings };
+  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, projects: renderProjectMgmt, revenue: renderRevenue, settings: renderSettings };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
