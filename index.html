@@ -610,6 +610,7 @@ function AviroDashboard() {
   const DB_URL = "https://iosvevycvqviaonsxsnq.supabase.co";
   const DB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvc3ZldnljdnF2aWFvbnN4c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA5NDMsImV4cCI6MjA5MTc0Njk0M30.IMpyt1CqwKUbM4aW0vyC0fxgNUvyNOSzk3aP9v_Iw-Q";
   const [saveStatus, setSaveStatus] = useState(""); // "", "saving", "saved", "error"
+  const [lastSyncedAt, setLastSyncedAt] = useState(null); // track when we last loaded/saved
 
   const buildState = useCallback(() => ({
     calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
@@ -625,22 +626,54 @@ function AviroDashboard() {
   }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients]);
 
   const saveState = useCallback(async () => {
-    if (!hasLoaded) return; // NEVER save before data has loaded — prevents overwriting with empty state
+    if (!hasLoaded) return; // NEVER save before data has loaded
     const state = buildState();
     // Always save to localStorage as fast cache
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn("localStorage save failed:", e); }
-    // Save to Supabase for shared access
+    // Check if someone else saved newer data before we overwrite
     try {
       setSaveStatus("saving");
+      const checkRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=updated_at", {
+        headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+      });
+      if (checkRes.ok) {
+        const rows = await checkRes.json();
+        if (rows.length > 0 && rows[0].updated_at && lastSyncedAt) {
+          const serverTime = new Date(rows[0].updated_at).getTime();
+          const ourTime = new Date(lastSyncedAt).getTime();
+          if (serverTime > ourTime + 3000) {
+            // Someone else saved newer data — load it instead of overwriting
+            console.log("Newer data found on server, loading instead of saving...");
+            setSaveStatus("syncing");
+            const loadRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state,updated_at", {
+              headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+            });
+            if (loadRes.ok) {
+              const loadRows = await loadRes.json();
+              if (loadRows.length > 0 && loadRows[0].state) {
+                applyState(loadRows[0].state);
+                setLastSyncedAt(loadRows[0].updated_at);
+                setSaveStatus("synced");
+                setTimeout(() => setSaveStatus(""), 2000);
+              }
+            }
+            return;
+          }
+        }
+      }
+    } catch (e) { console.warn("Conflict check failed, saving anyway:", e); }
+    // No conflict — save our state
+    try {
+      const now = new Date().toISOString();
       const res = await fetch(DB_URL + "/rest/v1/dashboard_state", {
         method: "POST",
         headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ id: "shared", state: state, updated_at: new Date().toISOString(), updated_by: "dashboard" }),
+        body: JSON.stringify({ id: "shared", state: state, updated_at: now, updated_by: "dashboard" }),
       });
-      if (res.ok) { setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
+      if (res.ok) { setLastSyncedAt(now); setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
       else { console.warn("Supabase save failed:", res.status); setSaveStatus("error"); }
     } catch (e) { console.warn("Supabase save failed:", e); setSaveStatus("error"); }
-  }, [buildState, hasLoaded]);
+  }, [buildState, hasLoaded, lastSyncedAt, applyState]);
 
   // Auto-save whenever state changes (debounced 2s to avoid hammering Supabase)
   useEffect(() => {
@@ -718,14 +751,15 @@ function AviroDashboard() {
       let loaded = false;
       // Try Supabase first (shared, authoritative)
       try {
-        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state", {
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state,updated_at", {
           headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
         });
         if (res.ok) {
           const rows = await res.json();
           if (rows.length > 0 && rows[0].state && Object.keys(rows[0].state).length > 0) {
-            console.log("Loaded state from Supabase");
+            console.log("Loaded state from Supabase, updated:", rows[0].updated_at);
             applyState(rows[0].state);
+            setLastSyncedAt(rows[0].updated_at);
             loaded = true;
           }
         }
@@ -7673,7 +7707,7 @@ function AviroDashboard() {
               <div style={{ width: 32, height: 32, borderRadius: 8, background: c.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: c.accent }}>{getAuthUserName().charAt(0).toUpperCase()}</div>
               <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{getAuthUserName()}</span>
             </div>
-            {saveStatus && <span style={{ fontSize: 10, fontWeight: 600, color: saveStatus === "saved" ? "#22c55e" : saveStatus === "saving" ? "#f59e0b" : "#ef4444", animation: saveStatus === "saving" ? "pulse 1s infinite" : "none" }}>{saveStatus === "saving" ? "Syncing..." : saveStatus === "saved" ? "Saved to cloud" : "Sync error"}</span>}
+            {saveStatus && <span style={{ fontSize: 10, fontWeight: 600, color: saveStatus === "saved" ? "#22c55e" : saveStatus === "synced" ? "#06b6d4" : saveStatus === "saving" || saveStatus === "syncing" ? "#f59e0b" : "#ef4444", animation: saveStatus === "saving" || saveStatus === "syncing" ? "pulse 1s infinite" : "none" }}>{saveStatus === "saving" ? "Saving..." : saveStatus === "syncing" ? "Newer data found, syncing..." : saveStatus === "saved" ? "Saved to cloud" : saveStatus === "synced" ? "Updated from cloud" : "Sync error"}</span>}
             {authUser.email === "david@aviro-group.com" && <button onClick={() => { saveState(); }} style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", color: "#fff", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Push to Cloud</button>}
             <button onClick={() => setShowChangePassword(!showChangePassword)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 500 }}>Change Password</button>
             {authUser.email === "david@aviro-group.com" && <button onClick={() => setShowUserAdmin(!showUserAdmin)} style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Manage Users</button>}
