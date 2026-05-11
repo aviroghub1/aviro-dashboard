@@ -625,6 +625,7 @@ function AviroDashboard() {
   }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients]);
 
   const saveState = useCallback(async () => {
+    if (!hasLoaded) return; // NEVER save before data has loaded — prevents overwriting with empty state
     const state = buildState();
     // Always save to localStorage as fast cache
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { console.warn("localStorage save failed:", e); }
@@ -639,13 +640,14 @@ function AviroDashboard() {
       if (res.ok) { setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
       else { console.warn("Supabase save failed:", res.status); setSaveStatus("error"); }
     } catch (e) { console.warn("Supabase save failed:", e); setSaveStatus("error"); }
-  }, [buildState]);
+  }, [buildState, hasLoaded]);
 
   // Auto-save whenever state changes (debounced 2s to avoid hammering Supabase)
   useEffect(() => {
+    if (!hasLoaded) return; // Don't auto-save until data is loaded
     const t = setTimeout(saveState, 2000);
     return () => clearTimeout(t);
-  }, [saveState]);
+  }, [saveState, hasLoaded]);
 
   // Apply state helper
   const applyState = useCallback((s) => {
