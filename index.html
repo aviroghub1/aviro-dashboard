@@ -3067,7 +3067,7 @@ function AviroDashboard() {
             <div style={sectionCard}>
               <SectionHeader sectionKey="agreements" title="Agreements" badge={`${(cl.agreements || []).length}`} extra={
                 !collapsed.agreements && <button onClick={() => {
-                  const newAg = { id: `clag-${Date.now()}`, name: "", startDate: "", renewalMonths: "" };
+                  const newAg = { id: `clag-${Date.now()}`, name: "", startDate: "", expiryDate: "", fileName: "", fileUrl: "" };
                   updateClient(cl.id, "agreements", [...(cl.agreements || []), newAg]);
                   setEditingClientField(`ag-${newAg.id}`);
                 }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
@@ -3076,16 +3076,22 @@ function AviroDashboard() {
                 {(cl.agreements || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No agreements</div>}
                 {(cl.agreements || []).map(ag => {
                   const isEd = editingClientField === `ag-${ag.id}`;
-                  const renewal = renewalCalc(ag.startDate, ag.renewalMonths);
+                  const isExpired = ag.expiryDate && new Date(ag.expiryDate) < new Date();
+                  const expiringSoon = ag.expiryDate && !isExpired && (new Date(ag.expiryDate) - new Date()) < 30 * 86400000;
                   return (
-                    <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8 }}>
+                    <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${isExpired ? "rgba(239,68,68,0.3)" : expiringSoon ? "rgba(245,158,11,0.3)" : c.border}`, padding: 12, marginBottom: 8 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
-                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>
-                            {ag.startDate && <span>Started {ag.startDate}</span>}
-                            {renewal && <span> · Renews {renewal}</span>}
-                            {ag.startDate && !ag.renewalMonths && <span> · No renewal</span>}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
+                            {isExpired && <span style={{ fontSize: 9, fontWeight: 700, color: "#ef4444", background: "rgba(239,68,68,0.1)", padding: "2px 6px", borderRadius: 4 }}>EXPIRED</span>}
+                            {expiringSoon && <span style={{ fontSize: 9, fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 6px", borderRadius: 4 }}>EXPIRING SOON</span>}
+                          </div>
+                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            {ag.startDate && <span>Start: {ag.startDate}</span>}
+                            {ag.expiryDate && <span>· Expires: {ag.expiryDate}</span>}
+                            {ag.startDate && !ag.expiryDate && <span>· No expiry</span>}
+                            {ag.fileUrl && <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {ag.fileName || "Download"}</a>}
                           </div>
                         </div>
                         <div style={{ display: "flex", gap: 4 }}>
@@ -3094,19 +3100,41 @@ function AviroDashboard() {
                         </div>
                       </div>
                       {isEd && (
-                        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
-                          <div><label style={labelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => {
-                            const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, name: e.target.value } : a);
-                            updateClient(cl.id, "agreements", upd);
-                          }} style={{ ...inputStyle, width: "100%" }} /></div>
-                          <div><label style={labelStyle}>Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => {
-                            const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, startDate: e.target.value } : a);
-                            updateClient(cl.id, "agreements", upd);
-                          }} style={{ ...inputStyle, width: "100%" }} /></div>
-                          <div><label style={labelStyle}>Renewal (months)</label><input type="number" min="0" value={ag.renewalMonths || ""} onChange={e => {
-                            const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, renewalMonths: e.target.value } : a);
-                            updateClient(cl.id, "agreements", upd);
-                          }} placeholder="No renewal" style={{ ...inputStyle, width: "100%" }} /></div>
+                        <div style={{ marginTop: 10 }}>
+                          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+                            <div><label style={labelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => {
+                              const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, name: e.target.value } : a);
+                              updateClient(cl.id, "agreements", upd);
+                            }} style={{ ...inputStyle, width: "100%" }} /></div>
+                            <div><label style={labelStyle}>Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => {
+                              const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, startDate: e.target.value } : a);
+                              updateClient(cl.id, "agreements", upd);
+                            }} style={{ ...inputStyle, width: "100%" }} /></div>
+                            <div><label style={labelStyle}>Expiry Date</label><input type="date" value={ag.expiryDate || ""} onChange={e => {
+                              const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, expiryDate: e.target.value } : a);
+                              updateClient(cl.id, "agreements", upd);
+                            }} style={{ ...inputStyle, width: "100%" }} placeholder="Leave blank if none" /></div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <label style={labelStyle}>Document</label>
+                            {ag.fileUrl ? (
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {ag.fileName}</a>
+                                <button onClick={() => { const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: "", fileUrl: "" } : a); updateClient(cl.id, "agreements", upd); }} style={{ fontSize: 9, color: "#ef4444", background: "rgba(239,68,68,0.08)", border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>Remove</button>
+                              </div>
+                            ) : (
+                              <label style={{ cursor: "pointer" }}><input type="file" style={{ display: "none" }} onChange={ev => {
+                                if (!ev.target.files[0] || !supabaseUrl || !supabaseKey) return;
+                                const file = ev.target.files[0];
+                                const safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
+                                const filePath = "clients/" + safeName + "/agreements/" + ag.id + "_" + Date.now() + "_" + file.name;
+                                fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, { method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file }).then(r => {
+                                  if (r.ok) { const url = supabaseUrl + "/storage/v1/object/public/documents/" + filePath; const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: file.name, fileUrl: url } : a); updateClient(cl.id, "agreements", upd); }
+                                  else { alert("Upload failed — check Supabase storage is configured"); }
+                                });
+                              }} /><span style={{ fontSize: 10, color: c.accent, border: `1px solid ${c.accent}`, borderRadius: 4, padding: "3px 8px", fontWeight: 600 }}>Upload Document</span></label>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
