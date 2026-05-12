@@ -610,7 +610,7 @@ function AviroDashboard() {
   const DB_URL = "https://iosvevycvqviaonsxsnq.supabase.co";
   const DB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvc3ZldnljdnF2aWFvbnN4c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA5NDMsImV4cCI6MjA5MTc0Njk0M30.IMpyt1CqwKUbM4aW0vyC0fxgNUvyNOSzk3aP9v_Iw-Q";
   const [saveStatus, setSaveStatus] = useState(""); // "", "saving", "saved", "error"
-  const [lastSyncedAt, setLastSyncedAt] = useState(null); // track when we last loaded/saved
+  const lastSyncedRef = useRef(null); // track when we last loaded/saved — ref to avoid re-render loops
 
   const buildState = useCallback(() => ({
     calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
@@ -638,12 +638,12 @@ function AviroDashboard() {
       });
       if (checkRes.ok) {
         const rows = await checkRes.json();
-        if (rows.length > 0 && rows[0].updated_at && lastSyncedAt) {
+        if (rows.length > 0 && rows[0].updated_at && lastSyncedRef.current) {
           const serverTime = new Date(rows[0].updated_at).getTime();
-          const ourTime = new Date(lastSyncedAt).getTime();
-          if (serverTime > ourTime + 3000) {
+          const ourTime = new Date(lastSyncedRef.current).getTime();
+          if (serverTime > ourTime + 5000) {
             // Someone else saved newer data — load it instead of overwriting
-            console.log("Newer data found on server, loading instead of saving...");
+            console.log("Newer data found on server (" + Math.round((serverTime - ourTime)/1000) + "s newer), loading...");
             setSaveStatus("syncing");
             const loadRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state,updated_at", {
               headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
@@ -652,7 +652,7 @@ function AviroDashboard() {
               const loadRows = await loadRes.json();
               if (loadRows.length > 0 && loadRows[0].state) {
                 applyState(loadRows[0].state);
-                setLastSyncedAt(loadRows[0].updated_at);
+                lastSyncedRef.current = loadRows[0].updated_at;
                 setSaveStatus("synced");
                 setTimeout(() => setSaveStatus(""), 2000);
               }
@@ -670,10 +670,10 @@ function AviroDashboard() {
         headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify({ id: "shared", state: state, updated_at: now, updated_by: "dashboard" }),
       });
-      if (res.ok) { setLastSyncedAt(now); setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
+      if (res.ok) { lastSyncedRef.current = now; setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
       else { console.warn("Supabase save failed:", res.status); setSaveStatus("error"); }
     } catch (e) { console.warn("Supabase save failed:", e); setSaveStatus("error"); }
-  }, [buildState, hasLoaded, lastSyncedAt, applyState]);
+  }, [buildState, hasLoaded, applyState]);
 
   // Auto-save whenever state changes (debounced 2s to avoid hammering Supabase)
   useEffect(() => {
@@ -759,7 +759,7 @@ function AviroDashboard() {
           if (rows.length > 0 && rows[0].state && Object.keys(rows[0].state).length > 0) {
             console.log("Loaded state from Supabase, updated:", rows[0].updated_at);
             applyState(rows[0].state);
-            setLastSyncedAt(rows[0].updated_at);
+            lastSyncedRef.current = rows[0].updated_at;
             loaded = true;
           }
         }
