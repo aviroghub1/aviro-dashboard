@@ -602,8 +602,14 @@ function AviroDashboard() {
   const [pmClickUpTasks, setPmClickUpTasks] = useState({});
 
   // ===== CLIENT MANAGEMENT (CRM) =====
-  const [crmClients, setCrmClients] = useState([]); // [{ id, name, category, status, contacts, comms, actions, docs, strategy, dealStatus, nextFollowUp }]
+  const [crmClients, setCrmClients] = useState([]); // [{ id, name, contact, status, overview, services, notes, convLog, ... }]
   const [crmSelectedClient, setCrmSelectedClient] = useState(null);
+  const [crmOverviewOpen, setCrmOverviewOpen] = useState({});
+  const [crmNewAviroText, setCrmNewAviroText] = useState("");
+  const [crmNewClientText, setCrmNewClientText] = useState("");
+  const [crmNewAttendees, setCrmNewAttendees] = useState("");
+  const [crmNewNoteText, setCrmNewNoteText] = useState("");
+  const [crmServicesOpen, setCrmServicesOpen] = useState(false);
 
   // ===== SUPABASE + LOCALSTORAGE PERSISTENCE =====
   const STORAGE_KEY = "aviro_dashboard_state";
@@ -6054,6 +6060,7 @@ function AviroDashboard() {
     const statusColors3 = { "In Discussion": "#8b5cf6", "Onboarding": "#f59e0b", "Active": "#22c55e", "Inactive": "#6b7280" };
     const PROGRESS_OPTS = ["Started", "Progressing", "Going Slow", "Nearly Finished", "Testing"];
     const progressColors = { "Started": "#8b5cf6", "Progressing": "#3b82f6", "Going Slow": "#f59e0b", "Nearly Finished": "#06b6d4", "Testing": "#22c55e" };
+    const SERVICE_OPTIONS = ["Gateway", "PSP", "Luxon Integration", "Banking", "UK Payments", "Operator Brand", "Other"];
 
     const inputSt3 = { fontSize: 12, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
     const labelSt3 = { fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, display: "block" };
@@ -6063,7 +6070,7 @@ function AviroDashboard() {
       const name = prompt("Client name:");
       if (!name) return;
       const id = "crm-" + Date.now();
-      setCrmClients(prev => [...prev, { id, name: name.trim(), contact: "", status: "In Discussion", overview: "", dateStarted: "", convLog: [], integrationGroup: "", onboardingStarted: "", onboardingProgress: "", legalsDone: false, targetVolume: "", lastMonthVolume: "", monthsProcessed: "", inactiveReason: "" }]);
+      setCrmClients(prev => [...prev, { id, name: name.trim(), contact: "", status: "In Discussion", overview: "", dateStarted: "", convLog: [], notes: [], services: [], integrationGroup: "", onboardingStarted: "", onboardingProgress: "", legalsDone: false, targetVolume: "", lastMonthVolume: "", monthsProcessed: "", inactiveReason: "" }]);
       setCrmSelectedClient(id);
     };
 
@@ -6075,6 +6082,28 @@ function AviroDashboard() {
       if (!confirm("Delete this client?")) return;
       setCrmClients(prev => prev.filter(cl => cl.id !== clientId));
       if (crmSelectedClient === clientId) setCrmSelectedClient(null);
+    };
+
+    const toggleService = (clientId, svc, currentServices) => {
+      const svcs = currentServices || [];
+      const updated = svcs.includes(svc) ? svcs.filter(s => s !== svc) : [...svcs, svc];
+      updateCrm(clientId, "services", updated);
+    };
+
+    const addNote = (clientId, currentNotes) => {
+      if (!crmNewNoteText.trim()) return;
+      const note = { id: "n-" + Date.now(), text: crmNewNoteText.trim(), date: new Date().toISOString().slice(0, 10) };
+      updateCrm(clientId, "notes", [note, ...(currentNotes || [])]);
+      setCrmNewNoteText("");
+    };
+
+    const addConvEntry = (clientId, side, currentLog) => {
+      const text = side === "Aviro" ? crmNewAviroText : crmNewClientText;
+      if (!text.trim()) return;
+      const entry = { id: "cv-" + Date.now(), date: new Date().toISOString().slice(0, 10), side, notes: text.trim(), attendees: crmNewAttendees.trim() };
+      updateCrm(clientId, "convLog", [entry, ...(currentLog || [])]);
+      if (side === "Aviro") setCrmNewAviroText(""); else setCrmNewClientText("");
+      setCrmNewAttendees("");
     };
 
     const selected = crmClients.find(cl => cl.id === crmSelectedClient);
@@ -6110,6 +6139,7 @@ function AviroDashboard() {
                       </div>
                       <span style={{ fontSize: 10, color: c.textMuted }}>→</span>
                     </div>
+                    {cl.services && cl.services.length > 0 && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>{cl.services.join(", ")}</div>}
                     {cl.status === "Active" && cl.lastMonthVolume && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>Last month: {cl.lastMonthVolume}</div>}
                     {cl.status === "Onboarding" && cl.onboardingProgress && <div style={{ fontSize: 10, color: progressColors[cl.onboardingProgress] || c.textMuted, marginTop: 6, fontWeight: 600 }}>{cl.onboardingProgress}</div>}
                     {cl.status === "In Discussion" && cl.dateStarted && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 6 }}>Since {cl.dateStarted}</div>}
@@ -6124,6 +6154,9 @@ function AviroDashboard() {
 
     // ---- CLIENT DETAIL VIEW ----
     const cl = selected;
+    const isOverviewOpen = crmOverviewOpen[cl.id] !== undefined ? crmOverviewOpen[cl.id] : (cl.status === "In Discussion");
+    const toggleOverview = () => setCrmOverviewOpen(prev => ({ ...prev, [cl.id]: !isOverviewOpen }));
+
     return (
       <div>
         <button onClick={() => setCrmSelectedClient(null)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.textSecondary, cursor: "pointer", fontWeight: 600, marginBottom: 16 }}>← All Clients</button>
@@ -6133,10 +6166,6 @@ function AviroDashboard() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div style={{ flex: 1 }}>
               <h2 style={{ fontSize: 22, fontWeight: 800, color: c.text, margin: "0 0 8px 0" }}>{cl.name}</h2>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
-                <label style={{ ...labelSt3, marginBottom: 0 }}>Contact</label>
-                <input value={cl.contact || ""} onChange={e => updateCrm(cl.id, "contact", e.target.value)} placeholder="Main contact name / details" style={{ ...inputSt3, flex: 1 }} />
-              </div>
               <div style={{ display: "flex", gap: 6 }}>
                 {STATUSES.map(s3 => (
                   <button key={s3} onClick={() => updateCrm(cl.id, "status", s3)} style={{ fontSize: 10, padding: "5px 12px", borderRadius: 6, border: cl.status === s3 ? "none" : `1px solid ${c.border}`, background: cl.status === s3 ? statusColors3[s3] : "transparent", color: cl.status === s3 ? "#fff" : c.textMuted, cursor: "pointer", fontWeight: 700, transition: "all 0.15s" }}>{s3}</button>
@@ -6147,10 +6176,68 @@ function AviroDashboard() {
           </div>
         </div>
 
-        {/* Overview — always shown */}
+        {/* Overview / Notes — collapsible */}
         <div style={cardSt}>
-          <label style={labelSt3}>Overview / Notes</label>
-          <textarea value={cl.overview || ""} onChange={e => updateCrm(cl.id, "overview", e.target.value)} placeholder="General notes about this client..." rows={4} style={{ ...inputSt3, width: "100%", resize: "vertical", fontFamily: "inherit", lineHeight: 1.6 }} />
+          <div onClick={toggleOverview} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none" }}>
+            <label style={{ ...labelSt3, marginBottom: 0, cursor: "pointer" }}>Overview / Notes</label>
+            <span style={{ fontSize: 12, color: c.textMuted, transition: "transform 0.2s", transform: isOverviewOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+          </div>
+          {isOverviewOpen && (
+            <div style={{ marginTop: 12 }}>
+              {/* Contact */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={labelSt3}>Contact</label>
+                <input value={cl.contact || ""} onChange={e => updateCrm(cl.id, "contact", e.target.value)} placeholder="Main contact name / details" style={{ ...inputSt3, width: "100%" }} />
+              </div>
+
+              {/* Services Discussed — multi-select */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={labelSt3}>Services Discussed</label>
+                <div style={{ position: "relative" }}>
+                  <div onClick={() => setCrmServicesOpen(!crmServicesOpen)} style={{ ...inputSt3, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 36 }}>
+                    <span style={{ fontSize: 12, color: (cl.services || []).length > 0 ? c.text : c.textMuted }}>
+                      {(cl.services || []).length > 0 ? (cl.services || []).join(", ") : "Select services..."}
+                    </span>
+                    <span style={{ fontSize: 10, color: c.textMuted }}>▾</span>
+                  </div>
+                  {crmServicesOpen && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: c.card, border: `1px solid ${c.border}`, borderRadius: 8, marginTop: 4, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", maxHeight: 220, overflow: "auto" }}>
+                      {SERVICE_OPTIONS.map(svc => {
+                        const isChecked = (cl.services || []).includes(svc);
+                        return (
+                          <div key={svc} onClick={() => toggleService(cl.id, svc, cl.services)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", cursor: "pointer", fontSize: 12, color: c.text, background: isChecked ? `${c.accent}15` : "transparent", transition: "background 0.1s" }}
+                            onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = c.surface; }} onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = "transparent"; }}>
+                            <div style={{ width: 16, height: 16, borderRadius: 4, border: isChecked ? "none" : `1.5px solid ${c.border}`, background: isChecked ? c.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              {isChecked && <span style={{ color: "#fff", fontSize: 10, fontWeight: 700 }}>✓</span>}
+                            </div>
+                            {svc}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes — write then click add */}
+              <div>
+                <label style={labelSt3}>Notes</label>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input value={crmNewNoteText} onChange={e => setCrmNewNoteText(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addNote(cl.id, cl.notes); }} placeholder="Add a note..." style={{ ...inputSt3, flex: 1 }} />
+                  <button onClick={() => addNote(cl.id, cl.notes)} style={{ fontSize: 11, padding: "8px 14px", borderRadius: 8, border: "none", background: c.accent, color: "#fff", cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>Add</button>
+                </div>
+                {(cl.notes || []).map(nt => (
+                  <div key={nt.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: "8px 10px", marginBottom: 6 }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5 }}>{nt.text}</div>
+                      <div style={{ fontSize: 9, color: c.textMuted, marginTop: 3 }}>{nt.date}</div>
+                    </div>
+                    <button onClick={() => updateCrm(cl.id, "notes", (cl.notes || []).filter(n => n.id !== nt.id))} style={{ fontSize: 9, padding: "2px 5px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.08)", color: "#ef4444", cursor: "pointer", marginLeft: 8, flexShrink: 0 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* === IN DISCUSSION === */}
@@ -6162,22 +6249,41 @@ function AviroDashboard() {
             </div>
 
             <div style={cardSt}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <span style={labelSt3}>Conversation Log</span>
-                <button onClick={() => updateCrm(cl.id, "convLog", [{ id: "cv-" + Date.now(), date: new Date().toISOString().slice(0, 10), side: "Aviro", notes: "" }, ...(cl.convLog || [])])} style={{ fontSize: 10, padding: "5px 12px", borderRadius: 6, border: "none", background: c.accent, color: "#fff", cursor: "pointer", fontWeight: 600 }}>+ Add Entry</button>
+              <span style={{ ...labelSt3, marginBottom: 12, display: "block" }}>Conversation Log</span>
+
+              {/* Aviro Side input */}
+              <div style={{ background: "rgba(99,102,241,0.06)", borderRadius: 10, padding: 12, marginBottom: 10, border: `1px solid rgba(99,102,241,0.15)` }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#6366f1", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Aviro Side</div>
+                <textarea value={crmNewAviroText} onChange={e => setCrmNewAviroText(e.target.value)} placeholder="What did the Aviro side discuss..." rows={2} style={{ ...inputSt3, width: "100%", resize: "vertical", fontFamily: "inherit", lineHeight: 1.5, marginBottom: 6 }} />
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input value={crmNewAttendees} onChange={e => setCrmNewAttendees(e.target.value)} placeholder="Who was present..." style={{ ...inputSt3, flex: 1, fontSize: 11 }} />
+                  <button onClick={() => addConvEntry(cl.id, "Aviro", cl.convLog)} style={{ fontSize: 10, padding: "6px 14px", borderRadius: 6, border: "none", background: "#6366f1", color: "#fff", cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>Add</button>
+                </div>
               </div>
+
+              {/* Client Side input */}
+              <div style={{ background: "rgba(236,72,153,0.06)", borderRadius: 10, padding: 12, marginBottom: 14, border: `1px solid rgba(236,72,153,0.15)` }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#ec4899", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Client Side</div>
+                <textarea value={crmNewClientText} onChange={e => setCrmNewClientText(e.target.value)} placeholder="What did the client side discuss..." rows={2} style={{ ...inputSt3, width: "100%", resize: "vertical", fontFamily: "inherit", lineHeight: 1.5, marginBottom: 6 }} />
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input value={crmNewAttendees} onChange={e => setCrmNewAttendees(e.target.value)} placeholder="Who was present..." style={{ ...inputSt3, flex: 1, fontSize: 11 }} />
+                  <button onClick={() => addConvEntry(cl.id, "Client", cl.convLog)} style={{ fontSize: 10, padding: "6px 14px", borderRadius: 6, border: "none", background: "#ec4899", color: "#fff", cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>Add</button>
+                </div>
+              </div>
+
+              {/* Logged entries */}
               {(cl.convLog || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No conversations logged yet</div>}
               {(cl.convLog || []).map(cv => (
-                <div key={cv.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8 }}>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
-                    <input type="date" value={cv.date || ""} onChange={e => updateCrm(cl.id, "convLog", (cl.convLog || []).map(c2 => c2.id === cv.id ? { ...c2, date: e.target.value } : c2))} style={{ ...inputSt3, fontSize: 10, padding: "4px 8px" }} />
-                    <select value={cv.side || "Aviro"} onChange={e => updateCrm(cl.id, "convLog", (cl.convLog || []).map(c2 => c2.id === cv.id ? { ...c2, side: e.target.value } : c2))} style={{ ...inputSt3, fontSize: 10, padding: "4px 8px", fontWeight: 600, color: cv.side === "Aviro" ? "#6366f1" : "#ec4899" }}>
-                      <option value="Aviro">Aviro Side</option>
-                      <option value="Client">Client Side</option>
-                    </select>
-                    <button onClick={() => updateCrm(cl.id, "convLog", (cl.convLog || []).filter(c2 => c2.id !== cv.id))} style={{ fontSize: 9, padding: "3px 6px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.08)", color: "#ef4444", cursor: "pointer", marginLeft: "auto" }}>×</button>
+                <div key={cv.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8, borderLeft: `3px solid ${cv.side === "Aviro" ? "#6366f1" : "#ec4899"}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: cv.side === "Aviro" ? "#6366f1" : "#ec4899" }}>{cv.side} Side</span>
+                      <span style={{ fontSize: 10, color: c.textMuted }}>{cv.date}</span>
+                      {cv.attendees && <span style={{ fontSize: 9, color: c.textSecondary, background: `${c.border}40`, padding: "2px 6px", borderRadius: 4 }}>👥 {cv.attendees}</span>}
+                    </div>
+                    <button onClick={() => updateCrm(cl.id, "convLog", (cl.convLog || []).filter(c2 => c2.id !== cv.id))} style={{ fontSize: 9, padding: "3px 6px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.08)", color: "#ef4444", cursor: "pointer" }}>×</button>
                   </div>
-                  <textarea value={cv.notes || ""} onChange={e => updateCrm(cl.id, "convLog", (cl.convLog || []).map(c2 => c2.id === cv.id ? { ...c2, notes: e.target.value } : c2))} placeholder="What was discussed..." rows={2} style={{ ...inputSt3, width: "100%", resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }} />
+                  <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5 }}>{cv.notes}</div>
                 </div>
               ))}
             </div>
