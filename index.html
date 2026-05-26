@@ -2608,10 +2608,19 @@ function AviroDashboard() {
 
       return (
         <div>
-          <button onClick={() => { setSelectedClient(null); setEditingClientField(null); }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 16, padding: 0 }}>&larr; Back to Client Portal</button>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{cl.name}</h2>
+          <div style={{ position: "sticky", top: 0, zIndex: 20, background: c.bg, paddingTop: 8, paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${c.border}` }}>
+            <button onClick={() => { setSelectedClient(null); setEditingClientField(null); }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 8, padding: 0 }}>&larr; Back to Client Portal</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: c.text, margin: 0 }}>{cl.name}</h2>
+              <button onClick={() => {
+                if (confirm("Delete this client?")) {
+                  setGatewayClients(gatewayClients.filter(x => x.id !== cl.id));
+                  setSelectedClient(null);
+                }
+              }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete Client</button>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
               {(() => {
                 const statuses = ["active", "onboarding", "inactive"];
                 const statusColors = { active: "#22c55e", onboarding: "#f59e0b", inactive: "#6b7280" };
@@ -2629,13 +2638,6 @@ function AviroDashboard() {
                   </div>
                 );
               })()}
-            </div>
-            <button onClick={() => {
-              if (confirm("Delete this client?")) {
-                setGatewayClients(gatewayClients.filter(x => x.id !== cl.id));
-                setSelectedClient(null);
-              }
-            }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete Client</button>
           </div>
 
           {/* Sub-tab navigation */}
@@ -2960,26 +2962,63 @@ function AviroDashboard() {
                               updateClient(cl.id, "agreements", upd);
                             }} style={{ ...inputStyle, width: "100%" }} placeholder="Leave blank if none" /></div>
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <label style={labelStyle}>Document</label>
-                            {ag.fileUrl ? (
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {ag.fileName}</a>
-                                <button onClick={() => { const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: "", fileUrl: "" } : a); updateClient(cl.id, "agreements", upd); }} style={{ fontSize: 9, color: "#ef4444", background: "rgba(239,68,68,0.08)", border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>Remove</button>
+                          {/* Drag-and-drop file upload zone */}
+                          {(() => {
+                            const handleAgUpload = (file) => {
+                              if (!file || !supabaseUrl || !supabaseKey) { if (!supabaseUrl || !supabaseKey) alert("Connect to Supabase database first"); return; }
+                              const safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
+                              const filePath = "clients/" + safeName + "/agreements/" + ag.id + "_" + Date.now() + "_" + file.name;
+                              const upd1 = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, uploadStatus: "uploading" } : a);
+                              updateClient(cl.id, "agreements", upd1);
+                              fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+                                method: "POST",
+                                headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" },
+                                body: file,
+                              }).then(r => {
+                                if (r.ok) {
+                                  const url = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+                                  const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: file.name, fileSize: file.size, fileUrl: url, uploadStatus: null } : a);
+                                  updateClient(cl.id, "agreements", upd);
+                                } else {
+                                  const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, uploadStatus: null } : a);
+                                  updateClient(cl.id, "agreements", upd);
+                                  alert("Upload failed — check Supabase storage is configured");
+                                }
+                              }).catch(() => {
+                                const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, uploadStatus: null } : a);
+                                updateClient(cl.id, "agreements", upd);
+                              });
+                            };
+                            const fmtSize = (bytes) => { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
+                            return (
+                              <div>
+                                <label style={labelStyle}>Document</label>
+                                <div
+                                  onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; e.currentTarget.style.background = `${c.accent}15`; }}
+                                  onDragLeave={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; e.currentTarget.style.background = c.surface; }}
+                                  onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; e.currentTarget.style.background = c.surface; if (e.dataTransfer.files[0]) handleAgUpload(e.dataTransfer.files[0]); }}
+                                  onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = ev => { if (ev.target.files[0]) handleAgUpload(ev.target.files[0]); }; inp.click(); }}
+                                  style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: ag.fileName ? "8px 12px" : "16px 12px", textAlign: "center", background: c.surface, cursor: "pointer", transition: "all 0.2s", marginTop: 4 }}
+                                >
+                                  {ag.uploadStatus === "uploading" ? (
+                                    <span style={{ fontSize: 11, color: c.accent }}>Uploading...</span>
+                                  ) : ag.fileName ? (
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                                      <a href={ag.fileUrl} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {ag.fileName}</a>
+                                      {ag.fileSize > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{fmtSize(ag.fileSize)}</span>}
+                                      <span style={{ fontSize: 10, color: c.textMuted }}>— click or drag to replace</span>
+                                      <button onClick={e => { e.stopPropagation(); const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: "", fileUrl: "", fileSize: 0 } : a); updateClient(cl.id, "agreements", upd); }} style={{ fontSize: 9, color: "#ef4444", background: "rgba(239,68,68,0.08)", border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>Remove</button>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 2 }}>Drop file here or click to browse</div>
+                                      <div style={{ fontSize: 10, color: c.textMuted }}>PDF, image, or any document file</div>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            ) : (
-                              <label style={{ cursor: "pointer" }}><input type="file" style={{ display: "none" }} onChange={ev => {
-                                if (!ev.target.files[0] || !supabaseUrl || !supabaseKey) return;
-                                const file = ev.target.files[0];
-                                const safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
-                                const filePath = "clients/" + safeName + "/agreements/" + ag.id + "_" + Date.now() + "_" + file.name;
-                                fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, { method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file }).then(r => {
-                                  if (r.ok) { const url = supabaseUrl + "/storage/v1/object/public/documents/" + filePath; const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: file.name, fileUrl: url } : a); updateClient(cl.id, "agreements", upd); }
-                                  else { alert("Upload failed — check Supabase storage is configured"); }
-                                });
-                              }} /><span style={{ fontSize: 10, color: c.accent, border: `1px solid ${c.accent}`, borderRadius: 4, padding: "3px 8px", fontWeight: 600 }}>Upload Document</span></label>
-                            )}
-                          </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -3531,9 +3570,9 @@ function AviroDashboard() {
 
       return (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <div style={{ position: "sticky", top: 0, zIndex: 20, background: c.bg, paddingTop: 8, paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 12 }}>
             <button onClick={() => setSelectedIntegration(null)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>← Back to List</button>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{ig.name}</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: c.text, margin: 0 }}>{ig.name}</h2>
             <span style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, background: (STAGE_COLORS[ig.stage] || STAGE_COLORS.Roadmap).bg, color: (STAGE_COLORS[ig.stage] || STAGE_COLORS.Roadmap).text, border: `1px solid ${(STAGE_COLORS[ig.stage] || STAGE_COLORS.Roadmap).border}`, fontWeight: 700 }}>{ig.stage}</span>
           </div>
 
@@ -3856,9 +3895,9 @@ function AviroDashboard() {
 
       return (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+          <div style={{ position: "sticky", top: 0, zIndex: 20, background: c.bg, paddingTop: 8, paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 12 }}>
             <button onClick={() => setSelectedProvider(null)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>← Back to Providers</button>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{prov.name}</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: c.text, margin: 0 }}>{prov.name}</h2>
             <span style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: c.accentBg, color: c.accent, fontWeight: 600 }}>{svcs.length} service{svcs.length !== 1 ? "s" : ""}</span>
           </div>
 
@@ -4233,13 +4272,15 @@ function AviroDashboard() {
 
     return (
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <button onClick={() => { setSelectedEntity(null); setSelectedCategory(null); }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, padding: 0 }}>&larr; Back</button>
-          <button onClick={() => downloadEntityPack(entity.name)} disabled={packDownloading} style={{ background: packDownloading ? c.surface : c.accent, border: "none", color: packDownloading ? c.textMuted : "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: packDownloading ? "wait" : "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>{packDownloading ? "⟳ Building Pack..." : "↓ Download Company Pack"}</button>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>{entity.name}</h2>
-          <span style={{ fontSize: 12, color: c.textMuted, background: c.surface, padding: "4px 10px", borderRadius: 6 }}>{category}</span>
+        <div style={{ position: "sticky", top: 0, zIndex: 20, background: c.bg, paddingTop: 8, paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${c.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button onClick={() => { setSelectedEntity(null); setSelectedCategory(null); }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, padding: 0 }}>&larr; Back</button>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: c.text, margin: 0 }}>{entity.name}</h2>
+              <span style={{ fontSize: 11, color: c.textMuted, background: c.surface, padding: "3px 8px", borderRadius: 6 }}>{category}</span>
+            </div>
+            <button onClick={() => downloadEntityPack(entity.name)} disabled={packDownloading} style={{ background: packDownloading ? c.surface : c.accent, border: "none", color: packDownloading ? c.textMuted : "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: packDownloading ? "wait" : "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>{packDownloading ? "⟳ Building Pack..." : "↓ Download Company Pack"}</button>
+          </div>
         </div>
 
         {/* A: Editable Company Details */}
@@ -6159,20 +6200,23 @@ function AviroDashboard() {
 
     return (
       <div>
-        <button onClick={() => setCrmSelectedClient(null)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.textSecondary, cursor: "pointer", fontWeight: 600, marginBottom: 16 }}>← All Clients</button>
-
-        {/* Header */}
-        <div style={cardSt}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div style={{ flex: 1 }}>
-              <h2 style={{ fontSize: 22, fontWeight: 800, color: c.text, margin: "0 0 8px 0" }}>{cl.name}</h2>
-              <div style={{ display: "flex", gap: 6 }}>
-                {STATUSES.map(s3 => (
-                  <button key={s3} onClick={() => updateCrm(cl.id, "status", s3)} style={{ fontSize: 10, padding: "5px 12px", borderRadius: 6, border: cl.status === s3 ? "none" : `1px solid ${c.border}`, background: cl.status === s3 ? statusColors3[s3] : "transparent", color: cl.status === s3 ? "#fff" : c.textMuted, cursor: "pointer", fontWeight: 700, transition: "all 0.15s" }}>{s3}</button>
-                ))}
-              </div>
+        {/* Sticky header */}
+        <div style={{ position: "sticky", top: 0, zIndex: 20, background: c.bg, paddingTop: 8, paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${c.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button onClick={() => setCrmSelectedClient(null)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.textSecondary, cursor: "pointer", fontWeight: 600 }}>← All Clients</button>
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: c.text, margin: 0 }}>{cl.name}</h2>
             </div>
             <button onClick={() => deleteCrmClient(cl.id)} style={{ fontSize: 10, padding: "5px 10px", borderRadius: 6, border: "none", background: "rgba(239,68,68,0.08)", color: "#ef4444", cursor: "pointer", fontWeight: 600 }}>Delete</button>
+          </div>
+        </div>
+
+        {/* Status buttons */}
+        <div style={{ ...cardSt, paddingTop: 14, paddingBottom: 14 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            {STATUSES.map(s3 => (
+              <button key={s3} onClick={() => updateCrm(cl.id, "status", s3)} style={{ fontSize: 10, padding: "5px 12px", borderRadius: 6, border: cl.status === s3 ? "none" : `1px solid ${c.border}`, background: cl.status === s3 ? statusColors3[s3] : "transparent", color: cl.status === s3 ? "#fff" : c.textMuted, cursor: "pointer", fontWeight: 700, transition: "all 0.15s" }}>{s3}</button>
+            ))}
           </div>
         </div>
 
