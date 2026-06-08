@@ -532,6 +532,11 @@ function AviroDashboard() {
   // Supabase sync
   const [supabaseUrl, setSupabaseUrl] = useState(""); // Supabase project URL
   const [supabaseKey, setSupabaseKey] = useState(""); // Supabase anon key
+  const [clickupToken, setClickupToken] = useState(""); // ClickUp API token
+  const [clickupDavidTasks, setClickupDavidTasks] = useState([]); // Live ClickUp tasks for David
+  const [clickupSophieTasks, setClickupSophieTasks] = useState([]); // Live ClickUp tasks for Sophie
+  const [clickupLoading, setClickupLoading] = useState(false);
+  const [clickupLastFetched, setClickupLastFetched] = useState(null);
   const [dbConnected, setDbConnected] = useState(false);
   const [dbSyncStatus, setDbSyncStatus] = useState("idle"); // idle, syncing, success, error
   const [dbSyncMessage, setDbSyncMessage] = useState("");
@@ -625,12 +630,12 @@ function AviroDashboard() {
     corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
     entityIntraAgreements, entityCorpAgreements,
     bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
-    supabaseUrl, supabaseKey,
+    supabaseUrl, supabaseKey, clickupToken,
     cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
     fxRates, fxBaseCurrency, fxLastUpdated,
     pmPipeline, pmRoadmap, pmClients,
     crmClients,
-  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, crmClients]);
+  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, crmClients]);
 
   const saveState = useCallback(async () => {
     if (!hasLoaded) return; // NEVER save before data has loaded
@@ -704,6 +709,7 @@ function AviroDashboard() {
     if (s.providers) setProviders(s.providers);
     if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
     if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
+    if (s.clickupToken) setClickupToken(s.clickupToken);
     if (s.cubePayDeals) setCubePayDeals(s.cubePayDeals);
     if (s.cubePayMonthlyData) setCubePayMonthlyData(s.cubePayMonthlyData);
     if (s.cubePayOperatingCosts) setCubePayOperatingCosts(s.cubePayOperatingCosts);
@@ -756,6 +762,37 @@ function AviroDashboard() {
     };
     load();
   }, []);
+
+  // ===== CLICKUP LIVE TASKS =====
+  const fetchClickUpTasks = useCallback(async (token) => {
+    if (!token) return;
+    setClickupLoading(true);
+    try {
+      const [dRes, sRes] = await Promise.all([
+        fetch("/api/clickup-tasks?user=david&token=" + encodeURIComponent(token)),
+        fetch("/api/clickup-tasks?user=sophie&token=" + encodeURIComponent(token)),
+      ]);
+      if (dRes.ok) {
+        const dData = await dRes.json();
+        if (dData.ok) setClickupDavidTasks(dData.tasks || []);
+      }
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        if (sData.ok) setClickupSophieTasks(sData.tasks || []);
+      }
+      setClickupLastFetched(new Date().toLocaleTimeString());
+    } catch (e) { console.warn("ClickUp fetch failed:", e); }
+    setClickupLoading(false);
+  }, []);
+
+  // Auto-fetch ClickUp tasks when token is available and data has loaded
+  useEffect(() => {
+    if (!hasLoaded || !clickupToken) return;
+    fetchClickUpTasks(clickupToken);
+    // Refresh every 5 minutes
+    const interval = setInterval(() => fetchClickUpTasks(clickupToken), 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [hasLoaded, clickupToken, fetchClickUpTasks]);
 
   // ===== METABASE HELPERS =====
   const mbProxyCall = useCallback(async (baseUrl, path, method, body, token) => {
@@ -1316,7 +1353,7 @@ function AviroDashboard() {
   };
 
   const signalTasks = [
-    ...CLICKUP_DAVID_TASKS.filter(t => t.priority === "urgent" || t.priority === "high" || (t.dueDate && t.dueDate <= "2026-04-15")).map(t => ({ ...t, source: "clickup" })),
+    ...(clickupDavidTasks.length > 0 ? clickupDavidTasks : CLICKUP_DAVID_TASKS).filter(t => t.priority === "urgent" || t.priority === "high" || (t.dueDate && t.dueDate <= new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10))).map(t => ({ ...t, source: "clickup" })),
     ...quickJobs.filter(j => j.inSignal && !j.done).map(j => ({ id: j.id, name: j.text, priority: "normal", status: "quick job", source: "quickjob" })),
   ];
 
@@ -2097,7 +2134,7 @@ function AviroDashboard() {
 
   // ===== SIGNAL TASKS =====
   // All ClickUp tasks (for left panel)
-  const allClickUpTasks = CLICKUP_DAVID_TASKS.filter(t => t.status !== "completed").map(t => ({ ...t, source: "clickup" }));
+  const allClickUpTasks = (clickupDavidTasks.length > 0 ? clickupDavidTasks : CLICKUP_DAVID_TASKS).filter(t => t.status !== "completed" && t.status !== "finished").map(t => ({ ...t, source: "clickup" }));
   const quickJobSignal = quickJobs.filter(j => j.inSignal && !j.done).map(j => ({ id: j.id, name: j.text, priority: "normal", status: "quick job", source: "quickjob", space: CAL_COLORS[j.cat]?.label || "Aviro", dueDate: null, url: null }));
 
   // Auto-add quick jobs marked as signal
@@ -2351,7 +2388,12 @@ function AviroDashboard() {
           <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, overflow: "hidden" }}>
             <div style={{ padding: "12px 16px", borderBottom: `1px solid ${c.border}`, background: c.surface }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: c.text }}>ClickUp Tasks ({filteredClickUp.length})</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: c.text }}>ClickUp Tasks ({filteredClickUp.length})</span>
+                  {clickupDavidTasks.length > 0 && <span style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, background: "rgba(34,197,94,0.1)", padding: "2px 6px", borderRadius: 4 }}>LIVE</span>}
+                  {clickupLoading && <span style={{ fontSize: 9, color: c.accent }}>Refreshing...</span>}
+                  {clickupToken && <button onClick={() => fetchClickUpTasks(clickupToken)} disabled={clickupLoading} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted, cursor: "pointer" }}>↻</button>}
+                </div>
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {[{ k: "priority", l: "Priority" }, { k: "dueDate", l: "Due Date" }, { k: "space", l: "Workspace" }].map(f => (
@@ -2454,12 +2496,15 @@ function AviroDashboard() {
           )}
         </div>
       )}
-      <h3 style={{ fontSize: 13, fontWeight: 700, color: c.textSecondary, margin: "0 0 12px 0", textTransform: "uppercase", letterSpacing: "0.05em" }}>ClickUp Tasks</h3>
-      {CLICKUP_SOPHIE_TASKS.map(task => (
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 700, color: c.textSecondary, margin: 0, textTransform: "uppercase", letterSpacing: "0.05em" }}>ClickUp Tasks</h3>
+        {clickupSophieTasks.length > 0 && <span style={{ fontSize: 9, color: c.success, fontWeight: 600 }}>LIVE{clickupLastFetched ? ` · ${clickupLastFetched}` : ""}</span>}
+      </div>
+      {(clickupSophieTasks.length > 0 ? clickupSophieTasks.filter(t => t.status !== "completed" && t.status !== "finished") : CLICKUP_SOPHIE_TASKS).map(task => (
         <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 12, background: c.card, border: `1px solid ${c.border}`, borderRadius: 8, padding: "10px 16px", marginBottom: 4 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, color: c.text, fontWeight: 500 }}>{task.name}</div>
-            <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{task.dueDate ? `Due ${task.dueDate}` : "No due date"}</div>
+            <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>{task.dueDate ? `Due ${task.dueDate}` : "No due date"}{task.list ? ` · ${task.list}` : ""}</div>
           </div>
           <StatusBadge status={task.status} />{task.priority && <PriorityBadge priority={task.priority} />}
           <a href={task.url} target="_blank" rel="noopener" style={{ color: c.textMuted }}><Icon type="link" size={14} /></a>
@@ -6527,6 +6572,41 @@ function AviroDashboard() {
               <button onClick={addCurrency} style={{ fontSize: 12, padding: "8px 20px", borderRadius: 8, cursor: "pointer", border: "none", background: c.accent, color: "#fff", fontWeight: 600 }}>Add</button>
             </div>
           </div>
+        </div>
+
+        {/* ClickUp Integration */}
+        <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 24, marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 4 }}>ClickUp Integration</div>
+              <div style={{ fontSize: 12, color: c.textMuted }}>Connect to ClickUp to pull live tasks for David & Sophie into the calendar</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {clickupLoading && <span style={{ fontSize: 11, color: c.accent }}>Fetching...</span>}
+              {clickupLastFetched && !clickupLoading && <span style={{ fontSize: 10, color: c.success }}>Last fetched: {clickupLastFetched}</span>}
+              {clickupToken && <button onClick={() => fetchClickUpTasks(clickupToken)} disabled={clickupLoading} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 6, border: "none", background: c.accent, color: "#fff", cursor: clickupLoading ? "wait" : "pointer", fontWeight: 600 }}>Refresh Now</button>}
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle5}>ClickUp API Token</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="password" value={clickupToken} onChange={e => setClickupToken(e.target.value)} placeholder="pk_..." style={{ ...inputStyle5, flex: 1 }} />
+              {clickupToken && <span style={{ fontSize: 10, color: c.success, fontWeight: 600 }}>Connected</span>}
+            </div>
+            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>Go to ClickUp → Settings → Apps → API Token to generate a personal token</div>
+          </div>
+          {clickupToken && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#6366f1" }}>{clickupDavidTasks.length}</div>
+                <div style={{ fontSize: 10, color: c.textMuted }}>David's Open Tasks</div>
+              </div>
+              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#ec4899" }}>{clickupSophieTasks.length}</div>
+                <div style={{ fontSize: 10, color: c.textMuted }}>Sophie's Open Tasks</div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Metabase Connections — future: move metabase config management here */}
