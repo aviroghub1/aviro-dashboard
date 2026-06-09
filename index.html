@@ -212,29 +212,7 @@ const toGMT = (h) => h;
 const toCEST = (h) => ((h + 2) % 24);
 const fmt12 = (h) => { const hr = h % 12 || 12; const ap = h < 12 ? "am" : "pm"; return `${hr}${ap}`; };
 
-// Motion API config — tries direct first, then CORS proxy fallback
-const MOTION_API_KEY = "jBkDSv4Fbp4QAhD967RbP4tzu+XjucvfEaRSRir7/aw=";
-const MOTION_API_BASE = "https://api.usemotion.com/v1";
-const CORS_PROXIES = [
-  (url) => url, // direct first
-  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-];
-let activeProxy = 0;
-const motionFetch = async (endpoint, opts = {}) => {
-  const url = `${MOTION_API_BASE}${endpoint}`;
-  for (let i = activeProxy; i < CORS_PROXIES.length; i++) {
-    try {
-      const proxyUrl = CORS_PROXIES[i](url);
-      const res = await fetch(proxyUrl, {
-        ...opts,
-        headers: { "X-API-Key": MOTION_API_KEY, "Content-Type": "application/json", ...(opts.headers || {}) },
-      });
-      if (res.ok || res.status < 500) { activeProxy = i; return res; }
-    } catch (e) { continue; }
-  }
-  throw new Error("All Motion API attempts failed (CORS)");
-};
+// (Motion API removed — now using Google Calendar via Supabase sync)
 
 function AviroDashboard() {
   const [section, setSection] = useState("home");
@@ -301,99 +279,34 @@ function AviroDashboard() {
   const [schedulingItem, setSchedulingItem] = useState(null); // { id, text, type, source, jobId?, startTime, endTime, cat }
   const [draggingUnscheduled, setDraggingUnscheduled] = useState(null); // { id, text, source, cat, jobId? }
 
-  // Motion API state
-  const [motionTasks, setMotionTasks] = useState([]);
-  const [motionSyncStatus, setMotionSyncStatus] = useState("idle"); // idle, syncing, synced, error
-  const [motionLastSync, setMotionLastSync] = useState(null);
-  const [motionWorkspaces, setMotionWorkspaces] = useState([]);
-  const [motionError, setMotionError] = useState(null);
+  // Google Calendar sync — events loaded from Supabase gcal_events row
+  const [gcalSyncStatus, setGcalSyncStatus] = useState("idle");
+  const [gcalLastSync, setGcalLastSync] = useState(null);
 
-  // Fetch Motion tasks and merge into calendar
-  const syncMotion = useCallback(async () => {
-    setMotionSyncStatus("syncing");
-    setMotionError(null);
-    try {
-      // Fetch workspaces first (needed for creating tasks later)
+  // Load Google Calendar events from Supabase on startup
+  useEffect(() => {
+    const loadGcal = async () => {
       try {
-        const wsRes = await motionFetch("/workspaces");
-        if (wsRes.ok) {
-          const wsData = await wsRes.json();
-          setMotionWorkspaces(wsData?.workspaces || wsData || []);
-        }
-      } catch (e) { /* workspaces optional */ }
-      // Fetch tasks — paginate through all
-      let allTasks = [];
-      let cursor = null;
-      for (let i = 0; i < 10; i++) {
-        const url = cursor ? `/tasks?cursor=${cursor}` : "/tasks";
-        const res = await motionFetch(url);
-        if (!res.ok) {
-          const errBody = await res.text().catch(() => "");
-          throw new Error(`Motion API returned ${res.status}: ${errBody.slice(0, 200)}`);
-        }
-        const data = await res.json();
-        allTasks = [...allTasks, ...(data.tasks || data || [])];
-        cursor = data.meta?.nextCursor || data.nextCursor;
-        if (!cursor) break;
-      }
-      setMotionTasks(allTasks);
-      // Convert Motion tasks with scheduled times into calendar events
-      const motionEvents = allTasks
-        .filter(t => t.scheduledStart || t.dueDate)
-        .map(t => {
-          const start = t.scheduledStart ? new Date(t.scheduledStart) : new Date(t.dueDate);
-          const end = t.scheduledEnd ? new Date(t.scheduledEnd) : new Date(start.getTime() + (t.duration || 30) * 60000);
-          const dateStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
-          const startHour = start.getUTCHours() + start.getUTCMinutes() / 60;
-          const endHour = end.getUTCHours() + end.getUTCMinutes() / 60;
-          return {
-            id: `motion-${t.id}`, date: dateStr, startHour, endHour: endHour || startHour + 0.5,
-            title: t.name, cat: "motion", meet: t.meetingUrl || null,
-            attendees: (t.assignees || []).map(a => a.name).join(", "),
-            location: t.location || "", notes: t.description || "",
-            motionId: t.id, motionStatus: t.status?.name || t.status,
-            priority: t.priority, isMotion: true,
-          };
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.gcal_events&select=state,updated_at", {
+          headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY },
         });
-      // Merge: keep existing non-motion events, add motion events
-      setCalEvents(prev => {
-        const nonMotion = prev.filter(e => !e.isMotion);
-        return [...nonMotion, ...motionEvents];
-      });
-      setMotionSyncStatus("synced");
-      setMotionLastSync(new Date());
-    } catch (err) {
-      console.error("Motion sync error:", err);
-      setMotionSyncStatus("error");
-      setMotionError(err.message || "Connection failed — check browser console");
-    }
+        if (res.ok) {
+          const rows = await res.json();
+          if (rows.length > 0 && rows[0].state && rows[0].state.events) {
+            const gcalEvts = rows[0].state.events;
+            setCalEvents(prev => {
+              const nonGcal = prev.filter(e => !e.isGcal);
+              return [...nonGcal, ...gcalEvts];
+            });
+            setGcalSyncStatus("synced");
+            setGcalLastSync(rows[0].updated_at ? new Date(rows[0].updated_at).toLocaleString() : "recently");
+            console.log("Loaded " + gcalEvts.length + " Google Calendar events from Supabase");
+          }
+        }
+      } catch (e) { console.warn("Google Calendar load failed:", e); }
+    };
+    loadGcal();
   }, []);
-
-  // Sync on first load
-  useEffect(() => { syncMotion(); }, []);
-
-  // Create a task in Motion (for scheduling quick jobs into Motion)
-  const createMotionTask = async (name, dueDate, duration = 30, description = "") => {
-    try {
-      const wsId = motionWorkspaces[0]?.id;
-      if (!wsId) { console.error("No Motion workspace"); return null; }
-      const res = await motionFetch("/tasks", {
-        method: "POST",
-        body: JSON.stringify({
-          name, dueDate, duration, description,
-          workspaceId: wsId, autoScheduled: { startDate: dueDate, deadlineType: "HARD", schedule: "Work Hours" },
-        }),
-      });
-      if (!res.ok) throw new Error(`Create task ${res.status}`);
-      const task = await res.json();
-      // Re-sync to pick up the scheduled time
-      setTimeout(() => syncMotion(), 2000);
-      return task;
-    } catch (err) {
-      console.error("Motion create error:", err);
-      return null;
-    }
-  };
 
   // Quick jobs
   const [quickJobs, setQuickJobs] = useState([]);
@@ -1337,10 +1250,12 @@ function AviroDashboard() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>David Calendar</h2>
-            <button onClick={syncMotion} style={{ display: "flex", alignItems: "center", gap: 6, background: motionSyncStatus === "synced" ? "rgba(6,182,212,0.1)" : motionSyncStatus === "error" ? "rgba(239,68,68,0.1)" : "transparent", border: `1px solid ${motionSyncStatus === "synced" ? "rgba(6,182,212,0.4)" : motionSyncStatus === "error" ? "rgba(239,68,68,0.4)" : c.border}`, color: motionSyncStatus === "synced" ? "#06b6d4" : motionSyncStatus === "error" ? "#ef4444" : c.textMuted, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
-              <div style={{ width: 6, height: 6, borderRadius: 3, background: motionSyncStatus === "syncing" ? "#eab308" : motionSyncStatus === "synced" ? "#06b6d4" : motionSyncStatus === "error" ? "#ef4444" : c.textMuted, animation: motionSyncStatus === "syncing" ? "pulse 1s infinite" : "none" }} />
-              {motionSyncStatus === "syncing" ? "Syncing Motion..." : motionSyncStatus === "synced" ? `Motion Synced • ${motionTasks.length} tasks${motionLastSync ? " • " + motionLastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}` : motionSyncStatus === "error" ? "Motion Error — Click to Retry" : "Sync Motion"}
-            </button>
+            {gcalSyncStatus === "synced" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.4)", color: "#4285f4", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
+                <div style={{ width: 6, height: 6, borderRadius: 3, background: "#4285f4" }} />
+                Google Calendar Synced{gcalLastSync ? ` · ${gcalLastSync}` : ""}
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {[{ k: "day", l: "Day View" }, { k: "week", l: "Week View" }, { k: "recurring", l: "Recurring" }, { k: "notes", l: "Meeting Notes" }].map(t => (
@@ -1451,7 +1366,6 @@ function AviroDashboard() {
                           {Object.entries(CAL_COLORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                         </select>
                         <button onClick={() => { const startH = parseTime(schedulingItem.startTime); const endH = parseTime(schedulingItem.endTime); setCalEvents([...calEvents, { id: `e${Date.now()}`, date: selDateStr, startHour: startH, endHour: endH, title: schedulingItem.text, cat: schedulingItem.cat, meet: null, attendees: "", location: "", notes: "" }]); setUnscheduledItems(unscheduledItems.filter(u => u.id !== item.id)); setSchedulingItem(null); }} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "3px 12px", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>Add to Calendar</button>
-                        <button onClick={() => { const dur = Math.round((parseTime(schedulingItem.endTime) - parseTime(schedulingItem.startTime)) * 60) || 30; createMotionTask(schedulingItem.text, `${selDateStr}T${schedulingItem.startTime}:00`, dur); setUnscheduledItems(unscheduledItems.filter(u => u.id !== item.id)); setSchedulingItem(null); }} style={{ background: "rgba(6,182,212,0.15)", border: "1px solid rgba(6,182,212,0.5)", color: "#06b6d4", borderRadius: 4, padding: "3px 12px", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>Add to Motion</button>
                         <button onClick={() => setSchedulingItem(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>Cancel</button>
                       </div>
                     </div>
@@ -1484,7 +1398,6 @@ function AviroDashboard() {
                           {Object.entries(CAL_COLORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                         </select>
                         <button onClick={() => { const startH = parseTime(schedulingItem.startTime); const endH = parseTime(schedulingItem.endTime); setCalEvents([...calEvents, { id: `e${Date.now()}`, date: selDateStr, startHour: startH, endHour: endH, title: schedulingItem.text, cat: schedulingItem.cat, meet: null, attendees: "", location: "", notes: "" }]); setQuickJobs(quickJobs.map(j => j.id === job.id ? { ...j, onCalendar: false } : j)); setSchedulingItem(null); }} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "3px 12px", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>Add to Calendar</button>
-                        <button onClick={() => { const dur = Math.round((parseTime(schedulingItem.endTime) - parseTime(schedulingItem.startTime)) * 60) || 30; createMotionTask(schedulingItem.text, `${selDateStr}T${schedulingItem.startTime}:00`, dur); setQuickJobs(quickJobs.map(j => j.id === job.id ? { ...j, onCalendar: false } : j)); setSchedulingItem(null); }} style={{ background: "rgba(6,182,212,0.15)", border: "1px solid rgba(6,182,212,0.5)", color: "#06b6d4", borderRadius: 4, padding: "3px 12px", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>Add to Motion</button>
                         <button onClick={() => setSchedulingItem(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>Cancel</button>
                       </div>
                     </div>
@@ -1627,19 +1540,15 @@ function AviroDashboard() {
               </div>
             )}
 
-            {/* Motion sync error banner */}
-            {motionSyncStatus === "error" && motionError && (
-              <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "12px 16px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#ef4444" }}>Motion Sync Failed</div>
-                  <div style={{ fontSize: 11, color: c.textSecondary, marginTop: 2 }}>{motionError}</div>
-                  <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>If opening as a local file, try running: <span style={{ fontFamily: "monospace", background: c.surface, padding: "1px 6px", borderRadius: 3 }}>python3 -m http.server 8080</span> then open <span style={{ fontFamily: "monospace", background: c.surface, padding: "1px 6px", borderRadius: 3 }}>localhost:8080</span></div>
-                </div>
-                <button onClick={syncMotion} style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.4)", color: "#ef4444", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>Retry Sync</button>
+            {/* Google Calendar sync status */}
+            {gcalSyncStatus === "synced" && gcalLastSync && (
+              <div style={{ fontSize: 10, color: "#22c55e", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: 3, background: "#22c55e", display: "inline-block" }} />
+                Google Calendar synced · {gcalLastSync}
               </div>
             )}
 
-            {/* Scrollable hourly timeline - Motion-style clean grid */}
+            {/* Scrollable hourly timeline */}
             <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, overflow: "hidden" }}>
               {/* Timezone header row - primary TZ shown first & highlighted */}
               {(() => {
@@ -1724,7 +1633,7 @@ function AviroDashboard() {
                                 </div>
                               </div>
                               <div style={{ display: "flex", gap: 4 }}>
-                                {ev.isMotion && <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: "rgba(6,182,212,0.15)", color: "#06b6d4", border: "1px solid rgba(6,182,212,0.4)", fontWeight: 700, letterSpacing: "0.05em" }}>MOTION</span>}
+                                {ev.isGcal && <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: "rgba(66,133,244,0.15)", color: "#4285f4", border: "1px solid rgba(66,133,244,0.4)", fontWeight: 700, letterSpacing: "0.05em" }}>GCAL</span>}
                                 {ev.calSource === "pluto" && <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: "rgba(99,102,241,0.15)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.4)", fontWeight: 700, letterSpacing: "0.05em" }}>PLUTO FIN</span>}
                                 <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: cc.bg, color: cc.text, border: `1px solid ${cc.border}`, fontWeight: 700 }}>{cc.label}</span>
                                 {ev.isRecurring && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: c.accentBg, color: c.accent, border: `1px solid rgba(99,102,241,0.3)`, fontWeight: 700 }}>RECURRING</span>}
