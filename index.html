@@ -212,7 +212,34 @@ const toGMT = (h) => h;
 const toCEST = (h) => ((h + 2) % 24);
 const fmt12 = (h) => { const hr = h % 12 || 12; const ap = h < 12 ? "am" : "pm"; return `${hr}${ap}`; };
 
-// (Motion API removed — now using Google Calendar via Supabase sync)
+// Google Calendar default events — fallback until Supabase gcal_events row is populated by scheduled sync
+const GCAL_DEFAULT_EVENTS = [
+  { id: "gcal-0", date: "2026-06-08", startHour: 7.5, endHour: 8.5, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "https://meet.google.com/pnx-eoxn-nhi", attendees: "aleksandra, martin", location: "", notes: "", isGcal: true },
+  { id: "gcal-1", date: "2026-06-08", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "https://meet.google.com/jjh-zitv-exy", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, mohammad, tim", location: "", notes: "", isGcal: true },
+  { id: "gcal-2", date: "2026-06-08", startHour: 9.0, endHour: 9.5, title: "Luxon and gateway discussion", cat: "gateway", meet: "", attendees: "arya, rui, tom.waters", location: "Zoom", notes: "", isGcal: true },
+  { id: "gcal-3", date: "2026-06-08", startHour: 9.5, endHour: 10.0, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "https://meet.google.com/baq-dtyp-dhn", attendees: "sophie", location: "", notes: "", isGcal: true },
+  { id: "gcal-4", date: "2026-06-08", startHour: 11.0, endHour: 12.5, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "https://meet.google.com/edi-gnmc-ksa", attendees: "martin, sophie, russ", location: "", notes: "", isGcal: true },
+  { id: "gcal-5", date: "2026-06-08", startHour: 12.0, endHour: 12.5, title: "Catch-up (Trust Payments)", cat: "gateway", meet: "", attendees: "james.burke, mark.hartson", location: "Microsoft Teams Meeting", notes: "", isGcal: true },
+  { id: "gcal-6", date: "2026-06-08", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+  { id: "gcal-7", date: "2026-06-09", startHour: 7.0, endHour: 7.5, title: "Aviro / GG Poker / Libernetix", cat: "gateway", meet: "https://meet.google.com/amh-mvqn-mwm", attendees: "karan.johal, mo.awada", location: "", notes: "", isGcal: true },
+  { id: "gcal-8", date: "2026-06-09", startHour: 9.5, endHour: 10.5, title: "Backlog Refinement", cat: "aviro", meet: "https://meet.google.com/cfh-tqee-qnd", attendees: "owen, adam, robert.bostock, sophie, russ, josh, rmcquater, tom, rob", location: "", notes: "", isGcal: true },
+  { id: "gcal-9", date: "2026-06-09", startHour: 10.0, endHour: 10.5, title: "Betglobala management call", cat: "aviro", meet: "", attendees: "ross.mcquater, tom.waters", location: "Zoom", notes: "", isGcal: true },
+  { id: "gcal-10", date: "2026-06-09", startHour: 10.0, endHour: 18.0, title: "House", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+  { id: "gcal-11", date: "2026-06-09", startHour: 12.0, endHour: 13.0, title: "MM", cat: "aviro", meet: "https://meet.google.com/boo-jmng-zys", attendees: "martin, russ, mark, andy", location: "", notes: "", isGcal: true },
+  { id: "gcal-12", date: "2026-06-10", startHour: 3.0, endHour: 4.0, title: "Monkey Tilt Payments", cat: "gateway", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+  { id: "gcal-13", date: "2026-06-10", startHour: 10.0, endHour: 10.33, title: "TW | DN", cat: "aviro", meet: "https://meet.google.com/gwt-ijak-zny", attendees: "tom.waters", location: "", notes: "", isGcal: true },
+  { id: "gcal-14", date: "2026-06-10", startHour: 11.0, endHour: 12.0, title: "Chainalysis Demo", cat: "aviro", meet: "https://meet.google.com/rif-xrzb-wht", attendees: "christian.dossantos", location: "", notes: "", isGcal: true },
+  { id: "gcal-15", date: "2026-06-10", startHour: 12.0, endHour: 13.0, title: "Topspins", cat: "gateway", meet: "https://meet.google.com/kin-ckrr-pyg", attendees: "martin, aleksandra, kirsty, marc.lee, mark", location: "", notes: "", isGcal: true },
+  { id: "gcal-16", date: "2026-06-10", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+  { id: "gcal-17", date: "2026-06-10", startHour: 16.5, endHour: 17.33, title: "Preply lesson - Beyza O.", cat: "personal", meet: "https://preply.com/en/chat/t-room/8662148", attendees: "", location: "Preply", notes: "", isGcal: true },
+  { id: "gcal-18", date: "2026-06-11", startHour: 12.0, endHour: 12.75, title: "Turbo (Alina & David)", cat: "aviro", meet: "", attendees: "alina", location: "", notes: "", isGcal: true },
+  { id: "gcal-19", date: "2026-06-11", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+  { id: "gcal-20", date: "2026-06-11", startHour: 17.75, endHour: 19.75, title: "Mexico vs South Africa (Group A)", cat: "personal", meet: "", attendees: "", location: "Mexico City", notes: "", isGcal: true },
+  { id: "gcal-21", date: "2026-06-12", startHour: 0.75, endHour: 2.75, title: "South Korea vs Czech Republic (Group A)", cat: "personal", meet: "", attendees: "", location: "Guadalajara", notes: "", isGcal: true },
+  { id: "gcal-22", date: "2026-06-12", startHour: 8.0, endHour: 9.5, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "https://meet.google.com/nam-zqfo-wso", attendees: "martin, sophie, russ", location: "", notes: "", isGcal: true },
+  { id: "gcal-23", date: "2026-06-12", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+  { id: "gcal-24", date: "2026-06-13", startHour: 2.75, endHour: 4.75, title: "USA vs Paraguay (Group D)", cat: "personal", meet: "", attendees: "", location: "Los Angeles", notes: "", isGcal: true },
+];
 
 function AviroDashboard() {
   const [section, setSection] = useState("home");
@@ -220,34 +247,7 @@ function AviroDashboard() {
 
   // Calendar state
   const [selectedDate, setSelectedDate] = useState(new Date());
-  // Calendar events — hours stored in GMT. Refreshed 2026-06-09 from Google Calendar.
-  const [calEvents, setCalEvents] = useState([
-    { id: "gcal-0", date: "2026-06-08", startHour: 7.5, endHour: 8.5, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "https://meet.google.com/pnx-eoxn-nhi", attendees: "aleksandra, martin", location: "", notes: "", isGcal: true },
-    { id: "gcal-1", date: "2026-06-08", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "https://meet.google.com/jjh-zitv-exy", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, mohammad, tim", location: "", notes: "", isGcal: true },
-    { id: "gcal-2", date: "2026-06-08", startHour: 9.0, endHour: 9.5, title: "Luxon and gateway discussion", cat: "gateway", meet: "", attendees: "arya, rui, tom.waters", location: "Zoom", notes: "", isGcal: true },
-    { id: "gcal-3", date: "2026-06-08", startHour: 9.5, endHour: 10.0, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "https://meet.google.com/baq-dtyp-dhn", attendees: "sophie", location: "", notes: "", isGcal: true },
-    { id: "gcal-4", date: "2026-06-08", startHour: 11.0, endHour: 12.5, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "https://meet.google.com/edi-gnmc-ksa", attendees: "martin, sophie, russ", location: "", notes: "", isGcal: true },
-    { id: "gcal-5", date: "2026-06-08", startHour: 12.0, endHour: 12.5, title: "Catch-up (Trust Payments)", cat: "gateway", meet: "", attendees: "james.burke, mark.hartson", location: "Microsoft Teams Meeting", notes: "", isGcal: true },
-    { id: "gcal-6", date: "2026-06-08", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-    { id: "gcal-7", date: "2026-06-09", startHour: 7.0, endHour: 7.5, title: "Aviro / GG Poker / Libernetix", cat: "gateway", meet: "https://meet.google.com/amh-mvqn-mwm", attendees: "karan.johal, mo.awada", location: "", notes: "", isGcal: true },
-    { id: "gcal-8", date: "2026-06-09", startHour: 9.5, endHour: 10.5, title: "Backlog Refinement", cat: "aviro", meet: "https://meet.google.com/cfh-tqee-qnd", attendees: "owen, adam, robert.bostock, sophie, russ, josh, rmcquater, tom, rob", location: "", notes: "", isGcal: true },
-    { id: "gcal-9", date: "2026-06-09", startHour: 10.0, endHour: 10.5, title: "Betglobala management call", cat: "aviro", meet: "", attendees: "ross.mcquater, tom.waters", location: "Zoom", notes: "", isGcal: true },
-    { id: "gcal-10", date: "2026-06-09", startHour: 10.0, endHour: 18.0, title: "House", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-    { id: "gcal-11", date: "2026-06-09", startHour: 12.0, endHour: 13.0, title: "MM", cat: "aviro", meet: "https://meet.google.com/boo-jmng-zys", attendees: "martin, russ, mark, andy", location: "", notes: "", isGcal: true },
-    { id: "gcal-12", date: "2026-06-10", startHour: 3.0, endHour: 4.0, title: "Monkey Tilt Payments", cat: "gateway", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-    { id: "gcal-13", date: "2026-06-10", startHour: 10.0, endHour: 10.33, title: "TW | DN", cat: "aviro", meet: "https://meet.google.com/gwt-ijak-zny", attendees: "tom.waters", location: "", notes: "", isGcal: true },
-    { id: "gcal-14", date: "2026-06-10", startHour: 11.0, endHour: 12.0, title: "Chainalysis Demo", cat: "aviro", meet: "https://meet.google.com/rif-xrzb-wht", attendees: "christian.dossantos", location: "", notes: "", isGcal: true },
-    { id: "gcal-15", date: "2026-06-10", startHour: 12.0, endHour: 13.0, title: "Topspins", cat: "gateway", meet: "https://meet.google.com/kin-ckrr-pyg", attendees: "martin, aleksandra, kirsty, marc.lee, mark", location: "", notes: "", isGcal: true },
-    { id: "gcal-16", date: "2026-06-10", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-    { id: "gcal-17", date: "2026-06-10", startHour: 16.5, endHour: 17.33, title: "Preply lesson - Beyza O.", cat: "personal", meet: "https://preply.com/en/chat/t-room/8662148", attendees: "", location: "Preply", notes: "", isGcal: true },
-    { id: "gcal-18", date: "2026-06-11", startHour: 12.0, endHour: 12.75, title: "Turbo (Alina & David)", cat: "aviro", meet: "", attendees: "alina", location: "", notes: "", isGcal: true },
-    { id: "gcal-19", date: "2026-06-11", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-    { id: "gcal-20", date: "2026-06-11", startHour: 17.75, endHour: 19.75, title: "Mexico vs South Africa (Group A)", cat: "personal", meet: "", attendees: "", location: "Mexico City", notes: "", isGcal: true },
-    { id: "gcal-21", date: "2026-06-12", startHour: 0.75, endHour: 2.75, title: "South Korea vs Czech Republic (Group A)", cat: "personal", meet: "", attendees: "", location: "Guadalajara", notes: "", isGcal: true },
-    { id: "gcal-22", date: "2026-06-12", startHour: 8.0, endHour: 9.5, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "https://meet.google.com/nam-zqfo-wso", attendees: "martin, sophie, russ", location: "", notes: "", isGcal: true },
-    { id: "gcal-23", date: "2026-06-12", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-    { id: "gcal-24", date: "2026-06-13", startHour: 2.75, endHour: 4.75, title: "USA vs Paraguay (Group D)", cat: "personal", meet: "", attendees: "", location: "Los Angeles", notes: "", isGcal: true },
-  ]);
+  const [calEvents, setCalEvents] = useState([]);
   // Recurring events - from Gmail and manual
   const [recurringEvents, setRecurringEvents] = useState([]);
   const [showAddRecurring, setShowAddRecurring] = useState(false);
@@ -283,30 +283,38 @@ function AviroDashboard() {
   const [gcalSyncStatus, setGcalSyncStatus] = useState("idle");
   const [gcalLastSync, setGcalLastSync] = useState(null);
 
-  // Load Google Calendar events from Supabase on startup
+  // Load Google Calendar events from Supabase after main state loads, with fallback to defaults
   useEffect(() => {
+    if (!hasLoaded) return;
     const loadGcal = async () => {
+      let gcalEvts = null;
       try {
         const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.gcal_events&select=state,updated_at", {
           headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY },
         });
         if (res.ok) {
           const rows = await res.json();
-          if (rows.length > 0 && rows[0].state && rows[0].state.events) {
-            const gcalEvts = rows[0].state.events;
-            setCalEvents(prev => {
-              const nonGcal = prev.filter(e => !e.isGcal);
-              return [...nonGcal, ...gcalEvts];
-            });
-            setGcalSyncStatus("synced");
+          if (rows.length > 0 && rows[0].state && rows[0].state.events && rows[0].state.events.length > 0) {
+            gcalEvts = rows[0].state.events;
             setGcalLastSync(rows[0].updated_at ? new Date(rows[0].updated_at).toLocaleString() : "recently");
             console.log("Loaded " + gcalEvts.length + " Google Calendar events from Supabase");
           }
         }
-      } catch (e) { console.warn("Google Calendar load failed:", e); }
+      } catch (e) { console.warn("Google Calendar Supabase load failed, using defaults:", e); }
+      // Fall back to hardcoded defaults if Supabase row doesn't exist yet
+      if (!gcalEvts) {
+        gcalEvts = GCAL_DEFAULT_EVENTS;
+        setGcalLastSync("defaults (scheduled sync pending)");
+        console.log("Using " + gcalEvts.length + " default Google Calendar events");
+      }
+      setCalEvents(prev => {
+        const nonGcal = prev.filter(e => !e.isGcal);
+        return [...nonGcal, ...gcalEvts];
+      });
+      setGcalSyncStatus("synced");
     };
     loadGcal();
-  }, []);
+  }, [hasLoaded]);
 
   // Quick jobs
   const [quickJobs, setQuickJobs] = useState([]);
@@ -507,7 +515,11 @@ function AviroDashboard() {
 
   // Apply state helper
   const applyState = useCallback((s) => {
-    if (s.calEvents) setCalEvents(s.calEvents);
+    if (s.calEvents) setCalEvents(prev => {
+      // Only load non-gcal (manually added) events from saved state; gcal events come from separate sync
+      const manualEvents = (s.calEvents || []).filter(e => !e.isGcal);
+      return manualEvents;
+    });
     if (s.quickJobs) setQuickJobs(s.quickJobs);
     if (s.delegatedTasks) setDelegatedTasks(s.delegatedTasks);
     if (s.signalSlots) setSignalSlots(s.signalSlots);
