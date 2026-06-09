@@ -204,10 +204,12 @@ const DocStatusBadge = ({ status }) => {
   return <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 3, background: s.bg, color: s.co }}>{s.l}</span>;
 };
 
-// Time zone helpers - GST is UTC+4, GMT is UTC+0, CET is UTC+1 (or +2 CEST in April)
+// Time zone helpers - all offsets from GMT/UTC
+// GST (Gulf) = UTC+4, BST (British Summer) = UTC+1, CEST (Central Europe Summer) = UTC+2
 const toGST = (h) => ((h + 4) % 24);
+const toBST = (h) => ((h + 1) % 24);
 const toGMT = (h) => h;
-const toCET = (h) => ((h + 2) % 24); // CEST in April
+const toCEST = (h) => ((h + 2) % 24);
 const fmt12 = (h) => { const hr = h % 12 || 12; const ap = h < 12 ? "am" : "pm"; return `${hr}${ap}`; };
 
 // Motion API config — tries direct first, then CORS proxy fallback
@@ -240,132 +242,33 @@ function AviroDashboard() {
 
   // Calendar state
   const [selectedDate, setSelectedDate] = useState(new Date());
+  // Calendar events — hours stored in GMT. Refreshed 2026-06-09 from Google Calendar.
   const [calEvents, setCalEvents] = useState([
-    { id: "gc0", date: "2026-04-06", startHour: 6.0, endHour: 6.5, title: "FYI - Update Mirror domains on all licenses", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc1", date: "2026-04-06", startHour: 6.5, endHour: 7.5, title: "FYI License updates - weekly checks", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc2", date: "2026-04-06", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, gary, mohammad", location: "", notes: "" },
-    { id: "gc3", date: "2026-04-06", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc4", date: "2026-04-06", startHour: 15.5, endHour: 17.0, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "", attendees: "martin, sportingbetruss, sophie, russ", location: "", notes: "" },
-    { id: "gc5", date: "2026-04-07", startHour: 7.5, endHour: 8.0, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "", attendees: "aleksandra, martin", location: "", notes: "" },
-    { id: "gc6", date: "2026-04-07", startHour: 8.5, endHour: 9.25, title: "BG Advisors", cat: "aviro", meet: "", attendees: "martin, aleksandra, adam, oliver, emile", location: "", notes: "" },
-    { id: "gc7", date: "2026-04-07", startHour: 9.5, endHour: 11.0, title: "End Of Sprint Review/Planning", cat: "aviro", meet: "", attendees: "owen, adam, robert.bostock23, sportingbetruss, sophie, josh, rmcquater, robert, tom, rob", location: "", notes: "" },
-    { id: "gc8", date: "2026-04-07", startHour: 11.0, endHour: 11.5, title: "Rapyd | PTW", cat: "gateway", meet: "", attendees: "martin, samuelm, bryanf, aleksandra", location: "", notes: "" },
-    { id: "gc9", date: "2026-04-07", startHour: 12.0, endHour: 13.0, title: "PSP Angels Intro: Bostock Enterprise x PylonPayments", cat: "gateway", meet: "", attendees: "shahar, anishia, aleksandra, sophie, finance", location: "", notes: "" },
-    { id: "gc10", date: "2026-04-07", startHour: 13.0, endHour: 14.0, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc11", date: "2026-04-07", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc12", date: "2026-04-07", startHour: 13.0, endHour: 14.0, title: "EDD Bi-Weekly", cat: "aviro", meet: "", attendees: "charlie, martin, chris.d, aleksandra", location: "", notes: "" },
-    { id: "gc13", date: "2026-04-08", startHour: 4.0, endHour: 4.5, title: "9th floor: Standard session - 30 minutes", cat: "personal", meet: "", attendees: "", location: "Scandinavian Physiotherapy Center, JLT, Dubai", notes: "" },
-    { id: "gc14", date: "2026-04-08", startHour: 8.5, endHour: 10.0, title: "Baby appointment", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc15", date: "2026-04-08", startHour: 10.0, endHour: 10.33, title: "TW | DN", cat: "aviro", meet: "", attendees: "tom.waters", location: "", notes: "" },
-    { id: "gc16", date: "2026-04-08", startHour: 11.0, endHour: 11.75, title: "Catch up", cat: "aviro", meet: "", attendees: "martin, russ", location: "", notes: "" },
-    { id: "gc17", date: "2026-04-08", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc18", date: "2026-04-08", startHour: 15.5, endHour: 16.5, title: "Radon - Bi-Weekly Call", cat: "pluto", meet: "", attendees: "martin, chris.d, tom, james, rowan, mohammad.hidayathullah", location: "", notes: "" },
-    { id: "gc19", date: "2026-04-09", startHour: 7.0, endHour: 7.5, title: "Privileged call - David", cat: "aviro", meet: "https://teams.microsoft.com/meet/387608709867583?p=VQOuyyzCOwVHQr3h2e", attendees: "Lembit Tedder [COBALT]", location: "Microsoft Teams Meeting", notes: "" },
-    { id: "gc20", date: "2026-04-09", startHour: 7.5, endHour: 9.0, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "", attendees: "martin, sophie, russ", location: "", notes: "" },
-    { id: "gc21", date: "2026-04-09", startHour: 9.0, endHour: 9.5, title: "MP/DN - biweekly", cat: "pluto", meet: "", attendees: "mark, meetingroom", location: "", notes: "" },
-    { id: "gc22", date: "2026-04-09", startHour: 10.0, endHour: 11.0, title: "Money Flow & Acc structure", cat: "aviro", meet: "", attendees: "martin, tom, james", location: "", notes: "" },
-    { id: "gc23", date: "2026-04-09", startHour: 11.5, endHour: 12.25, title: "Libernetix | Aviro", cat: "gateway", meet: "", attendees: "aleksandra, mo.awada", location: "", notes: "" },
-    { id: "gc24", date: "2026-04-09", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc25", date: "2026-04-09", startHour: 14.0, endHour: 14.75, title: "Argon", cat: "aviro", meet: "", attendees: "martin, rowan, chris.d", location: "", notes: "" },
-    { id: "gc26", date: "2026-04-10", startHour: 4.5, endHour: 5.5, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc27", date: "2026-04-10", startHour: 8.0, endHour: 8.83, title: "Preply lesson - Beyza O.", cat: "personal", meet: "https://preply.com/en/chat/t-room/8662148", attendees: "", location: "Preply", notes: "" },
-    { id: "gc28", date: "2026-04-10", startHour: 9.0, endHour: 15.0, title: "House meeting", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc29", date: "2026-04-10", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc30", date: "2026-04-11", startHour: 4.5, endHour: 5.5, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc31", date: "2026-04-11", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc32", date: "2026-04-12", startHour: 10.5, endHour: 11.33, title: "Preply lesson - Beyza O.", cat: "personal", meet: "https://preply.com/en/chat/t-room/8662148", attendees: "", location: "Preply", notes: "" },
-    { id: "gc33", date: "2026-04-12", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc34", date: "2026-04-13", startHour: 4.0, endHour: 5.0, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc35", date: "2026-04-13", startHour: 7.5, endHour: 8.5, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "", attendees: "aleksandra, martin", location: "", notes: "" },
-    { id: "gc36", date: "2026-04-13", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, gary, mohammad", location: "", notes: "" },
-    { id: "gc37", date: "2026-04-13", startHour: 9.5, endHour: 10.5, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc38", date: "2026-04-13", startHour: 11.0, endHour: 12.5, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "", attendees: "martin, sportingbetruss, sophie, russ", location: "", notes: "" },
-    { id: "gc39", date: "2026-04-13", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc40", date: "2026-04-14", startHour: 4.0, endHour: 5.0, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc41", date: "2026-04-14", startHour: 5.5, endHour: 13.5, title: "House Stuff", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc42", date: "2026-04-14", startHour: 9.5, endHour: 10.5, title: "Backlog Refinement", cat: "aviro", meet: "", attendees: "owen, adam, robert.bostock23, sportingbetruss, sophie, josh, rmcquater, tom, robert, rob", location: "", notes: "" },
-    { id: "gc43", date: "2026-04-14", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc44", date: "2026-04-15", startHour: 4.0, endHour: 5.0, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc45", date: "2026-04-15", startHour: 9.0, endHour: 9.33, title: "TW | DN", cat: "aviro", meet: "", attendees: "tom.waters", location: "", notes: "" },
-    { id: "gc46", date: "2026-04-15", startHour: 10.5, endHour: 14.5, title: "House visit", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc47", date: "2026-04-15", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc48", date: "2026-04-16", startHour: 4.0, endHour: 5.0, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc49", date: "2026-04-16", startHour: 12.0, endHour: 12.83, title: "Preply lesson - Beyza O.", cat: "personal", meet: "https://preply.com/en/chat/t-room/8662148", attendees: "", location: "Preply", notes: "" },
-    { id: "gc50", date: "2026-04-16", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc51", date: "2026-04-17", startHour: 8.0, endHour: 9.5, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "", attendees: "martin, sophie, russ", location: "", notes: "" },
-    { id: "gc52", date: "2026-04-17", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc53", date: "2026-04-18", startHour: 5.0, endHour: 6.0, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc54", date: "2026-04-18", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc55", date: "2026-04-19", startHour: 5.0, endHour: 6.0, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc56", date: "2026-04-19", startHour: 9.5, endHour: 10.33, title: "Preply lesson - Beyza O.", cat: "personal", meet: "https://preply.com/en/chat/t-room/8662148", attendees: "", location: "Preply", notes: "" },
-    { id: "gc57", date: "2026-04-19", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc58", date: "2026-04-20", startHour: 4.0, endHour: 5.0, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc59", date: "2026-04-20", startHour: 6.0, endHour: 6.5, title: "FYI - Update Mirror domains on all licenses", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc60", date: "2026-04-20", startHour: 6.5, endHour: 7.5, title: "FYI License updates - weekly checks", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc61", date: "2026-04-20", startHour: 7.5, endHour: 8.5, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "", attendees: "aleksandra, martin", location: "", notes: "" },
-    { id: "gc62", date: "2026-04-20", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, gary, mohammad", location: "", notes: "" },
-    { id: "gc63", date: "2026-04-20", startHour: 9.5, endHour: 10.5, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc64", date: "2026-04-20", startHour: 11.0, endHour: 12.5, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "", attendees: "martin, sportingbetruss, sophie, russ", location: "", notes: "" },
-    { id: "gc65", date: "2026-04-20", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc66", date: "2026-04-21", startHour: 4.0, endHour: 5.0, title: "PT", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc67", date: "2026-04-21", startHour: 8.0, endHour: 9.0, title: "Personal Finance sheet - monthly update", cat: "personal", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc68", date: "2026-04-21", startHour: 9.33, endHour: 18.25, title: "Flight: EK 19 from DXB to MAN", cat: "personal", meet: "", attendees: "sophie", location: "Dubai International Airport", notes: "" },
-    { id: "gc69", date: "2026-04-21", startHour: 9.5, endHour: 11.0, title: "End Of Sprint Review/Planning", cat: "aviro", meet: "", attendees: "owen, adam, robert.bostock23, sportingbetruss, sophie, josh, rmcquater, robert, tom, rob", location: "", notes: "" },
-    { id: "gc70", date: "2026-04-21", startHour: 10.0, endHour: 10.75, title: "Project 3", cat: "aviro", meet: "", attendees: "martin", location: "", notes: "" },
-    { id: "gc71", date: "2026-04-21", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc72", date: "2026-04-21", startHour: 13.0, endHour: 14.0, title: "EDD Bi-Weekly", cat: "aviro", meet: "", attendees: "charlie, martin, chris.d, aleksandra", location: "", notes: "" },
-    { id: "gc73", date: "2026-04-22", startHour: 10.0, endHour: 10.33, title: "TW | DN", cat: "aviro", meet: "", attendees: "tom.waters", location: "", notes: "" },
-    { id: "gc74", date: "2026-04-22", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc75", date: "2026-04-22", startHour: 15.0, endHour: 16.0, title: "Radon - Bi-Weekly Call", cat: "pluto", meet: "", attendees: "martin, chris.d, tom, james, rowan, mohammad.hidayathullah", location: "", notes: "" },
-    { id: "gc76", date: "2026-04-23", startHour: 9.0, endHour: 9.5, title: "MP/DN - biweekly", cat: "pluto", meet: "", attendees: "mark, meetingroom", location: "", notes: "" },
-    { id: "gc77", date: "2026-04-23", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc78", date: "2026-04-24", startHour: 8.0, endHour: 9.5, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "", attendees: "martin, sophie, russ", location: "", notes: "" },
-    { id: "gc79", date: "2026-04-24", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc80", date: "2026-04-25", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc81", date: "2026-04-26", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc82", date: "2026-04-27", startHour: 7.5, endHour: 8.5, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "", attendees: "aleksandra, martin", location: "", notes: "" },
-    { id: "gc83", date: "2026-04-27", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, gary, mohammad", location: "", notes: "" },
-    { id: "gc84", date: "2026-04-27", startHour: 9.5, endHour: 10.5, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc85", date: "2026-04-27", startHour: 11.0, endHour: 12.5, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "", attendees: "martin, sportingbetruss, sophie, russ", location: "", notes: "" },
-    { id: "gc86", date: "2026-04-27", startHour: 12.0, endHour: 14.0, title: "David Nicholson and Stella Anna Sonnenbaum", cat: "personal", meet: "", attendees: "stellaannasonnenbaum", location: "Flat 6, 33-35 Daventry Street, London NW1 6TD", notes: "" },
-    { id: "gc87", date: "2026-04-27", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc88", date: "2026-04-28", startHour: 9.5, endHour: 10.5, title: "Backlog Refinement", cat: "aviro", meet: "", attendees: "owen, adam, robert.bostock23, sportingbetruss, sophie, josh, rmcquater, tom, robert, rob", location: "", notes: "" },
-    { id: "gc89", date: "2026-04-28", startHour: 11.0, endHour: 12.0, title: "James Cube Pay Monthly Update", cat: "aviro", meet: "", attendees: "martin, aleksandra, sophie, stavros, james", location: "", notes: "" },
-    { id: "gc90", date: "2026-04-28", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc91", date: "2026-04-28", startHour: 18.75, endHour: 19.75, title: "Reservation at CORE by Clare Smyth", cat: "personal", meet: "", attendees: "", location: "CORE by Clare Smyth, 92 Kensington Park Road, London, W11 2PN", notes: "" },
-    { id: "gc92", date: "2026-04-29", startHour: 10.0, endHour: 10.33, title: "TW | DN", cat: "aviro", meet: "", attendees: "tom.waters", location: "", notes: "" },
-    { id: "gc93", date: "2026-04-29", startHour: 12.0, endHour: 15.0, title: "Lunch", cat: "personal", meet: "", attendees: "Aaron Morley, Martin T, Shaun Carter", location: "TBC", notes: "" },
-    { id: "gc94", date: "2026-04-29", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc95", date: "2026-04-30", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc96", date: "2026-04-30", startHour: 16.0, endHour: 19.0, title: "HQ Dinner", cat: "personal", meet: "", attendees: "martin, russ, sophie", location: "London", notes: "" },
-    { id: "gc97", date: "2026-05-01", startHour: 8.0, endHour: 9.5, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "", attendees: "martin, sophie, russ", location: "", notes: "" },
-    { id: "gc98", date: "2026-05-01", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc99", date: "2026-05-02", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc100", date: "2026-05-03", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc101", date: "2026-05-04", startHour: 6.0, endHour: 6.5, title: "FYI - Update Mirror domains on all licenses", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc102", date: "2026-05-04", startHour: 6.5, endHour: 7.5, title: "FYI License updates - weekly checks", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc103", date: "2026-05-04", startHour: 7.5, endHour: 8.5, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "", attendees: "aleksandra, martin", location: "", notes: "" },
-    { id: "gc104", date: "2026-05-04", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, gary, mohammad", location: "", notes: "" },
-    { id: "gc105", date: "2026-05-04", startHour: 9.5, endHour: 10.5, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "" },
-    { id: "gc106", date: "2026-05-04", startHour: 11.0, endHour: 12.5, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "", attendees: "martin, sportingbetruss, sophie, russ", location: "", notes: "" },
-    { id: "gc107", date: "2026-05-04", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc108", date: "2026-05-05", startHour: 9.5, endHour: 11.0, title: "End Of Sprint Review/Planning", cat: "aviro", meet: "", attendees: "owen, adam, robert.bostock23, sportingbetruss, sophie, josh, rmcquater, robert, tom, rob", location: "", notes: "" },
-    { id: "gc109", date: "2026-05-05", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc110", date: "2026-05-05", startHour: 13.0, endHour: 14.0, title: "EDD Bi-Weekly", cat: "aviro", meet: "", attendees: "charlie, martin, chris.d, aleksandra", location: "", notes: "" },
-    { id: "gc111", date: "2026-05-06", startHour: 10.0, endHour: 10.33, title: "TW | DN", cat: "aviro", meet: "", attendees: "tom.waters", location: "", notes: "" },
-    { id: "gc112", date: "2026-05-06", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc113", date: "2026-05-06", startHour: 15.0, endHour: 16.0, title: "Radon - Bi-Weekly Call", cat: "pluto", meet: "", attendees: "martin, chris.d, tom, james, rowan, mohammad.hidayathullah", location: "", notes: "" },
-    { id: "gc114", date: "2026-05-07", startHour: 9.0, endHour: 9.5, title: "MP/DN - biweekly", cat: "pluto", meet: "", attendees: "mark, meetingroom", location: "", notes: "" },
-    { id: "gc115", date: "2026-05-07", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc116", date: "2026-05-08", startHour: 8.0, endHour: 9.5, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "", attendees: "martin, sophie, russ", location: "", notes: "" },
-    { id: "gc117", date: "2026-05-08", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc118", date: "2026-05-09", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    { id: "gc119", date: "2026-05-10", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "" },
-    // === Pluto Finance Calendar (finance@plutodata.co.uk) ===
-    { id: "pf0", date: "2026-04-08", startHour: 10.0, endHour: 11.0, title: "Leadership call", cat: "pluto", meet: "", attendees: "mark, alex, jon, henry, sophie", location: "", notes: "", calSource: "pluto" },
-    { id: "pf1", date: "2026-04-22", startHour: 10.0, endHour: 11.0, title: "Leadership call", cat: "pluto", meet: "", attendees: "mark, alex, jon, henry, sophie", location: "", notes: "", calSource: "pluto" },
-    { id: "pf2", date: "2026-04-30", startHour: 8.0, endHour: 9.0, title: "Fund Log run through", cat: "pluto", meet: "", attendees: "mark, henry", location: "", notes: "Like we did a few months ago, this is an opportunity to be happy with the Fund Log flow and calcs WELL AHEAD of the 19th July (end of syndi year)", calSource: "pluto" },
-    { id: "pf3", date: "2026-05-06", startHour: 10.0, endHour: 11.0, title: "Leadership call", cat: "pluto", meet: "", attendees: "mark, alex, jon, henry, sophie", location: "", notes: "", calSource: "pluto" },
+    { id: "gcal-0", date: "2026-06-08", startHour: 7.5, endHour: 8.5, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "https://meet.google.com/pnx-eoxn-nhi", attendees: "aleksandra, martin", location: "", notes: "", isGcal: true },
+    { id: "gcal-1", date: "2026-06-08", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "https://meet.google.com/jjh-zitv-exy", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, mohammad, tim", location: "", notes: "", isGcal: true },
+    { id: "gcal-2", date: "2026-06-08", startHour: 9.0, endHour: 9.5, title: "Luxon and gateway discussion", cat: "gateway", meet: "", attendees: "arya, rui, tom.waters", location: "Zoom", notes: "", isGcal: true },
+    { id: "gcal-3", date: "2026-06-08", startHour: 9.5, endHour: 10.0, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "https://meet.google.com/baq-dtyp-dhn", attendees: "sophie", location: "", notes: "", isGcal: true },
+    { id: "gcal-4", date: "2026-06-08", startHour: 11.0, endHour: 12.5, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "https://meet.google.com/edi-gnmc-ksa", attendees: "martin, sophie, russ", location: "", notes: "", isGcal: true },
+    { id: "gcal-5", date: "2026-06-08", startHour: 12.0, endHour: 12.5, title: "Catch-up (Trust Payments)", cat: "gateway", meet: "", attendees: "james.burke, mark.hartson", location: "Microsoft Teams Meeting", notes: "", isGcal: true },
+    { id: "gcal-6", date: "2026-06-08", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+    { id: "gcal-7", date: "2026-06-09", startHour: 7.0, endHour: 7.5, title: "Aviro / GG Poker / Libernetix", cat: "gateway", meet: "https://meet.google.com/amh-mvqn-mwm", attendees: "karan.johal, mo.awada", location: "", notes: "", isGcal: true },
+    { id: "gcal-8", date: "2026-06-09", startHour: 9.5, endHour: 10.5, title: "Backlog Refinement", cat: "aviro", meet: "https://meet.google.com/cfh-tqee-qnd", attendees: "owen, adam, robert.bostock, sophie, russ, josh, rmcquater, tom, rob", location: "", notes: "", isGcal: true },
+    { id: "gcal-9", date: "2026-06-09", startHour: 10.0, endHour: 10.5, title: "Betglobala management call", cat: "aviro", meet: "", attendees: "ross.mcquater, tom.waters", location: "Zoom", notes: "", isGcal: true },
+    { id: "gcal-10", date: "2026-06-09", startHour: 10.0, endHour: 18.0, title: "House", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+    { id: "gcal-11", date: "2026-06-09", startHour: 12.0, endHour: 13.0, title: "MM", cat: "aviro", meet: "https://meet.google.com/boo-jmng-zys", attendees: "martin, russ, mark, andy", location: "", notes: "", isGcal: true },
+    { id: "gcal-12", date: "2026-06-10", startHour: 3.0, endHour: 4.0, title: "Monkey Tilt Payments", cat: "gateway", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+    { id: "gcal-13", date: "2026-06-10", startHour: 10.0, endHour: 10.33, title: "TW | DN", cat: "aviro", meet: "https://meet.google.com/gwt-ijak-zny", attendees: "tom.waters", location: "", notes: "", isGcal: true },
+    { id: "gcal-14", date: "2026-06-10", startHour: 11.0, endHour: 12.0, title: "Chainalysis Demo", cat: "aviro", meet: "https://meet.google.com/rif-xrzb-wht", attendees: "christian.dossantos", location: "", notes: "", isGcal: true },
+    { id: "gcal-15", date: "2026-06-10", startHour: 12.0, endHour: 13.0, title: "Topspins", cat: "gateway", meet: "https://meet.google.com/kin-ckrr-pyg", attendees: "martin, aleksandra, kirsty, marc.lee, mark", location: "", notes: "", isGcal: true },
+    { id: "gcal-16", date: "2026-06-10", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+    { id: "gcal-17", date: "2026-06-10", startHour: 16.5, endHour: 17.33, title: "Preply lesson - Beyza O.", cat: "personal", meet: "https://preply.com/en/chat/t-room/8662148", attendees: "", location: "Preply", notes: "", isGcal: true },
+    { id: "gcal-18", date: "2026-06-11", startHour: 12.0, endHour: 12.75, title: "Turbo (Alina & David)", cat: "aviro", meet: "", attendees: "alina", location: "", notes: "", isGcal: true },
+    { id: "gcal-19", date: "2026-06-11", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+    { id: "gcal-20", date: "2026-06-11", startHour: 17.75, endHour: 19.75, title: "Mexico vs South Africa (Group A)", cat: "personal", meet: "", attendees: "", location: "Mexico City", notes: "", isGcal: true },
+    { id: "gcal-21", date: "2026-06-12", startHour: 0.75, endHour: 2.75, title: "South Korea vs Czech Republic (Group A)", cat: "personal", meet: "", attendees: "", location: "Guadalajara", notes: "", isGcal: true },
+    { id: "gcal-22", date: "2026-06-12", startHour: 8.0, endHour: 9.5, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "https://meet.google.com/nam-zqfo-wso", attendees: "martin, sophie, russ", location: "", notes: "", isGcal: true },
+    { id: "gcal-23", date: "2026-06-12", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
+    { id: "gcal-24", date: "2026-06-13", startHour: 2.75, endHour: 4.75, title: "USA vs Paraguay (Group D)", cat: "personal", meet: "", attendees: "", location: "Los Angeles", notes: "", isGcal: true },
   ]);
   // Recurring events - from Gmail and manual
   const [recurringEvents, setRecurringEvents] = useState([]);
@@ -586,7 +489,7 @@ function AviroDashboard() {
   const [expandedFlows, setExpandedFlows] = useState({});
   const [copiedText, setCopiedText] = useState(null);
   const [calSubSection, setCalSubSection] = useState("day"); // day, notes
-  const [primaryTZ, setPrimaryTZ] = useState("GST"); // GST, BST, CEST - user's primary timezone
+  const [primaryTZ, setPrimaryTZ] = useState("GST"); // GST (UTC+4), BST (UTC+1 summer), CEST (UTC+2 summer)
 
   // ===== REVENUE STATE =====
   const [revenueSubSection, setRevenueSubSection] = useState("overview"); // overview, cubepay, gatewayrev, bettingrev
@@ -1770,7 +1673,7 @@ function AviroDashboard() {
               {HOURS.map(hour => {
                 const eventsThisHour = todayEvents.filter(e => e.startHour <= hour && e.endHour > hour);
                 const startsThisHour = todayEvents.filter(e => Math.floor(e.startHour) === hour);
-                const gst = toGST(hour), cet = toCET(hour);
+                const gst = toGST(hour), bst = toBST(hour), cet = toCEST(hour);
 
                 return (
                   <div key={hour}
@@ -1784,7 +1687,7 @@ function AviroDashboard() {
                     {(() => {
                       const tzVals = [
                         { key: "GST", time: fmt12(gst), color: "#f59e0b" },
-                        { key: "BST", time: fmt12(hour), color: "#3b82f6" },
+                        { key: "BST", time: fmt12(bst), color: "#3b82f6" },
                         { key: "CEST", time: fmt12(cet), color: "#22c55e" },
                       ];
                       const sorted = [...tzVals].sort((a, b) => (a.key === primaryTZ ? -1 : b.key === primaryTZ ? 1 : 0));
