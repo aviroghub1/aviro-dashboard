@@ -14,6 +14,9 @@
 [functions."clickup-tasks"]
   timeout = 15
 
+[functions."gcal-sync"]
+  timeout = 20
+
 [context.production.environment]
   AWS_LAMBDA_JS_RUNTIME = "nodejs18.x"
   NODE_VERSION = "18"
@@ -24,6 +27,11 @@
     Cache-Control = "no-cache, no-store, must-revalidate"
     Pragma = "no-cache"
     Expires = "0"
+
+[[redirects]]
+  from = "/api/gcal-sync"
+  to = "/.netlify/functions/gcal-sync"
+  status = 200
 
 [[redirects]]
   from = "/api/clickup-tasks"

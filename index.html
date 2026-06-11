@@ -326,6 +326,31 @@ function AviroDashboard() {
   // Google Calendar sync — events loaded from Supabase gcal_events row
   const [gcalSyncStatus, setGcalSyncStatus] = useState("idle");
   const [gcalLastSync, setGcalLastSync] = useState(null);
+  const [gcalIcsUrl, setGcalIcsUrl] = useState(""); // Private ICS URL from Google Calendar settings
+
+  // Manual Google Calendar sync — fetches ICS feed via Netlify proxy, updates Supabase + local state
+  const syncGoogleCalendar = useCallback(async () => {
+    if (!gcalIcsUrl) { alert("Set your Google Calendar ICS URL in Settings first"); return; }
+    setGcalSyncStatus("syncing");
+    try {
+      const res = await fetch("/api/gcal-sync?ics_url=" + encodeURIComponent(gcalIcsUrl));
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || "Sync failed: " + res.status); }
+      const data = await res.json();
+      if (data.ok && data.events) {
+        setCalEvents(prev => {
+          const nonGcal = prev.filter(e => !e.isGcal);
+          return [...nonGcal, ...data.events];
+        });
+        setGcalLastSync(new Date().toLocaleString());
+        setGcalSyncStatus("synced");
+        console.log("Google Calendar synced: " + data.count + " events (" + data.dateRange + "), Supabase: " + (data.supabaseWritten ? "written" : "skipped"));
+      } else { throw new Error("No events returned"); }
+    } catch (e) {
+      console.error("Google Calendar sync failed:", e);
+      setGcalSyncStatus("error");
+      setTimeout(() => setGcalSyncStatus(gcalLastSync ? "synced" : "idle"), 3000);
+    }
+  }, [gcalIcsUrl, gcalLastSync]);
 
   // Google Calendar events are loaded inside the init load() function below (not a separate effect)
   // to avoid a hoisting issue where hasLoaded is undefined in the dependency array.
@@ -494,12 +519,12 @@ function AviroDashboard() {
     corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
     entityIntraAgreements, entityCorpAgreements,
     bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
-    supabaseUrl, supabaseKey, clickupToken,
+    supabaseUrl, supabaseKey, clickupToken, gcalIcsUrl,
     cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
     fxRates, fxBaseCurrency, fxLastUpdated,
     pmPipeline, pmRoadmap, pmClients,
     crmClients,
-  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, crmClients]);
+  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, gcalIcsUrl, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, crmClients]);
 
   const saveState = useCallback(async () => {
     if (!hasLoaded) return; // NEVER save before data has loaded
@@ -578,6 +603,7 @@ function AviroDashboard() {
     if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
     if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
     if (s.clickupToken) setClickupToken(s.clickupToken);
+    if (s.gcalIcsUrl) setGcalIcsUrl(s.gcalIcsUrl);
     if (s.cubePayDeals) setCubePayDeals(s.cubePayDeals);
     if (s.cubePayMonthlyData) setCubePayMonthlyData(s.cubePayMonthlyData);
     if (s.cubePayOperatingCosts) setCubePayOperatingCosts(s.cubePayOperatingCosts);
@@ -1302,11 +1328,27 @@ function AviroDashboard() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>David Calendar</h2>
+            {gcalSyncStatus === "syncing" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.3)", color: "#4285f4", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
+                <div style={{ width: 6, height: 6, borderRadius: 3, background: "#4285f4", animation: "pulse 1s infinite" }} />
+                Syncing Google Calendar...
+              </div>
+            )}
+            {gcalSyncStatus === "error" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
+                Sync failed — check ICS URL in Settings
+              </div>
+            )}
             {gcalSyncStatus === "synced" && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.4)", color: "#4285f4", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
                 <div style={{ width: 6, height: 6, borderRadius: 3, background: "#4285f4" }} />
-                Google Calendar Synced{gcalLastSync ? ` · ${gcalLastSync}` : ""}
+                Google Calendar{gcalLastSync ? ` · ${gcalLastSync}` : ""}
               </div>
+            )}
+            {gcalIcsUrl && (
+              <button onClick={syncGoogleCalendar} disabled={gcalSyncStatus === "syncing"} style={{ background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.4)", color: "#4285f4", borderRadius: 6, padding: "4px 10px", cursor: gcalSyncStatus === "syncing" ? "wait" : "pointer", fontSize: 10, fontWeight: 700 }}>
+                ↻ Sync Now
+              </button>
             )}
           </div>
           <div style={{ display: "flex", gap: 6 }}>
@@ -6494,6 +6536,41 @@ function AviroDashboard() {
               <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "#ec4899" }}>{clickupSophieTasks.length}</div>
                 <div style={{ fontSize: 10, color: c.textMuted }}>Sophie's Open Tasks</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Google Calendar */}
+        <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 24, marginBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: c.text }}>Google Calendar</div>
+              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>Sync events from your Google Calendar ICS feed</div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {gcalSyncStatus === "syncing" && <span style={{ fontSize: 11, color: c.accent }}>Syncing...</span>}
+              {gcalSyncStatus === "synced" && gcalLastSync && <span style={{ fontSize: 10, color: c.success }}>Last synced: {gcalLastSync}</span>}
+              {gcalIcsUrl && <button onClick={syncGoogleCalendar} disabled={gcalSyncStatus === "syncing"} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 6, border: "none", background: "#4285f4", color: "#fff", cursor: gcalSyncStatus === "syncing" ? "wait" : "pointer", fontWeight: 600 }}>Sync Now</button>}
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle5}>Google Calendar ICS URL</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="password" value={gcalIcsUrl} onChange={e => setGcalIcsUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/..." style={{ ...inputStyle5, flex: 1 }} />
+              {gcalIcsUrl && <span style={{ fontSize: 10, color: c.success, fontWeight: 600 }}>Set</span>}
+            </div>
+            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>Google Calendar → Settings → your calendar → "Secret address in iCal format". Events sync to Supabase and show on your calendar.</div>
+          </div>
+          {gcalIcsUrl && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#4285f4" }}>{calEvents.filter(e => e.isGcal).length}</div>
+                <div style={{ fontSize: 10, color: c.textMuted }}>Calendar Events Loaded</div>
+              </div>
+              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#4285f4" }}>{calEvents.filter(e => e.isGcal && e.meet).length}</div>
+                <div style={{ fontSize: 10, color: c.textMuted }}>With Meet Links</div>
               </div>
             </div>
           )}
