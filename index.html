@@ -283,38 +283,8 @@ function AviroDashboard() {
   const [gcalSyncStatus, setGcalSyncStatus] = useState("idle");
   const [gcalLastSync, setGcalLastSync] = useState(null);
 
-  // Load Google Calendar events from Supabase after main state loads, with fallback to defaults
-  useEffect(() => {
-    if (!hasLoaded) return;
-    const loadGcal = async () => {
-      let gcalEvts = null;
-      try {
-        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.gcal_events&select=state,updated_at", {
-          headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY },
-        });
-        if (res.ok) {
-          const rows = await res.json();
-          if (rows.length > 0 && rows[0].state && rows[0].state.events && rows[0].state.events.length > 0) {
-            gcalEvts = rows[0].state.events;
-            setGcalLastSync(rows[0].updated_at ? new Date(rows[0].updated_at).toLocaleString() : "recently");
-            console.log("Loaded " + gcalEvts.length + " Google Calendar events from Supabase");
-          }
-        }
-      } catch (e) { console.warn("Google Calendar Supabase load failed, using defaults:", e); }
-      // Fall back to hardcoded defaults if Supabase row doesn't exist yet
-      if (!gcalEvts) {
-        gcalEvts = GCAL_DEFAULT_EVENTS;
-        setGcalLastSync("defaults (scheduled sync pending)");
-        console.log("Using " + gcalEvts.length + " default Google Calendar events");
-      }
-      setCalEvents(prev => {
-        const nonGcal = prev.filter(e => !e.isGcal);
-        return [...nonGcal, ...gcalEvts];
-      });
-      setGcalSyncStatus("synced");
-    };
-    loadGcal();
-  }, [hasLoaded]);
+  // Google Calendar events are loaded inside the init load() function below (not a separate effect)
+  // to avoid a hoisting issue where hasLoaded is undefined in the dependency array.
 
   // Quick jobs
   const [quickJobs, setQuickJobs] = useState([]);
@@ -474,7 +444,7 @@ function AviroDashboard() {
   const lastSyncedRef = useRef(null); // track when we last loaded/saved — ref to avoid re-render loops
 
   const buildState = useCallback(() => ({
-    calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
+    calEvents: calEvents.filter(e => !e.isGcal), quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
     signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems,
     calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
     corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
@@ -612,6 +582,32 @@ function AviroDashboard() {
           }
         } catch (e) { console.warn("localStorage load also failed:", e); }
       }
+      // Load Google Calendar events — from Supabase gcal_events row, or hardcoded defaults
+      let gcalEvts = null;
+      try {
+        const gcalRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.gcal_events&select=state,updated_at", {
+          headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY },
+        });
+        if (gcalRes.ok) {
+          const gcalRows = await gcalRes.json();
+          if (gcalRows.length > 0 && gcalRows[0].state && gcalRows[0].state.events && gcalRows[0].state.events.length > 0) {
+            gcalEvts = gcalRows[0].state.events;
+            setGcalLastSync(gcalRows[0].updated_at ? new Date(gcalRows[0].updated_at).toLocaleString() : "recently");
+            console.log("Loaded " + gcalEvts.length + " Google Calendar events from Supabase");
+          }
+        }
+      } catch (e) { console.warn("Google Calendar Supabase load failed, using defaults:", e); }
+      if (!gcalEvts) {
+        gcalEvts = GCAL_DEFAULT_EVENTS;
+        setGcalLastSync("defaults (scheduled sync pending)");
+        console.log("Using " + gcalEvts.length + " default Google Calendar events");
+      }
+      setCalEvents(prev => {
+        const nonGcal = prev.filter(e => !e.isGcal);
+        return [...nonGcal, ...gcalEvts];
+      });
+      setGcalSyncStatus("synced");
+
       setHasLoaded(true);
     };
     load();
