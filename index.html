@@ -32,73 +32,9 @@ const ENTITY_TYPES = ["Gaming License", "Payment Agent", "Technology Company", "
 
 // Intra-company agreements are now managed via editable state (entityIntraAgreements)
 
-// ClickUp tasks — refreshed 2026-06-09 from live API. Overridden by live fetch when ClickUp token is set in Settings.
-const CLICKUP_DAVID_TASKS = [
-  { id: "86c9841fu", name: "Rebuild Fund Log", priority: "normal", status: "to do", dueDate: "2026-07-02", space: "List", url: "https://app.clickup.com/t/86c9841fu" },
-  { id: "86c98400h", name: "Suntera Onboarding", priority: "normal", status: "in progress", dueDate: "2026-07-02", space: "List", url: "https://app.clickup.com/t/86c98400h" },
-  { id: "86c8h2ezv", name: "Get bookiebase/metabase set up for Rocket Bet, Luna and Turbo", priority: "high", status: "in progress", dueDate: "2026-07-02", space: "Finance Team", url: "https://app.clickup.com/t/86c8h2ezv" },
-  { id: "86c8h2efq", name: "Change address on all banks to my Mum and Dad", priority: "high", status: "backlog", dueDate: "2026-06-22", space: "Personal Tasks", url: "https://app.clickup.com/t/86c8h2efq" },
-  { id: "86ca5tuxx", name: "Write Proposal for Bet Brave", priority: "normal", status: "backlog", dueDate: "2026-06-18", space: "Client Specific Tasks", url: "https://app.clickup.com/t/86ca5tuxx" },
-  { id: "86c7bqgt6", name: "Design Full Money Flow and Accountancy Structure", priority: "high", status: "in progress finishing", dueDate: "2026-06-15", space: "List", url: "https://app.clickup.com/t/86c7bqgt6" },
-  { id: "86c9ewzjz", name: "Open 1Password Manager and change passwords", priority: "normal", status: "in progress", dueDate: "2026-06-14", space: "Personal Tasks", url: "https://app.clickup.com/t/86c9ewzjz" },
-  { id: "86ca5tt6m", name: "Write Proposal for CS2Skin", priority: "normal", status: "backlog", dueDate: "2026-06-12", space: "Client Specific Tasks", url: "https://app.clickup.com/t/86ca5tt6m" },
-  { id: "86c9tjurb", name: "Banned Countries", priority: "high", status: "in review", dueDate: "2026-06-12", space: "Turbo Launch", url: "https://app.clickup.com/t/86c9tjurb" },
-  { id: "86c9tjuq7", name: "Confirm Registration Flow", priority: "high", status: "in progress", dueDate: "2026-06-12", space: "Turbo Launch", url: "https://app.clickup.com/t/86c9tjuq7" },
-  { id: "86c9tjub5", name: "Domain Hosting / Switching", priority: "high", status: "in review", dueDate: "2026-06-12", space: "Turbo Launch", url: "https://app.clickup.com/t/86c9tjub5" },
-  { id: "86c9tju5e", name: "Withdrawal Flow", priority: "normal", status: "in progress", dueDate: "2026-06-12", space: "Turbo Launch", url: "https://app.clickup.com/t/86c9tju5e" },
-  { id: "86c9tjtuw", name: "VIP / Bonus Scheme", priority: "high", status: "in progress", dueDate: "2026-06-12", space: "Turbo Launch", url: "https://app.clickup.com/t/86c9tjtuw" },
-  { id: "86c9e7cb6", name: "Complete EM share Transfer", priority: "normal", status: "in progress", dueDate: "2026-06-12", space: "Corporate Structure", url: "https://app.clickup.com/t/86c9e7cb6" },
-  { id: "86c7g1hjf", name: "Handling of player data", priority: "normal", status: "in progress", dueDate: "2026-06-12", space: "Turbo Launch", url: "https://app.clickup.com/t/86c7g1hjf" },
-  { id: "86c7dfnab", name: "Get Team Set Up fully for Turbo Slots", priority: "urgent", status: "in progress", dueDate: "2026-06-12", space: "Finance Team", url: "https://app.clickup.com/t/86c7dfnab" },
-  { id: "86c79rch8", name: "Finalise GG Poker Contract", priority: "high", status: "not started", dueDate: "2026-06-12", space: "GG Replace Praxis Project", url: "https://app.clickup.com/t/86c79rch8" },
-  { id: "86c9yccxx", name: "Write proposal for IQPlay", priority: "normal", status: "in progress", dueDate: "2026-06-10", space: "Client Specific Tasks", url: "https://app.clickup.com/t/86c9yccxx" },
-  { id: "86ca5tu85", name: "Write Proposal for WPT", priority: "normal", status: "backlog", dueDate: "2026-06-09", space: "Client Specific Tasks", url: "https://app.clickup.com/t/86ca5tu85" },
-  { id: "86ca5tr3x", name: "Open Up Coeus Overchain Account", priority: "high", status: "in progress", dueDate: "2026-06-08", space: "List", url: "https://app.clickup.com/t/86ca5tr3x" },
-  { id: "86c9ycd3x", name: "Write proposal for BC Game", priority: "normal", status: "sign off", dueDate: "2026-05-25", space: "Client Specific Tasks", url: "https://app.clickup.com/t/86c9ycd3x" },
-  { id: "86c81mg89", name: "Design Corporate Flow showing how revenue moves", priority: "high", status: "sign off", dueDate: "2026-04-09", space: "Gateway.io Set-UP", url: "https://app.clickup.com/t/86c81mg89" },
-  { id: "86c9wph36", name: "Whetstone house repair quote to agree", priority: "normal", status: "in progress", dueDate: "", space: "Personal Tasks", url: "https://app.clickup.com/t/86c9wph36" },
-  { id: "86c98cmfc", name: "Pylon Pay", priority: "normal", status: "in progress", dueDate: "", space: "New PSPs / Methods", url: "https://app.clickup.com/t/86c98cmfc" },
-  { id: "86c983yqr", name: "Build Corporate Matrix.", priority: "urgent", status: "in progress", dueDate: "", space: "List", url: "https://app.clickup.com/t/86c983yqr" },
-  { id: "86c96bw79", name: "Final Approval for Payments system Cube Pay & Fomo", priority: "normal", status: "in progress", dueDate: "", space: "Turkey Jobs", url: "https://app.clickup.com/t/86c96bw79" },
-  { id: "86c96bw76", name: "Handling of player data", priority: "normal", status: "in progress", dueDate: "", space: "Turkey Jobs", url: "https://app.clickup.com/t/86c96bw76" },
-  { id: "86c96bw75", name: "Fill out sheet with exact Luna Bonus structure", priority: "high", status: "in progress", dueDate: "", space: "Turkey Jobs", url: "https://app.clickup.com/t/86c96bw75" },
-  { id: "86c8xg55r", name: "Off board domains to add to Nevis", priority: "normal", status: "not started", dueDate: "", space: "Licenses", url: "https://app.clickup.com/t/86c8xg55r" },
-  { id: "86c8h2erk", name: "Golden Visa Process", priority: "normal", status: "backlog", dueDate: "", space: "Personal Tasks", url: "https://app.clickup.com/t/86c8h2erk" },
-  { id: "86c81mgr3", name: "Set Russ up to do Bookie in a Box", priority: "high", status: "to do", dueDate: "", space: "List", url: "https://app.clickup.com/t/86c81mgr3" },
-  { id: "86c7hjkw8", name: "Create a flow chart to show Kylro Money UX vision", priority: "normal", status: "review", dueDate: "", space: "Klyro Money", url: "https://app.clickup.com/t/86c7hjkw8" },
-  { id: "86c7h07z6", name: "Kylro Money and Gateway.io Asset Design", priority: "high", status: "in progress", dueDate: "", space: "Klyro Money", url: "https://app.clickup.com/t/86c7h07z6" },
-  { id: "86c7gyn5f", name: "Agree and finalise deal with RY", priority: "normal", status: "sign off", dueDate: "", space: "List", url: "https://app.clickup.com/t/86c7gyn5f" },
-  { id: "86c7g1gkv", name: "Final Approval for Payments system Cube Pay & Fomo", priority: "normal", status: "in review", dueDate: "", space: "Turbo Launch", url: "https://app.clickup.com/t/86c7g1gkv" },
-  { id: "86c7bnpez", name: "Open Account with Frontier Pay", priority: "urgent", status: "review", dueDate: "", space: "Bank Applications", url: "https://app.clickup.com/t/86c7bnpez" },
-  { id: "86c7behz3", name: "Create Website Klyro Money", priority: "low", status: "in progress", dueDate: "", space: "Klyro Money", url: "https://app.clickup.com/t/86c7behz3" },
-  { id: "86c7b6dme", name: "Create Gateway.io Website & Deck", priority: "high", status: "in progress", dueDate: "", space: "Gateway.io Set-UP", url: "https://app.clickup.com/t/86c7b6dme" },
-  { id: "86c7a725j", name: "On Shore Plan", priority: "normal", status: "blocked to start", dueDate: "", space: "GG Replace Praxis Project", url: "https://app.clickup.com/t/86c7a725j" },
-  { id: "86c96bw72", name: "Luna Figma Design", priority: "high", status: "sign off", dueDate: "2026-02-27", space: "Turkey Jobs", url: "https://app.clickup.com/t/86c96bw72" },
-  { id: "86c7eg2fw", name: "Run EV sims on the Onyx Bet Players", priority: "normal", status: "sign off", dueDate: "2026-01-14", space: "List", url: "https://app.clickup.com/t/86c7eg2fw" },
-  { id: "86c8k1b8h", name: "Cube Pay Xoala Open Banking Terminal", priority: "normal", status: "in progress started", dueDate: "", space: "List", url: "https://app.clickup.com/t/86c8k1b8h" },
-];
+// ClickUp tasks — fully live from API. Set your ClickUp API token in Settings to see tasks.
 
-const CLICKUP_SOPHIE_TASKS = [
-  { id: "86c8h2ezv", name: "Get bookiebase/metabase set up for Rocket Bet, Luna and Turbo", priority: "high", status: "in progress", dueDate: "2026-07-02", space: "Finance Team", url: "https://app.clickup.com/t/86c8h2ezv" },
-  { id: "86c9e7cb6", name: "Complete EM share Transfer", priority: "normal", status: "in progress", dueDate: "2026-06-12", space: "Corporate Structure", url: "https://app.clickup.com/t/86c9e7cb6" },
-  { id: "86c79rch8", name: "Finalise GG Poker Contract", priority: "high", status: "not started", dueDate: "2026-06-12", space: "GG Replace Praxis Project", url: "https://app.clickup.com/t/86c79rch8" },
-  { id: "86c9wp7f7", name: "May invoice and employee breakdown", priority: "normal", status: "employees", dueDate: "2026-05-21", space: "Accounting for India team", url: "https://app.clickup.com/t/86c9wp7f7" },
-  { id: "86c8uwcn9", name: "Equals application. Onboard with Areoncorp", priority: "normal", status: "in progress", dueDate: "2026-04-15", space: "Bank Applications", url: "https://app.clickup.com/t/86c8uwcn9" },
-  { id: "86c93trr4", name: "Onefinance refresh kyc docs", priority: "normal", status: "in progress", dueDate: "2026-04-05", space: "Bank Applications", url: "https://app.clickup.com/t/86c93trr4" },
-  { id: "86c9xq1th", name: "P8swiss onboarding", priority: "normal", status: "review", dueDate: "", space: "Bank Applications", url: "https://app.clickup.com/t/86c9xq1th" },
-  { id: "86c9xpvtb", name: "Open account with Space Pay", priority: "normal", status: "review", dueDate: "", space: "Bank Applications", url: "https://app.clickup.com/t/86c9xpvtb" },
-  { id: "86c9wpkh8", name: "Renewal for NEXGEN", priority: "normal", status: "in progress", dueDate: "", space: "Licenses", url: "https://app.clickup.com/t/86c9wpkh8" },
-  { id: "86c9wpkf3", name: "Renewal for Astor", priority: "normal", status: "in progress", dueDate: "", space: "Licenses", url: "https://app.clickup.com/t/86c9wpkf3" },
-  { id: "86c9tju1t", name: "3rd Party Agreements", priority: "normal", status: "in progress", dueDate: "", space: "Turbo Launch", url: "https://app.clickup.com/t/86c9tju1t" },
-  { id: "86c99gfbm", name: "Add domain proofs and seals to one folder", priority: "normal", status: "not started", dueDate: "", space: "Licenses", url: "https://app.clickup.com/t/86c99gfbm" },
-  { id: "86c98cmfc", name: "Pylon Pay", priority: "normal", status: "in progress", dueDate: "", space: "New PSPs / Methods", url: "https://app.clickup.com/t/86c98cmfc" },
-  { id: "86c983yqr", name: "Build Corporate Matrix.", priority: "urgent", status: "in progress", dueDate: "", space: "List", url: "https://app.clickup.com/t/86c983yqr" },
-  { id: "86c8h2erk", name: "Golden Visa Process", priority: "normal", status: "backlog", dueDate: "", space: "Personal Tasks", url: "https://app.clickup.com/t/86c8h2erk" },
-  { id: "86c7bnpez", name: "Open Account with Frontier Pay", priority: "urgent", status: "review", dueDate: "", space: "Bank Applications", url: "https://app.clickup.com/t/86c7bnpez" },
-  { id: "86c7bjgja", name: "Anjouan - Ultima Entertainment", priority: "urgent", status: "work in progress", dueDate: "", space: "Licenses", url: "https://app.clickup.com/t/86c7bjgja" },
-  { id: "86c7hbm7w", name: "December invoice and employee breakdown", priority: "normal", status: "employees", dueDate: "", space: "Accounting for India team", url: "https://app.clickup.com/t/86c7hbm7w" },
-  { id: "86c7hbkzn", name: "November invoice and employee breakdown", priority: "normal", status: "employees", dueDate: "", space: "Accounting for India team", url: "https://app.clickup.com/t/86c7hbkzn" },
-];
+
 
 const GATEWAY_CLIENTS = [
   { name: "GG Poker", status: "active", statusColor: "#22c55e" },
@@ -1273,7 +1209,7 @@ function AviroDashboard() {
   };
 
   const signalTasks = [
-    ...(clickupDavidTasks.length > 0 ? clickupDavidTasks : CLICKUP_DAVID_TASKS).filter(t => t.priority === "urgent" || t.priority === "high" || (t.dueDate && t.dueDate <= new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10))).map(t => ({ ...t, source: "clickup" })),
+    ...clickupDavidTasks.filter(t => t.priority === "urgent" || t.priority === "high" || (t.dueDate && t.dueDate <= new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10))).map(t => ({ ...t, source: "clickup" })),
     ...quickJobs.filter(j => j.inSignal && !j.done).map(j => ({ id: j.id, name: j.text, priority: "normal", status: "quick job", source: "quickjob" })),
   ];
 
@@ -2066,7 +2002,7 @@ function AviroDashboard() {
 
   // ===== SIGNAL TASKS =====
   // All ClickUp tasks (for left panel)
-  const allClickUpTasks = (clickupDavidTasks.length > 0 ? clickupDavidTasks : CLICKUP_DAVID_TASKS).filter(t => t.status !== "completed" && t.status !== "finished").map(t => ({ ...t, source: "clickup" }));
+  const allClickUpTasks = clickupDavidTasks.filter(t => t.status !== "completed" && t.status !== "finished").map(t => ({ ...t, source: "clickup" }));
   const quickJobSignal = quickJobs.filter(j => j.inSignal && !j.done).map(j => ({ id: j.id, name: j.text, priority: "normal", status: "quick job", source: "quickjob", space: CAL_COLORS[j.cat]?.label || "Aviro", dueDate: null, url: null }));
 
   // Auto-add quick jobs marked as signal
@@ -2323,6 +2259,7 @@ function AviroDashboard() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: c.text }}>ClickUp Tasks ({filteredClickUp.length})</span>
                   {clickupDavidTasks.length > 0 && <span style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, background: "rgba(34,197,94,0.1)", padding: "2px 6px", borderRadius: 4 }}>LIVE</span>}
+                  {!clickupToken && <span style={{ fontSize: 9, color: c.textMuted }}>Set ClickUp token in Settings</span>}
                   {clickupLoading && <span style={{ fontSize: 9, color: c.accent }}>Refreshing...</span>}
                   {clickupToken && <button onClick={() => fetchClickUpTasks(clickupToken)} disabled={clickupLoading} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted, cursor: "pointer" }}>↻</button>}
                 </div>
@@ -2432,7 +2369,7 @@ function AviroDashboard() {
         <h3 style={{ fontSize: 13, fontWeight: 700, color: c.textSecondary, margin: 0, textTransform: "uppercase", letterSpacing: "0.05em" }}>ClickUp Tasks</h3>
         {clickupSophieTasks.length > 0 && <span style={{ fontSize: 9, color: c.success, fontWeight: 600 }}>LIVE{clickupLastFetched ? ` · ${clickupLastFetched}` : ""}</span>}
       </div>
-      {(clickupSophieTasks.length > 0 ? clickupSophieTasks.filter(t => t.status !== "completed" && t.status !== "finished") : CLICKUP_SOPHIE_TASKS).map(task => (
+      {clickupSophieTasks.filter(t => t.status !== "completed" && t.status !== "finished").map(task => (
         <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 12, background: c.card, border: `1px solid ${c.border}`, borderRadius: 8, padding: "10px 16px", marginBottom: 4 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, color: c.text, fontWeight: 500 }}>{task.name}</div>
