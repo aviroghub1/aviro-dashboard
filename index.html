@@ -614,6 +614,37 @@ function AviroDashboard() {
       });
       setGcalSyncStatus("synced");
 
+      // Load cached ClickUp tasks from Supabase (live fetch will overlay later if token is set)
+      try {
+        const [cuDRes, cuSRes] = await Promise.all([
+          fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.clickup_david_tasks&select=state,updated_at", {
+            headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY },
+          }),
+          fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.clickup_sophie_tasks&select=state,updated_at", {
+            headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY },
+          }),
+        ]);
+        let cachedCount = 0;
+        if (cuDRes.ok) {
+          const cuDRows = await cuDRes.json();
+          if (cuDRows.length > 0 && cuDRows[0].state && cuDRows[0].state.tasks && cuDRows[0].state.tasks.length > 0) {
+            setClickupDavidTasks(cuDRows[0].state.tasks);
+            cachedCount += cuDRows[0].state.tasks.length;
+          }
+        }
+        if (cuSRes.ok) {
+          const cuSRows = await cuSRes.json();
+          if (cuSRows.length > 0 && cuSRows[0].state && cuSRows[0].state.tasks && cuSRows[0].state.tasks.length > 0) {
+            setClickupSophieTasks(cuSRows[0].state.tasks);
+            cachedCount += cuSRows[0].state.tasks.length;
+          }
+        }
+        if (cachedCount > 0) {
+          setClickupLastFetched("cached");
+          console.log("Loaded " + cachedCount + " cached ClickUp tasks from Supabase");
+        }
+      } catch (e) { console.warn("ClickUp Supabase cache load failed:", e); }
+
       setHasLoaded(true);
     };
     load();
