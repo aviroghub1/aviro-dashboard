@@ -10,14 +10,18 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:#1a1a2e}
-::-webkit-scrollbar-thumb{background:#4a4a6a;border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:#6a6a8a}
+body{background:#0c0c14;color:#e2e8f0;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+::selection{background:rgba(129,140,248,0.25);color:#fff}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(100,100,140,0.3);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(100,100,140,0.5)}
+input,select,textarea,button{font-family:inherit}
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
 </style>
 </head>
 <body>
@@ -37,17 +41,17 @@ const ENTITY_TYPES = ["Gaming License", "Payment Agent", "Technology Company", "
 
 
 const GATEWAY_CLIENTS = [
-  { name: "GG Poker", status: "active", statusColor: "#22c55e" },
-  { name: "Elite Bet", status: "active", statusColor: "#22c55e" },
-  { name: "Rocket Bet", status: "active", statusColor: "#22c55e" },
-  { name: "Bet-40", status: "active", statusColor: "#22c55e" },
-  { name: "Puntervips.io (TEC)", status: "active", statusColor: "#22c55e" },
-  { name: "Shark Casino", status: "onboarding", statusColor: "#f59e0b" },
-  { name: "Luna Bet", status: "onboarding", statusColor: "#f59e0b" },
-  { name: "Ultima Markets", status: "onboarding", statusColor: "#f59e0b" },
-  { name: "UKingBet", status: "onboarding", statusColor: "#f59e0b" },
-  { name: "ACR Poker", status: "onboarding", statusColor: "#f59e0b" },
-  { name: "Yeet", status: "onboarding", statusColor: "#f59e0b" },
+  { name: "GG Poker", status: "active", statusColor: "#34d399" },
+  { name: "Elite Bet", status: "active", statusColor: "#34d399" },
+  { name: "Rocket Bet", status: "active", statusColor: "#34d399" },
+  { name: "Bet-40", status: "active", statusColor: "#34d399" },
+  { name: "Puntervips.io (TEC)", status: "active", statusColor: "#34d399" },
+  { name: "Shark Casino", status: "onboarding", statusColor: "#fbbf24" },
+  { name: "Luna Bet", status: "onboarding", statusColor: "#fbbf24" },
+  { name: "Ultima Markets", status: "onboarding", statusColor: "#fbbf24" },
+  { name: "UKingBet", status: "onboarding", statusColor: "#fbbf24" },
+  { name: "ACR Poker", status: "onboarding", statusColor: "#fbbf24" },
+  { name: "Yeet", status: "onboarding", statusColor: "#fbbf24" },
 ];
 
 // Metabase connection configs — keyed by client name (matched case-insensitive)
@@ -72,21 +76,21 @@ const INTEGRATION_ROADMAP = [
 
 // COLOR CODING: green=Gateway, blue=Pluto, yellow=Personal, red=Aviro
 const CAL_COLORS = {
-  gateway: { bg: "rgba(34,197,94,0.15)", border: "rgba(34,197,94,0.5)", text: "#22c55e", label: "Gateway" },
-  pluto: { bg: "rgba(59,130,246,0.15)", border: "rgba(59,130,246,0.5)", text: "#3b82f6", label: "Pluto" },
-  personal: { bg: "rgba(234,179,8,0.15)", border: "rgba(234,179,8,0.5)", text: "#eab308", label: "Personal" },
-  aviro: { bg: "rgba(239,68,68,0.15)", border: "rgba(239,68,68,0.5)", text: "#ef4444", label: "Aviro" },
-  meeting: { bg: "rgba(139,92,246,0.15)", border: "rgba(139,92,246,0.5)", text: "#8b5cf6", label: "Meeting" },
+  gateway: { bg: "rgba(52,211,153,0.1)", border: "rgba(52,211,153,0.35)", text: "#34d399", label: "Gateway" },
+  pluto: { bg: "rgba(96,165,250,0.1)", border: "rgba(96,165,250,0.35)", text: "#60a5fa", label: "Pluto" },
+  personal: { bg: "rgba(251,191,36,0.1)", border: "rgba(251,191,36,0.35)", text: "#fbbf24", label: "Personal" },
+  aviro: { bg: "rgba(248,113,113,0.1)", border: "rgba(248,113,113,0.35)", text: "#f87171", label: "Aviro" },
+  meeting: { bg: "rgba(139,92,246,0.15)", border: "rgba(139,92,246,0.5)", text: "#a78bfa", label: "Meeting" },
   motion: { bg: "rgba(6,182,212,0.15)", border: "rgba(6,182,212,0.5)", text: "#06b6d4", label: "Motion" },
 };
 
 const c = {
-  bg: "#0a0a0f", surface: "#12121a", surfaceHover: "#1a1a26", card: "#16161f", cardHover: "#1e1e2a",
-  border: "#2a2a3a", borderLight: "#3a3a4a", text: "#e4e4ed", textSecondary: "#8888a0", textMuted: "#5a5a72",
-  accent: "#6366f1", accentDim: "#4f46e5", accentBg: "rgba(99,102,241,0.1)",
-  urgent: "#ef4444", urgentBg: "rgba(239,68,68,0.1)", high: "#f59e0b", highBg: "rgba(245,158,11,0.1)",
-  normal: "#6366f1", normalBg: "rgba(99,102,241,0.1)", success: "#22c55e", successBg: "rgba(34,197,94,0.1)",
-  warning: "#f59e0b", warningBg: "rgba(245,158,11,0.1)", danger: "#ef4444", dangerBg: "rgba(239,68,68,0.1)", white: "#ffffff",
+  bg: "#0c0c14", surface: "#141420", surfaceHover: "#1c1c2c", card: "#181824", cardHover: "#20202e",
+  border: "#232336", borderLight: "#2e2e44", text: "#e8e8f2", textSecondary: "#9494ae", textMuted: "#62627a",
+  accent: "#818cf8", accentDim: "#818cf8", accentBg: "rgba(129,140,248,0.08)",
+  urgent: "#f87171", urgentBg: "rgba(248,113,113,0.08)", high: "#fbbf24", highBg: "rgba(251,191,36,0.08)",
+  normal: "#818cf8", normalBg: "rgba(129,140,248,0.08)", success: "#34d399", successBg: "rgba(52,211,153,0.08)",
+  warning: "#fbbf24", warningBg: "rgba(251,191,36,0.08)", danger: "#f87171", dangerBg: "rgba(248,113,113,0.08)", white: "#ffffff",
 };
 
 const Icon = ({ type, size = 16 }) => {
@@ -120,7 +124,7 @@ const Icon = ({ type, size = 16 }) => {
 };
 
 const PriorityBadge = ({ priority }) => {
-  const m = { urgent: { bg: c.urgentBg, co: c.urgent, bd: "rgba(239,68,68,0.3)", l: "URGENT" }, high: { bg: c.highBg, co: c.high, bd: "rgba(245,158,11,0.3)", l: "HIGH" }, normal: { bg: c.normalBg, co: c.normal, bd: "rgba(99,102,241,0.3)", l: "NORMAL" }, low: { bg: "rgba(107,114,128,0.1)", co: "#6b7280", bd: "rgba(107,114,128,0.3)", l: "LOW" } };
+  const m = { urgent: { bg: c.urgentBg, co: c.urgent, bd: "rgba(248,113,113,0.2)", l: "URGENT" }, high: { bg: c.highBg, co: c.high, bd: "rgba(245,158,11,0.3)", l: "HIGH" }, normal: { bg: c.normalBg, co: c.normal, bd: "rgba(129,140,248,0.2)", l: "NORMAL" }, low: { bg: "rgba(107,114,128,0.1)", co: "#6b7280", bd: "rgba(107,114,128,0.3)", l: "LOW" } };
   const p = m[priority] || m.normal;
   return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: p.bg, color: p.co, border: `1px solid ${p.bd}`, letterSpacing: "0.05em" }}>{p.l}</span>;
 };
@@ -235,14 +239,14 @@ function AviroDashboard() {
 
   // Full-day notes (banners)
   const [dayBanners, setDayBanners] = useState([
-    { id: "gb0", startDate: "2026-04-11", endDate: "2026-04-23", text: "Sophie in Jamaica", color: "#6366f1" },
-    { id: "gb1", startDate: "2026-04-11", endDate: "2026-04-20", text: "Wiseman's in Orlando", color: "#6366f1" },
-    { id: "gb2", startDate: "2026-04-24", endDate: "2026-04-26", text: "Billesley Manor Hotel & Spa", color: "#f59e0b" },
-    { id: "gb3", startDate: "2026-04-25", endDate: "2026-04-25", text: "Wedding in Midlands", color: "#f59e0b" },
-    { id: "gb4", startDate: "2026-04-26", endDate: "2026-05-01", text: "The Kensington Hotel", color: "#f59e0b" },
+    { id: "gb0", startDate: "2026-04-11", endDate: "2026-04-23", text: "Sophie in Jamaica", color: "#818cf8" },
+    { id: "gb1", startDate: "2026-04-11", endDate: "2026-04-20", text: "Wiseman's in Orlando", color: "#818cf8" },
+    { id: "gb2", startDate: "2026-04-24", endDate: "2026-04-26", text: "Billesley Manor Hotel & Spa", color: "#fbbf24" },
+    { id: "gb3", startDate: "2026-04-25", endDate: "2026-04-25", text: "Wedding in Midlands", color: "#fbbf24" },
+    { id: "gb4", startDate: "2026-04-26", endDate: "2026-05-01", text: "The Kensington Hotel", color: "#fbbf24" },
   ]);
   const [showAddBanner, setShowAddBanner] = useState(false);
-  const [newBanner, setNewBanner] = useState({ text: "", startDate: "", endDate: "", color: "#f59e0b" });
+  const [newBanner, setNewBanner] = useState({ text: "", startDate: "", endDate: "", color: "#fbbf24" });
 
   const [calNotes, setCalNotes] = useState([]);
   // Enhanced meeting creation form
@@ -1174,7 +1178,7 @@ function AviroDashboard() {
   const addDayBanner = () => {
     if (!newBanner.text.trim()) return;
     setDayBanners([...dayBanners, { id: `b${Date.now()}`, ...newBanner, startDate: newBanner.startDate || selDateStr, endDate: newBanner.endDate || selDateStr }]);
-    setNewBanner({ text: "", startDate: "", endDate: "", color: "#f59e0b" });
+    setNewBanner({ text: "", startDate: "", endDate: "", color: "#fbbf24" });
     setShowAddBanner(false);
   };
 
@@ -1294,26 +1298,26 @@ function AviroDashboard() {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>David Calendar</h2>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>David Calendar</h2>
             {gcalSyncStatus === "syncing" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.3)", color: "#4285f4", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
-                <div style={{ width: 6, height: 6, borderRadius: 3, background: "#4285f4", animation: "pulse 1s infinite" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.2)", color: "#60a5fa", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
+                <div style={{ width: 6, height: 6, borderRadius: 3, background: "#60a5fa", animation: "pulse 1s infinite" }} />
                 Syncing Google Calendar...
               </div>
             )}
             {gcalSyncStatus === "error" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
                 Sync failed — check ICS URL in Settings
               </div>
             )}
             {gcalSyncStatus === "synced" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.4)", color: "#4285f4", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
-                <div style={{ width: 6, height: 6, borderRadius: 3, background: "#4285f4" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
+                <div style={{ width: 6, height: 6, borderRadius: 3, background: "#60a5fa" }} />
                 Google Calendar{gcalLastSync ? ` · ${gcalLastSync}` : ""}
               </div>
             )}
             {gcalIcsUrl && (
-              <button onClick={syncGoogleCalendar} disabled={gcalSyncStatus === "syncing"} style={{ background: "rgba(66,133,244,0.1)", border: "1px solid rgba(66,133,244,0.4)", color: "#4285f4", borderRadius: 6, padding: "4px 10px", cursor: gcalSyncStatus === "syncing" ? "wait" : "pointer", fontSize: 10, fontWeight: 700 }}>
+              <button onClick={syncGoogleCalendar} disabled={gcalSyncStatus === "syncing"} style={{ background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa", borderRadius: 6, padding: "4px 10px", cursor: gcalSyncStatus === "syncing" ? "wait" : "pointer", fontSize: 10, fontWeight: 700 }}>
                 ↻ Sync Now
               </button>
             )}
@@ -1385,9 +1389,9 @@ function AviroDashboard() {
                   </select>
                 </div>
                 {[
-                  { key: "GST", label: "GST (Dubai)", time: liveTimeForZone(4), color: "#f59e0b" },
+                  { key: "GST", label: "GST (Dubai)", time: liveTimeForZone(4), color: "#fbbf24" },
                   { key: "BST", label: "BST (London)", time: liveTimeForZone(1), color: "#3b82f6" },
-                  { key: "CEST", label: "CEST (Europe)", time: liveTimeForZone(2), color: "#22c55e" },
+                  { key: "CEST", label: "CEST (Europe)", time: liveTimeForZone(2), color: "#34d399" },
                 ].map(tz => (
                   <div key={tz.label} style={{ display: "flex", alignItems: "center", gap: 6, opacity: tz.key === primaryTZ ? 1 : 0.6, padding: "3px 8px", borderRadius: 6, background: tz.key === primaryTZ ? `${tz.color}18` : "transparent", border: tz.key === primaryTZ ? `1px solid ${tz.color}40` : "1px solid transparent" }}>
                     <div style={{ width: 8, height: 8, borderRadius: 4, background: tz.color }} />
@@ -1603,8 +1607,8 @@ function AviroDashboard() {
 
             {/* Google Calendar sync status */}
             {gcalSyncStatus === "synced" && gcalLastSync && (
-              <div style={{ fontSize: 10, color: "#22c55e", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 3, background: "#22c55e", display: "inline-block" }} />
+              <div style={{ fontSize: 10, color: "#34d399", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: 3, background: "#34d399", display: "inline-block" }} />
                 Google Calendar synced · {gcalLastSync}
               </div>
             )}
@@ -1614,9 +1618,9 @@ function AviroDashboard() {
               {/* Timezone header row - primary TZ shown first & highlighted */}
               {(() => {
                 const tzCols = [
-                  { key: "GST", label: "GST", color: "#f59e0b" },
+                  { key: "GST", label: "GST", color: "#fbbf24" },
                   { key: "BST", label: "BST", color: "#3b82f6" },
-                  { key: "CEST", label: "CEST", color: "#22c55e" },
+                  { key: "CEST", label: "CEST", color: "#34d399" },
                 ];
                 const sorted = [...tzCols].sort((a, b) => (a.key === primaryTZ ? -1 : b.key === primaryTZ ? 1 : 0));
                 return (
@@ -1636,8 +1640,8 @@ function AviroDashboard() {
                 const gmtHour = now.getUTCHours() + now.getUTCMinutes() / 60;
                 const topPx = gmtHour * 52; // 52px per hour row
                 return <div style={{ position: "absolute", top: topPx, left: 0, right: 0, zIndex: 3, pointerEvents: "none", display: "flex", alignItems: "center" }}>
-                  <div style={{ width: 8, height: 8, borderRadius: 4, background: "#ef4444", marginLeft: -4, flexShrink: 0 }} />
-                  <div style={{ flex: 1, height: 2, background: "#ef4444" }} />
+                  <div style={{ width: 8, height: 8, borderRadius: 4, background: "#f87171", marginLeft: -4, flexShrink: 0 }} />
+                  <div style={{ flex: 1, height: 2, background: "#f87171" }} />
                 </div>;
               })()}
               {HOURS.map(hour => {
@@ -1656,9 +1660,9 @@ function AviroDashboard() {
                     }}>
                     {(() => {
                       const tzVals = [
-                        { key: "GST", time: fmt12(gst), color: "#f59e0b" },
+                        { key: "GST", time: fmt12(gst), color: "#fbbf24" },
                         { key: "BST", time: fmt12(bst), color: "#3b82f6" },
-                        { key: "CEST", time: fmt12(cet), color: "#22c55e" },
+                        { key: "CEST", time: fmt12(cet), color: "#34d399" },
                       ];
                       const sorted = [...tzVals].sort((a, b) => (a.key === primaryTZ ? -1 : b.key === primaryTZ ? 1 : 0));
                       return sorted.map(tz => (
@@ -1694,10 +1698,10 @@ function AviroDashboard() {
                                 </div>
                               </div>
                               <div style={{ display: "flex", gap: 4 }}>
-                                {ev.isGcal && <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: "rgba(66,133,244,0.15)", color: "#4285f4", border: "1px solid rgba(66,133,244,0.4)", fontWeight: 700, letterSpacing: "0.05em" }}>GCAL</span>}
+                                {ev.isGcal && <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: "rgba(66,133,244,0.15)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.25)", fontWeight: 700, letterSpacing: "0.05em" }}>GCAL</span>}
                                 {ev.calSource === "pluto" && <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: "rgba(99,102,241,0.15)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.4)", fontWeight: 700, letterSpacing: "0.05em" }}>PLUTO FIN</span>}
                                 <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: cc.bg, color: cc.text, border: `1px solid ${cc.border}`, fontWeight: 700 }}>{cc.label}</span>
-                                {ev.isRecurring && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: c.accentBg, color: c.accent, border: `1px solid rgba(99,102,241,0.3)`, fontWeight: 700 }}>RECURRING</span>}
+                                {ev.isRecurring && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: c.accentBg, color: c.accent, border: `1px solid rgba(129,140,248,0.2)`, fontWeight: 700 }}>RECURRING</span>}
                                 {existingNote && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: c.successBg, color: c.success, border: `1px solid rgba(34,197,94,0.3)`, fontWeight: 700 }}>NOTES</span>}
                               </div>
                             </div>
@@ -1709,15 +1713,15 @@ function AviroDashboard() {
                                   <span style={{ color: c.text }}>{(() => { const off = primaryTZ === "GST" ? 4 : primaryTZ === "CEST" ? 2 : 1; return `${fmtTime((ev.startHour + off) % 24)} - ${fmtTime((ev.endHour + off) % 24)} ${primaryTZ} (${fmtTime(ev.startHour)} - ${fmtTime(ev.endHour)} GMT)`; })()}</span>
                                   {ev.attendees && <><span style={{ color: c.textMuted, fontWeight: 600 }}>With</span><span style={{ color: c.text }}>{ev.attendees}</span></>}
                                   {ev.location && <><span style={{ color: c.textMuted, fontWeight: 600 }}>Location</span><span style={{ color: c.text }}>{ev.location}</span></>}
-                                  {ev.meet && <><span style={{ color: c.textMuted, fontWeight: 600 }}>Meeting</span><div style={{ display: "flex", alignItems: "center", gap: 8 }}><a href={ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`} target="_blank" rel="noopener noreferrer" style={{ color: ev.meet.includes("teams") ? "#5b5fc7" : ev.meet.includes("preply") ? "#f59e0b" : c.accent, textDecoration: "none", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }} onClick={e => e.stopPropagation()}>{ev.meet.includes("teams.microsoft") ? "📞 Join Teams Meeting" : ev.meet.includes("preply") ? "📖 Open Preply Lesson" : "📹 Join Google Meet"}</a><button onClick={e => { e.stopPropagation(); copyToClipboard(ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`); }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>{copiedText === (ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`) ? "Copied!" : "Copy Link"}</button></div></>}
+                                  {ev.meet && <><span style={{ color: c.textMuted, fontWeight: 600 }}>Meeting</span><div style={{ display: "flex", alignItems: "center", gap: 8 }}><a href={ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`} target="_blank" rel="noopener noreferrer" style={{ color: ev.meet.includes("teams") ? "#5b5fc7" : ev.meet.includes("preply") ? "#fbbf24" : c.accent, textDecoration: "none", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }} onClick={e => e.stopPropagation()}>{ev.meet.includes("teams.microsoft") ? "📞 Join Teams Meeting" : ev.meet.includes("preply") ? "📖 Open Preply Lesson" : "📹 Join Google Meet"}</a><button onClick={e => { e.stopPropagation(); copyToClipboard(ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`); }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>{copiedText === (ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`) ? "Copied!" : "Copy Link"}</button></div></>}
                                   <span style={{ color: c.textMuted, fontWeight: 600 }}>Category</span>
                                   <span style={{ color: cc.text }}>{cc.label}</span>
                                 </div>
                                 {/* Action buttons: Cancel event */}
                                 <div style={{ display: "flex", gap: 8, marginTop: 10, paddingTop: 8, borderTop: `1px solid ${cc.border}30` }}>
-                                  {ev.meet && <a href={ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ background: ev.meet.includes("teams") ? "rgba(91,95,199,0.15)" : ev.meet.includes("preply") ? "rgba(245,158,11,0.15)" : "rgba(6,182,212,0.15)", border: `1px solid ${ev.meet.includes("teams") ? "rgba(91,95,199,0.4)" : ev.meet.includes("preply") ? "rgba(245,158,11,0.4)" : "rgba(6,182,212,0.4)"}`, color: ev.meet.includes("teams") ? "#5b5fc7" : ev.meet.includes("preply") ? "#f59e0b" : "#06b6d4", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 700, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>{ev.meet.includes("teams") ? "📞 Join Teams" : ev.meet.includes("preply") ? "📖 Open Lesson" : "📹 Join Meet"}</a>}
+                                  {ev.meet && <a href={ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ background: ev.meet.includes("teams") ? "rgba(91,95,199,0.15)" : ev.meet.includes("preply") ? "rgba(245,158,11,0.15)" : "rgba(6,182,212,0.15)", border: `1px solid ${ev.meet.includes("teams") ? "rgba(91,95,199,0.4)" : ev.meet.includes("preply") ? "rgba(245,158,11,0.4)" : "rgba(6,182,212,0.4)"}`, color: ev.meet.includes("teams") ? "#5b5fc7" : ev.meet.includes("preply") ? "#fbbf24" : "#06b6d4", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 700, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>{ev.meet.includes("teams") ? "📞 Join Teams" : ev.meet.includes("preply") ? "📖 Open Lesson" : "📹 Join Meet"}</a>}
                                   <button onClick={e => { e.stopPropagation(); setUnscheduledItems([...unscheduledItems, { id: `u${Date.now()}`, text: ev.title, type: "call" }]); setCalEvents(calEvents.filter(ce => ce.id !== ev.id)); setSelectedEventId(null); }} style={{ background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", color: "#eab308", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Unschedule</button>
-                                  <button onClick={e => { e.stopPropagation(); if (confirm(`Cancel "${ev.title}"?`)) { setCalEvents(calEvents.filter(ce => ce.id !== ev.id)); setSelectedEventId(null); } }} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Cancel Event</button>
+                                  <button onClick={e => { e.stopPropagation(); if (confirm(`Cancel "${ev.title}"?`)) { setCalEvents(calEvents.filter(ce => ce.id !== ev.id)); setSelectedEventId(null); } }} style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Cancel Event</button>
                                   <button onClick={e => { e.stopPropagation(); setCalEvents(calEvents.filter(ce => ce.id !== ev.id)); setSelectedEventId(null); }} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11 }}>Remove from View</button>
                                 </div>
                                 {/* Notes section */}
@@ -2212,7 +2216,7 @@ function AviroDashboard() {
                   }}
                   style={{
                     display: "flex", flexDirection: "column", minHeight: slot ? "auto" : 56, borderRadius: 8, marginBottom: 6,
-                    border: slot ? `1px solid ${slot.priority === "urgent" ? "rgba(239,68,68,0.3)" : c.border}` : `2px dashed ${c.border}`,
+                    border: slot ? `1px solid ${slot.priority === "urgent" ? "rgba(248,113,113,0.2)" : c.border}` : `2px dashed ${c.border}`,
                     background: "transparent",
                     transition: "background 0.15s",
                   }}>
@@ -2289,7 +2293,7 @@ function AviroDashboard() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: c.text }}>ClickUp Tasks ({filteredClickUp.length})</span>
-                  {clickupDavidTasks.length > 0 && <span style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, background: "rgba(34,197,94,0.1)", padding: "2px 6px", borderRadius: 4 }}>LIVE</span>}
+                  {clickupDavidTasks.length > 0 && <span style={{ fontSize: 9, color: "#34d399", fontWeight: 700, background: "rgba(34,197,94,0.1)", padding: "2px 6px", borderRadius: 4 }}>LIVE</span>}
                   {!clickupToken && <span style={{ fontSize: 9, color: c.textMuted }}>Set ClickUp token in Settings</span>}
                   {clickupLoading && <span style={{ fontSize: 9, color: c.accent }}>Refreshing...</span>}
                   {clickupToken && <button onClick={() => fetchClickUpTasks(clickupToken)} disabled={clickupLoading} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted, cursor: "pointer" }}>↻</button>}
@@ -2371,13 +2375,13 @@ function AviroDashboard() {
           {delegatedTasks.filter(t => !t.completed).map((t, i) => {
             const cc = CAL_COLORS[t.cat] || CAL_COLORS.aviro;
             return (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: c.accentBg, border: `1px solid rgba(99,102,241,0.3)`, borderRadius: 8, padding: "10px 16px", marginBottom: 4 }}>
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: c.accentBg, border: `1px solid rgba(129,140,248,0.2)`, borderRadius: 8, padding: "10px 16px", marginBottom: 4 }}>
               <div style={{ width: 10, height: 10, borderRadius: 3, background: cc.bg, border: `1px solid ${cc.border}`, flexShrink: 0 }} />
               <Icon type="delegate" size={14} />
               <span style={{ fontSize: 13, color: c.text, flex: 1 }}>{t.text}</span>
               <span style={{ fontSize: 10, color: c.textMuted }}>{t.delegatedAt ? new Date(t.delegatedAt).toLocaleDateString() : "Delegated"}</span>
               <button onClick={() => { setDelegatedTasks(delegatedTasks.map(d => d.id === t.id ? { ...d, completed: true, completedAt: new Date().toISOString() } : d)); }} style={{ background: c.successBg, border: "1px solid rgba(34,197,94,0.3)", color: c.success, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Complete</button>
-              <button onClick={() => { setQuickJobs([...quickJobs, { id: t.id, text: t.text, done: false, inSignal: t.inSignal || false, cat: t.cat || "aviro", onCalendar: false, note: t.note || "", createdAt: t.createdAt || new Date().toISOString() }]); setDelegatedTasks(delegatedTasks.filter(d => d.id !== t.id)); }} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Undelegate</button>
+              <button onClick={() => { setQuickJobs([...quickJobs, { id: t.id, text: t.text, done: false, inSignal: t.inSignal || false, cat: t.cat || "aviro", onCalendar: false, note: t.note || "", createdAt: t.createdAt || new Date().toISOString() }]); setDelegatedTasks(delegatedTasks.filter(d => d.id !== t.id)); }} style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Undelegate</button>
             </div>
             );
           })}
@@ -2414,7 +2418,7 @@ function AviroDashboard() {
   );
 
   // ===== PERSONAL JOBS =====
-  const PJ_PRIORITIES = { urgent: { color: "#ef4444", bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", label: "Urgent" }, high: { color: "#f59e0b", bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", label: "High" }, normal: { color: "#3b82f6", bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.3)", label: "Normal" }, low: { color: "#6b7280", bg: "rgba(107,114,128,0.12)", border: "rgba(107,114,128,0.3)", label: "Low" } };
+  const PJ_PRIORITIES = { urgent: { color: "#f87171", bg: "rgba(239,68,68,0.12)", border: "rgba(248,113,113,0.2)", label: "Urgent" }, high: { color: "#fbbf24", bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", label: "High" }, normal: { color: "#3b82f6", bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.3)", label: "Normal" }, low: { color: "#6b7280", bg: "rgba(107,114,128,0.12)", border: "rgba(107,114,128,0.3)", label: "Low" } };
   const pjSortOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
   const renderPersonalJobs = () => {
     const addPJ = () => {
@@ -2434,9 +2438,9 @@ function AviroDashboard() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
         {[
           { label: "Total Active", value: counts.all, color: "#eab308", bg: "rgba(234,179,8,0.1)" },
-          { label: "Urgent", value: counts.urgent, color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
-          { label: "High Priority", value: counts.high, color: "#f59e0b", bg: "rgba(245,158,11,0.1)" },
-          { label: "Completed", value: counts.done, color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
+          { label: "Urgent", value: counts.urgent, color: "#f87171", bg: "rgba(248,113,113,0.08)" },
+          { label: "High Priority", value: counts.high, color: "#fbbf24", bg: "rgba(245,158,11,0.1)" },
+          { label: "Completed", value: counts.done, color: "#34d399", bg: "rgba(34,197,94,0.1)" },
         ].map(card => (
           <div key={card.label} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 16, textAlign: "center" }}>
             <div style={{ fontSize: 28, fontWeight: 800, color: card.color }}>{card.value}</div>
@@ -2466,7 +2470,7 @@ function AviroDashboard() {
           <button key={f.k} onClick={() => setPjFilter(f.k)} style={{
             background: pjFilter === f.k ? (pc ? pc.bg : f.k === "all" ? "rgba(234,179,8,0.12)" : "rgba(34,197,94,0.12)") : "transparent",
             border: `1px solid ${pjFilter === f.k ? (pc ? pc.border : f.k === "all" ? "rgba(234,179,8,0.3)" : "rgba(34,197,94,0.3)") : c.border}`,
-            color: pjFilter === f.k ? (pc ? pc.color : f.k === "all" ? "#eab308" : "#22c55e") : c.textSecondary,
+            color: pjFilter === f.k ? (pc ? pc.color : f.k === "all" ? "#eab308" : "#34d399") : c.textSecondary,
             borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600,
           }}>{f.l} ({counts[f.k]})</button>
           );
@@ -2498,7 +2502,7 @@ function AviroDashboard() {
               <button onClick={() => { setUnscheduledItems([...unscheduledItems, { id: `u${Date.now()}`, text: job.text, type: "call" }]); setPersonalJobs(personalJobs.filter(j => j.id !== job.id)); setSection("calendar"); }} style={{ background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", color: "#eab308", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                 <Icon type="calendar" size={11} /> Send to Calendar
               </button>
-              <button onClick={() => { setDelegatedTasks([...delegatedTasks, { id: job.id, text: job.text, cat: "personal", delegatedAt: new Date().toISOString() }]); setPersonalJobs(personalJobs.filter(j => j.id !== job.id)); }} style={{ background: c.accentBg, border: "1px solid rgba(99,102,241,0.3)", color: c.accent, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+              <button onClick={() => { setDelegatedTasks([...delegatedTasks, { id: job.id, text: job.text, cat: "personal", delegatedAt: new Date().toISOString() }]); setPersonalJobs(personalJobs.filter(j => j.id !== job.id)); }} style={{ background: c.accentBg, border: "1px solid rgba(129,140,248,0.2)", color: c.accent, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                 <Icon type="delegate" size={11} /> Delegate to Sophie
               </button>
               <button onClick={() => { setQuickJobs([...quickJobs, { id: `qj${Date.now()}`, text: job.text, done: false, inSignal: true, cat: "personal", onCalendar: false, note: "", createdAt: new Date().toISOString() }]); setPersonalJobs(personalJobs.filter(j => j.id !== job.id)); }} style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.3)", color: "#06b6d4", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
@@ -2537,7 +2541,7 @@ function AviroDashboard() {
   const renderClients = () => {
     const inputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
     const labelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
-    const sectionCard = { background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 };
+    const sectionCard = { background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 22, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" };
     const sectionTitle = { fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" };
 
     // ===== CLIENT DETAIL VIEW =====
@@ -2562,13 +2566,13 @@ function AviroDashboard() {
                   setGatewayClients(gatewayClients.filter(x => x.id !== cl.id));
                   setSelectedClient(null);
                 }
-              }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete Client</button>
+              }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete Client</button>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
               {(() => {
                 const statuses = ["active", "onboarding", "inactive"];
-                const statusColors = { active: "#22c55e", onboarding: "#f59e0b", inactive: "#6b7280" };
+                const statusColors = { active: "#34d399", onboarding: "#fbbf24", inactive: "#6b7280" };
                 const current = cl.status || "onboarding";
                 return (
                   <div style={{ display: "flex", gap: 4 }}>
@@ -2690,7 +2694,7 @@ function AviroDashboard() {
                               <input type="date" value={ent.licenseExpiry || ""} onChange={e => updateEnt(entId, "licenseExpiry", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
                               {ent.licenseExpiry && (() => {
                                 const exp = new Date(ent.licenseExpiry); const now = new Date(); const daysLeft = Math.ceil((exp - now) / (1000*60*60*24));
-                                const ac = daysLeft <= 0 ? "#ef4444" : daysLeft <= 30 ? "#f59e0b" : daysLeft <= 90 ? "#eab308" : "#22c55e";
+                                const ac = daysLeft <= 0 ? "#f87171" : daysLeft <= 30 ? "#fbbf24" : daysLeft <= 90 ? "#eab308" : "#34d399";
                                 const at = daysLeft <= 0 ? "EXPIRED" : daysLeft <= 30 ? `${daysLeft}d — EXPIRING` : daysLeft <= 90 ? `${daysLeft}d — Review` : `${daysLeft}d`;
                                 return <span style={{ fontSize: 9, color: ac, fontWeight: 700, marginTop: 2, display: "block" }}>{at}</span>;
                               })()}
@@ -2742,7 +2746,7 @@ function AviroDashboard() {
                                   if (r.ok) { const url = supabaseUrl + "/storage/v1/object/public/documents/" + filePath; updateEnt(entId, "uboEntKybDocs", (ent.uboEntKybDocs || []).map(d => d.id === doc.id ? { ...d, fileName: file.name, fileUrl: url } : d)); }
                                 });
                               }} /><span style={{ fontSize: 10, color: c.accent, border: `1px solid ${c.accent}`, borderRadius: 4, padding: "2px 6px" }}>Upload</span></label>
-                              <button onClick={() => updateEnt(entId, "uboEntKybDocs", (ent.uboEntKybDocs || []).filter(d => d.id !== doc.id))} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12 }}>✕</button>
+                              <button onClick={() => updateEnt(entId, "uboEntKybDocs", (ent.uboEntKybDocs || []).filter(d => d.id !== doc.id))} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 12 }}>✕</button>
                             </div>
                           ))}
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
@@ -2781,7 +2785,7 @@ function AviroDashboard() {
                       {docs.map(doc => {
                         const isEd = editingClientField === `kd-${doc.id}`;
                         const renewal = doc.startDate && doc.renewalMonths ? (() => { const d = new Date(doc.startDate); d.setMonth(d.getMonth() + parseInt(doc.renewalMonths)); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })() : null;
-                        const sc = doc.fileUrl ? "#22c55e" : "#f59e0b";
+                        const sc = doc.fileUrl ? "#34d399" : "#fbbf24";
                         return (
                           <div key={doc.id}
                             onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = `2px solid ${c.accent}`; }}
@@ -2799,7 +2803,7 @@ function AviroDashboard() {
                               <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                                 {doc.fileUrl && <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 9, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "2px 6px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>↓</a>}
                                 <button onClick={() => setEditingClientField(isEd ? null : `kd-${doc.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 9, borderRadius: 4, padding: "2px 6px" }}>{isEd ? "Done" : "Edit"}</button>
-                                <button onClick={() => updateEnt(entId, "kybDocuments", docs.filter(d => d.id !== doc.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "2px 5px", cursor: "pointer", fontSize: 9 }}>✕</button>
+                                <button onClick={() => updateEnt(entId, "kybDocuments", docs.filter(d => d.id !== doc.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "2px 5px", cursor: "pointer", fontSize: 9 }}>✕</button>
                               </div>
                             </div>
                             {isEd && (
@@ -2816,7 +2820,7 @@ function AviroDashboard() {
                                   style={{ border: `2px dashed ${c.border}`, borderRadius: 6, padding: "10px 12px", textAlign: "center", cursor: "pointer" }}
                                   onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = ev => { if (ev.target.files[0]) handleEntKybUpload(entId, doc.id, ev.target.files[0]); }; inp.click(); }}
                                 >
-                                  {doc.uploadStatus === "uploading" ? <span style={{ fontSize: 11, color: c.accent }}>Uploading...</span> : doc.fileName ? <span style={{ fontSize: 11, color: "#22c55e" }}>{doc.fileName} — click to replace</span> : <span style={{ fontSize: 11, color: c.textMuted }}>Drop file or click to upload</span>}
+                                  {doc.uploadStatus === "uploading" ? <span style={{ fontSize: 11, color: c.accent }}>Uploading...</span> : doc.fileName ? <span style={{ fontSize: 11, color: "#34d399" }}>{doc.fileName} — click to replace</span> : <span style={{ fontSize: 11, color: c.textMuted }}>Drop file or click to upload</span>}
                                 </div>
                               </div>
                             )}
@@ -2836,7 +2840,7 @@ function AviroDashboard() {
                   <div key={ent.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 14, marginBottom: idx < ents.length - 1 ? 10 : 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Entity {idx + 1}{ent.entityName ? ` — ${ent.entityName}` : ""}</span>
-                      {ents.length > 1 && <button onClick={() => updateClient(cl.id, "entities", ents.filter(e => e.id !== ent.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10 }}>Remove</button>}
+                      {ents.length > 1 && <button onClick={() => updateClient(cl.id, "entities", ents.filter(e => e.id !== ent.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10 }}>Remove</button>}
                     </div>
                     {renderEntityFields(ent, ent.id, false)}
                   </div>
@@ -2871,13 +2875,13 @@ function AviroDashboard() {
                   const isExpired = ag.expiryDate && new Date(ag.expiryDate) < new Date();
                   const expiringSoon = ag.expiryDate && !isExpired && (new Date(ag.expiryDate) - new Date()) < 30 * 86400000;
                   return (
-                    <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${isExpired ? "rgba(239,68,68,0.3)" : expiringSoon ? "rgba(245,158,11,0.3)" : c.border}`, padding: 12, marginBottom: 8 }}>
+                    <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${isExpired ? "rgba(248,113,113,0.2)" : expiringSoon ? "rgba(245,158,11,0.3)" : c.border}`, padding: 12, marginBottom: 8 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
-                            {isExpired && <span style={{ fontSize: 9, fontWeight: 700, color: "#ef4444", background: "rgba(239,68,68,0.1)", padding: "2px 6px", borderRadius: 4 }}>EXPIRED</span>}
-                            {expiringSoon && <span style={{ fontSize: 9, fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 6px", borderRadius: 4 }}>EXPIRING SOON</span>}
+                            {isExpired && <span style={{ fontSize: 9, fontWeight: 700, color: "#f87171", background: "rgba(248,113,113,0.08)", padding: "2px 6px", borderRadius: 4 }}>EXPIRED</span>}
+                            {expiringSoon && <span style={{ fontSize: 9, fontWeight: 700, color: "#fbbf24", background: "rgba(245,158,11,0.1)", padding: "2px 6px", borderRadius: 4 }}>EXPIRING SOON</span>}
                           </div>
                           <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                             {ag.startDate && <span>Start: {ag.startDate}</span>}
@@ -2888,7 +2892,7 @@ function AviroDashboard() {
                         </div>
                         <div style={{ display: "flex", gap: 4 }}>
                           <button onClick={() => setEditingClientField(isEd ? null : `ag-${ag.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 8px" }}>{isEd ? "Done" : "Edit"}</button>
-                          <button onClick={() => updateClient(cl.id, "agreements", (cl.agreements || []).filter(a => a.id !== ag.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                          <button onClick={() => updateClient(cl.id, "agreements", (cl.agreements || []).filter(a => a.id !== ag.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
                         </div>
                       </div>
                       {isEd && (
@@ -2952,7 +2956,7 @@ function AviroDashboard() {
                                       <a href={ag.fileUrl} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {ag.fileName}</a>
                                       {ag.fileSize > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{fmtSize(ag.fileSize)}</span>}
                                       <span style={{ fontSize: 10, color: c.textMuted }}>— click or drag to replace</span>
-                                      <button onClick={e => { e.stopPropagation(); const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: "", fileUrl: "", fileSize: 0 } : a); updateClient(cl.id, "agreements", upd); }} style={{ fontSize: 9, color: "#ef4444", background: "rgba(239,68,68,0.08)", border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>Remove</button>
+                                      <button onClick={e => { e.stopPropagation(); const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: "", fileUrl: "", fileSize: 0 } : a); updateClient(cl.id, "agreements", upd); }} style={{ fontSize: 9, color: "#f87171", background: "rgba(248,113,113,0.06)", border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>Remove</button>
                                     </div>
                                   ) : (
                                     <div>
@@ -3091,7 +3095,7 @@ function AviroDashboard() {
                             if (cp.referralPct) dealExtra = `Referral: ${cp.referralPct}%`;
                           }
 
-                          const feeModelColor = deal === "Direct" ? "#22c55e" : deal === "Profit Share" ? "#8b5cf6" : deal === "Referral" ? "#f59e0b" : c.textMuted;
+                          const feeModelColor = deal === "Direct" ? "#34d399" : deal === "Profit Share" ? "#a78bfa" : deal === "Referral" ? "#fbbf24" : c.textMuted;
 
                           return (
                             <React.Fragment key={cp.id || cpIdx}>
@@ -3189,7 +3193,7 @@ function AviroDashboard() {
                   const clientTx = parseFloat(cp.clientPayinTxFee) || 0;
                   const marginPct = clientRate - provPayinPct;
                   const marginTx = clientTx - provPayinTx;
-                  const marginColor = (v) => parseFloat(v) > 0 ? "#22c55e" : parseFloat(v) < 0 ? "#ef4444" : c.textMuted;
+                  const marginColor = (v) => parseFloat(v) > 0 ? "#34d399" : parseFloat(v) < 0 ? "#f87171" : c.textMuted;
 
                   // Tiers renderer (reusable)
                   const renderTiers = (tiers, field) => (
@@ -3205,7 +3209,7 @@ function AviroDashboard() {
                           <span style={{ fontSize: 10, color: c.textMuted }}>→</span>
                           <input value={tier.rate || ""} onChange={e => updateTier(cpIdx, tiers, field, tier.id, "rate", e.target.value)} placeholder="Rate %" style={{ ...inputStyle, width: 80, fontSize: 11 }} />
                           <span style={{ fontSize: 10, color: c.textMuted }}>%</span>
-                          <button onClick={() => removeTier(cpIdx, tiers, field, tier.id)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 11 }}>✕</button>
+                          <button onClick={() => removeTier(cpIdx, tiers, field, tier.id)} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>✕</button>
                         </div>
                       ))}
                     </div>
@@ -3219,9 +3223,9 @@ function AviroDashboard() {
                           <span style={{ fontSize: 10, fontWeight: 700, color: c.accent, background: c.accentBg, padding: "2px 8px", borderRadius: 4 }}>PROVIDER {cpIdx + 1}</span>
                           {linkedProv && <span style={{ fontSize: 14, fontWeight: 700, color: c.text }}>{linkedProv.name}</span>}
                           {linkedSvc && <span style={{ fontSize: 11, color: c.textMuted }}>— {linkedSvc.name || "Unnamed"}</span>}
-                          {cp.feeModel && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 600, background: cp.feeModel === "Direct" ? "rgba(34,197,94,0.1)" : cp.feeModel === "Profit Share" ? "rgba(139,92,246,0.1)" : "rgba(245,158,11,0.1)", color: cp.feeModel === "Direct" ? "#22c55e" : cp.feeModel === "Profit Share" ? "#8b5cf6" : "#f59e0b" }}>{cp.feeModel}</span>}
+                          {cp.feeModel && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 600, background: cp.feeModel === "Direct" ? "rgba(34,197,94,0.1)" : cp.feeModel === "Profit Share" ? "rgba(139,92,246,0.1)" : "rgba(245,158,11,0.1)", color: cp.feeModel === "Direct" ? "#34d399" : cp.feeModel === "Profit Share" ? "#a78bfa" : "#fbbf24" }}>{cp.feeModel}</span>}
                         </div>
-                        <button onClick={() => { if (confirm("Remove this provider?")) removeClProv(cpIdx); }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Remove</button>
+                        <button onClick={() => { if (confirm("Remove this provider?")) removeClProv(cpIdx); }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Remove</button>
                       </div>
 
                       {/* Provider & Service & Fee Model Selection */}
@@ -3259,9 +3263,9 @@ function AviroDashboard() {
                           {linkedSvc.serviceType2 === "Cards" && linkedSvc.cardType && <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: "rgba(236,72,153,0.08)", border: "1px solid rgba(236,72,153,0.2)", color: "#ec4899", fontWeight: 600 }}>MCC: {linkedSvc.cardType}</span>}
                           {linkedSvc.serviceType2 === "Open Banking" && (
                             linkedSvc.providesC2B === true
-                              ? <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", color: "#22c55e", fontWeight: 600 }}>C2B Account: Provider</span>
+                              ? <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", color: "#34d399", fontWeight: 600 }}>C2B Account: Provider</span>
                               : linkedSvc.providesC2B === false
-                                ? <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", color: "#f59e0b", fontWeight: 600 }}>C2B Account: Our Bank</span>
+                                ? <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", color: "#fbbf24", fontWeight: 600 }}>C2B Account: Our Bank</span>
                                 : <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted, fontWeight: 600 }}>C2B: Not set</span>
                           )}
                           {linkedSvc.agreementType && <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 5, background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted, fontWeight: 600 }}>{linkedSvc.agreementType}</span>}
@@ -3320,7 +3324,7 @@ function AviroDashboard() {
                           </div>
                           {renderTiers(cp.payinTiers, "payinTiers")}
                           <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${c.border}` }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: "#8b5cf6", textTransform: "uppercase", marginBottom: 8 }}>Provider Hard Cost & Profit Share</div>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: "#a78bfa", textTransform: "uppercase", marginBottom: 8 }}>Provider Hard Cost & Profit Share</div>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
                               <div><label style={labelStyle}>Hard Cost %</label><input value={cp.hardCostPayinPct || ""} onChange={e => updateClProv(cpIdx, "hardCostPayinPct", e.target.value)} placeholder="e.g. 2.0" style={{ ...inputStyle, width: "100%" }} /></div>
                               <div><label style={labelStyle}>Profit Share %</label><input value={cp.profitSharePct || ""} onChange={e => updateClProv(cpIdx, "profitSharePct", e.target.value)} placeholder="e.g. 50" style={{ ...inputStyle, width: "100%" }} /></div>
@@ -3331,7 +3335,7 @@ function AviroDashboard() {
                               return (
                                 <div style={{ padding: "10px 12px", background: "rgba(139,92,246,0.05)", borderRadius: 6, border: "1px solid rgba(139,92,246,0.15)" }}>
                                   <div style={{ fontSize: 11, color: c.textSecondary }}>
-                                    Client <strong>{cr}%</strong> — Cost <strong>{hc}%</strong> = <strong>{profit.toFixed(2)}%</strong> profit — They get <strong>{theyGet.toFixed(2)}%</strong> ({sh}%) — <strong style={{ color: "#22c55e" }}>We make {weGet.toFixed(2)}%</strong>
+                                    Client <strong>{cr}%</strong> — Cost <strong>{hc}%</strong> = <strong>{profit.toFixed(2)}%</strong> profit — They get <strong>{theyGet.toFixed(2)}%</strong> ({sh}%) — <strong style={{ color: "#34d399" }}>We make {weGet.toFixed(2)}%</strong>
                                   </div>
                                 </div>
                               );
@@ -3355,7 +3359,7 @@ function AviroDashboard() {
                               {(parseFloat(cp.referralPct) && parseFloat(cp.referralPayinPct)) ? (
                                 <div style={{ display: "flex", alignItems: "end", paddingBottom: 6 }}>
                                   <div style={{ fontSize: 11, color: c.textSecondary }}>
-                                    {cp.referralPct}% of volume — on <strong>{cp.referralPayinPct}%</strong> rate = <strong style={{ color: "#22c55e" }}>{((parseFloat(cp.referralPayinPct)) * (parseFloat(cp.referralPct)) / 100).toFixed(3)}%</strong> effective earning
+                                    {cp.referralPct}% of volume — on <strong>{cp.referralPayinPct}%</strong> rate = <strong style={{ color: "#34d399" }}>{((parseFloat(cp.referralPayinPct)) * (parseFloat(cp.referralPct)) / 100).toFixed(3)}%</strong> effective earning
                                   </div>
                                 </div>
                               ) : null}
@@ -3395,7 +3399,7 @@ function AviroDashboard() {
                         <div><label style={labelStyle}>Account Type</label><select value={ba.accountType || ""} onChange={e => { const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, accountType: e.target.value } : b); updateClient(cl.id, "bankAccounts", upd); }} style={{ ...inputStyle, width: "100%" }}><option value="">— Type —</option>{BANK_ACCT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                         <div><label style={labelStyle}>Fee In (%)</label><input value={ba.feeIncoming || ""} onChange={e => { const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, feeIncoming: e.target.value } : b); updateClient(cl.id, "bankAccounts", upd); }} placeholder="%" style={{ ...inputStyle, width: "100%" }} /></div>
                         <div><label style={labelStyle}>Fee Out (%)</label><input value={ba.feeOutgoing || ""} onChange={e => { const upd = (cl.bankAccounts || []).map(b => b.id === ba.id ? { ...b, feeOutgoing: e.target.value } : b); updateClient(cl.id, "bankAccounts", upd); }} placeholder="%" style={{ ...inputStyle, width: "100%" }} /></div>
-                        <button onClick={() => updateClient(cl.id, "bankAccounts", (cl.bankAccounts || []).filter(b => b.id !== ba.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10, marginBottom: 2 }}>✕</button>
+                        <button onClick={() => updateClient(cl.id, "bankAccounts", (cl.bankAccounts || []).filter(b => b.id !== ba.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10, marginBottom: 2 }}>✕</button>
                       </div>
                     </div>
                   ))}
@@ -3417,7 +3421,7 @@ function AviroDashboard() {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Gateway.io Client Portal</h2>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Gateway.io Client Portal</h2>
             <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gatewayClients.filter(x => x.status === "active").length} active · {gatewayClients.filter(x => x.status === "onboarding" || !x.status).length} onboarding · {gatewayClients.filter(x => x.status === "inactive").length} inactive</p>
           </div>
           <button onClick={() => setShowAddClient(!showAddClient)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Client</button>
@@ -3452,14 +3456,14 @@ function AviroDashboard() {
         )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
           {gatewayClients.map(cl => {
-            const typeColor = cl.clientType === "Full Cashier Management" ? "#6366f1" : cl.clientType === "VIP Gateway" ? "#ec4899" : cl.clientType === "Gateway" ? "#22c55e" : cl.clientType === "Tech Only" ? "#06b6d4" : cl.clientType === "Another PSP" ? "#f59e0b" : c.accent;
+            const typeColor = cl.clientType === "Full Cashier Management" ? "#818cf8" : cl.clientType === "VIP Gateway" ? "#ec4899" : cl.clientType === "Gateway" ? "#34d399" : cl.clientType === "Tech Only" ? "#06b6d4" : cl.clientType === "Another PSP" ? "#fbbf24" : c.accent;
             return (
               <div key={cl.id} onClick={() => { setSelectedClient(cl.id); setEditingClientField(null); }}
                 style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 20, cursor: "pointer", borderLeft: `3px solid ${typeColor}`, transition: "background 0.15s" }}
                 onMouseEnter={e => e.currentTarget.style.background = c.cardHover} onMouseLeave={e => e.currentTarget.style.background = c.card}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: c.text }}>{cl.name}</div>
-                  {(() => { const sc = { active: "#22c55e", onboarding: "#f59e0b", inactive: "#6b7280" }; const st = cl.status || "onboarding"; return <span style={{ fontSize: 9, color: sc[st], background: `${sc[st]}15`, border: `1px solid ${sc[st]}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 700, textTransform: "uppercase" }}>{st}</span>; })()}
+                  {(() => { const sc = { active: "#34d399", onboarding: "#fbbf24", inactive: "#6b7280" }; const st = cl.status || "onboarding"; return <span style={{ fontSize: 9, color: sc[st], background: `${sc[st]}15`, border: `1px solid ${sc[st]}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 700, textTransform: "uppercase" }}>{st}</span>; })()}
                 </div>
                 {cl.clientType && <span style={{ fontSize: 10, color: typeColor, background: `${typeColor}15`, border: `1px solid ${typeColor}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{cl.clientType}</span>}
                 <div style={{ marginTop: 8, fontSize: 11, color: c.textMuted }}>
@@ -3484,7 +3488,7 @@ function AviroDashboard() {
   // ===== INTEGRATION ROADMAP =====
   const renderRoadmap = () => {
     const STAGES = ["Roadmap", "Planning", "Execution", "Testing", "Deployed"];
-    const STAGE_COLORS = { "Roadmap": { bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.4)", text: "#8b5cf6" }, "Planning": { bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.4)", text: "#3b82f6" }, "Execution": { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.4)", text: "#f59e0b" }, "Testing": { bg: "rgba(234,179,8,0.12)", border: "rgba(234,179,8,0.4)", text: "#eab308" }, "Deployed": { bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.4)", text: "#22c55e" } };
+    const STAGE_COLORS = { "Roadmap": { bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.4)", text: "#a78bfa" }, "Planning": { bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.4)", text: "#3b82f6" }, "Execution": { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.4)", text: "#fbbf24" }, "Testing": { bg: "rgba(234,179,8,0.12)", border: "rgba(234,179,8,0.4)", text: "#eab308" }, "Deployed": { bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.4)", text: "#34d399" } };
     const METHOD_TYPES = ["Payin", "Payout", "Both"];
     const METHOD_CHANNELS = ["Cards", "Non Cards", "Crypto"];
     const PAYMENT_REGIONS = ["Global", "UK", "West Europe", "East Europe", "Scandinavia", "Turkey", "MENA", "GCC", "CIS", "Africa", "LATAM", "North America", "Oceania", "India", "Asia", "South East Asia", "Japan"];
@@ -3523,13 +3527,13 @@ function AviroDashboard() {
 
           {/* Estimated Deployment Date banner */}
           {deployDate ? (
-            <div style={{ background: ig.deployedSuccessfully ? "rgba(34,197,94,0.1)" : ig.pace === "Behind Pace" ? "rgba(239,68,68,0.08)" : ig.pace === "Ahead Of Pace" ? "rgba(59,130,246,0.08)" : c.card, border: `1px solid ${ig.deployedSuccessfully ? "rgba(34,197,94,0.3)" : ig.pace === "Behind Pace" ? "rgba(239,68,68,0.25)" : ig.pace === "Ahead Of Pace" ? "rgba(59,130,246,0.25)" : c.border}`, borderRadius: 12, padding: "16px 24px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ background: ig.deployedSuccessfully ? "rgba(34,197,94,0.1)" : ig.pace === "Behind Pace" ? "rgba(248,113,113,0.06)" : ig.pace === "Ahead Of Pace" ? "rgba(59,130,246,0.08)" : c.card, border: `1px solid ${ig.deployedSuccessfully ? "rgba(34,197,94,0.3)" : ig.pace === "Behind Pace" ? "rgba(248,113,113,0.15)" : ig.pace === "Ahead Of Pace" ? "rgba(59,130,246,0.25)" : c.border}`, borderRadius: 12, padding: "16px 24px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>{ig.deployedSuccessfully ? "Deployed" : isEarlyStage ? "Estimated Deployment" : "Target Deployment Date"}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: ig.deployedSuccessfully ? c.success : ig.pace === "Behind Pace" ? "#ef4444" : ig.pace === "Ahead Of Pace" ? "#3b82f6" : c.text }}>{ig.deployedSuccessfully && ig.deployedDate ? new Date(ig.deployedDate + "T00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : deployDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: ig.deployedSuccessfully ? c.success : ig.pace === "Behind Pace" ? "#f87171" : ig.pace === "Ahead Of Pace" ? "#3b82f6" : c.text }}>{ig.deployedSuccessfully && ig.deployedDate ? new Date(ig.deployedDate + "T00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : deployDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
               </div>
               <div style={{ textAlign: "right" }}>
-                {ig.pace === "Behind Pace" && ig.behindDelayWeeks && <div style={{ fontSize: 12, fontWeight: 600, color: "#ef4444" }}>+{ig.behindDelayWeeks}w delay</div>}
+                {ig.pace === "Behind Pace" && ig.behindDelayWeeks && <div style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>+{ig.behindDelayWeeks}w delay</div>}
                 {ig.pace === "Ahead Of Pace" && ig.aheadWeeks && <div style={{ fontSize: 12, fontWeight: 600, color: "#3b82f6" }}>{ig.aheadWeeks}w ahead</div>}
                 {ig.weeksToDeployment && <div style={{ fontSize: 11, color: c.textMuted }}>{ig.weeksToDeployment}w estimated{ig.pace === "Behind Pace" && ig.behindDelayWeeks ? ` + ${ig.behindDelayWeeks}w delay` : ig.pace === "Ahead Of Pace" && ig.aheadWeeks ? ` - ${ig.aheadWeeks}w ahead` : ""}</div>}
               </div>
@@ -3637,15 +3641,15 @@ function AviroDashboard() {
                     <div style={{ display: "flex", gap: 6 }}>
                       {PACE_OPTIONS.map(p => {
                         const sel = ig.pace === p;
-                        const paceColor = p === "Behind Pace" ? "#ef4444" : p === "On Pace" ? "#22c55e" : "#3b82f6";
+                        const paceColor = p === "Behind Pace" ? "#f87171" : p === "On Pace" ? "#34d399" : "#3b82f6";
                         return <button key={p} onClick={() => updateIntegration(ig.id, "pace", p)} style={{ flex: 1, padding: "8px 6px", borderRadius: 8, fontSize: 11, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? paceColor + "18" : c.surface, color: sel ? paceColor : c.textMuted, border: `2px solid ${sel ? paceColor : c.border}`, transition: "all 0.15s" }}>{p}</button>;
                       })}
                     </div>
                   </div>
                   {ig.pace === "Behind Pace" && (
-                    <div style={{ background: "rgba(239,68,68,0.08)", borderRadius: 8, padding: 12, border: "1px solid rgba(239,68,68,0.2)", marginBottom: 10 }}>
-                      <div style={{ marginBottom: 8 }}><label style={{ ...labelStyle2, color: "#ef4444" }}>Reason for Delay</label><textarea value={ig.behindReason || ""} onChange={e => updateIntegration(ig.id, "behindReason", e.target.value)} placeholder="What's causing the delay..." rows={2} style={{ ...inputStyle2, width: "100%", resize: "vertical" }} /></div>
-                      <div><label style={{ ...labelStyle2, color: "#ef4444" }}>Estimated Delay</label>
+                    <div style={{ background: "rgba(248,113,113,0.06)", borderRadius: 8, padding: 12, border: "1px solid rgba(239,68,68,0.2)", marginBottom: 10 }}>
+                      <div style={{ marginBottom: 8 }}><label style={{ ...labelStyle2, color: "#f87171" }}>Reason for Delay</label><textarea value={ig.behindReason || ""} onChange={e => updateIntegration(ig.id, "behindReason", e.target.value)} placeholder="What's causing the delay..." rows={2} style={{ ...inputStyle2, width: "100%", resize: "vertical" }} /></div>
+                      <div><label style={{ ...labelStyle2, color: "#f87171" }}>Estimated Delay</label>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <input type="number" min="1" value={ig.behindDelayWeeks || ""} onChange={e => updateIntegration(ig.id, "behindDelayWeeks", e.target.value)} placeholder="#" style={{ ...inputStyle2, width: 60 }} />
                           <span style={{ fontSize: 12, color: c.textMuted }}>weeks</span>
@@ -3700,7 +3704,7 @@ function AviroDashboard() {
 
           {/* Delete */}
           <div style={{ marginTop: 24, textAlign: "right" }}>
-            <button onClick={() => { if (confirm("Delete this integration?")) { setIntegrations(integrations.filter(x => x.id !== ig.id)); setSelectedIntegration(null); } }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 8, padding: "8px 20px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Delete Integration</button>
+            <button onClick={() => { if (confirm("Delete this integration?")) { setIntegrations(integrations.filter(x => x.id !== ig.id)); setSelectedIntegration(null); } }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 8, padding: "8px 20px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Delete Integration</button>
           </div>
         </div>
       );
@@ -3714,7 +3718,7 @@ function AviroDashboard() {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Integration Roadmap</h2>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Integration Roadmap</h2>
             <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{integrations.length} integration{integrations.length !== 1 ? "s" : ""}</p>
           </div>
           <button onClick={() => setShowAddIntegration(!showAddIntegration)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ New Integration</button>
@@ -3786,7 +3790,7 @@ function AviroDashboard() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                         {(ig.regions || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{ig.regions.slice(0, 3).join(", ")}{ig.regions.length > 3 ? ` +${ig.regions.length - 3}` : ""}</span>}
                         {ig.stage === "Execution" && ig.pace && (
-                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 600, background: ig.pace === "Behind Pace" ? "rgba(239,68,68,0.12)" : ig.pace === "On Pace" ? "rgba(34,197,94,0.12)" : "rgba(59,130,246,0.12)", color: ig.pace === "Behind Pace" ? "#ef4444" : ig.pace === "On Pace" ? "#22c55e" : "#3b82f6" }}>{ig.pace}</span>
+                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 600, background: ig.pace === "Behind Pace" ? "rgba(239,68,68,0.12)" : ig.pace === "On Pace" ? "rgba(34,197,94,0.12)" : "rgba(59,130,246,0.12)", color: ig.pace === "Behind Pace" ? "#f87171" : ig.pace === "On Pace" ? "#34d399" : "#3b82f6" }}>{ig.pace}</span>
                         )}
                         {deployDate && <span style={{ fontSize: 11, color: c.textMuted }}>{deployDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
                         <span style={{ fontSize: 12, color: c.accent }}>→</span>
@@ -3871,13 +3875,13 @@ function AviroDashboard() {
                     <span style={{ fontSize: 11, fontWeight: 700, color: c.accent, background: c.accentBg, padding: "2px 8px", borderRadius: 4 }}>SERVICE {svcIdx + 1}</span>
                     {svc.name && <span style={{ fontSize: 15, fontWeight: 700, color: c.text }}>{svc.name}</span>}
                   </div>
-                  <button onClick={() => { if (confirm("Delete this service?")) updateProvider(prov.id, "services", svcs.filter(s => s.id !== svc.id)); }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Delete</button>
+                  <button onClick={() => { if (confirm("Delete this service?")) updateProvider(prov.id, "services", svcs.filter(s => s.id !== svc.id)); }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Delete</button>
                 </div>
                 {/* Service Status */}
                 <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
                   {["Onboarding", "Integrating", "Active", "Deactivated"].map(st => {
                     const sel = svc.serviceStatus === st;
-                    const stColor = st === "Active" ? "#22c55e" : st === "Deactivated" ? "#ef4444" : st === "Integrating" ? "#f59e0b" : "#6366f1";
+                    const stColor = st === "Active" ? "#34d399" : st === "Deactivated" ? "#f87171" : st === "Integrating" ? "#fbbf24" : "#818cf8";
                     return <button key={st} onClick={() => updateService(prov.id, svc.id, "serviceStatus", st)} style={{ flex: 1, padding: "7px 6px", borderRadius: 6, fontSize: 11, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? stColor + "18" : c.surface, color: sel ? stColor : c.textMuted, border: `2px solid ${sel ? stColor : c.border}`, transition: "all 0.15s" }}>{st}</button>;
                   })}
                 </div>
@@ -3908,7 +3912,7 @@ function AviroDashboard() {
                         <div style={{ display: "flex", gap: 6, marginBottom: svc.providesC2B === false ? 10 : 0 }}>
                           {[{ val: true, label: "Yes" }, { val: false, label: "No" }].map(opt => {
                             const sel = svc.providesC2B === opt.val;
-                            return <button key={String(opt.val)} onClick={() => updateServiceMulti(prov.id, svc.id, { providesC2B: opt.val, c2bBankAccountId: opt.val ? "" : svc.c2bBankAccountId })} style={{ padding: "5px 16px", borderRadius: 6, fontSize: 11, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? (opt.val ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)") : c.surface, color: sel ? (opt.val ? "#22c55e" : "#f59e0b") : c.textMuted, border: `2px solid ${sel ? (opt.val ? "#22c55e" : "#f59e0b") : c.border}`, transition: "all 0.15s" }}>{opt.label}</button>;
+                            return <button key={String(opt.val)} onClick={() => updateServiceMulti(prov.id, svc.id, { providesC2B: opt.val, c2bBankAccountId: opt.val ? "" : svc.c2bBankAccountId })} style={{ padding: "5px 16px", borderRadius: 6, fontSize: 11, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? (opt.val ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)") : c.surface, color: sel ? (opt.val ? "#34d399" : "#fbbf24") : c.textMuted, border: `2px solid ${sel ? (opt.val ? "#34d399" : "#fbbf24") : c.border}`, transition: "all 0.15s" }}>{opt.label}</button>;
                           })}
                         </div>
                         {svc.providesC2B === false && (() => {
@@ -3970,7 +3974,7 @@ function AviroDashboard() {
                               {options.map(opt => {
                                 const sel = (svc.entities || []).includes(opt.name);
                                 const isLicense = opt.type === "License";
-                                return <button key={opt.name} onClick={() => { const ents = svc.entities || []; updateService(prov.id, svc.id, "entities", sel ? ents.filter(x => x !== opt.name) : [...ents, opt.name]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? (isLicense ? "rgba(139,92,246,0.12)" : c.accentBg) : c.surface, color: sel ? (isLicense ? "#8b5cf6" : c.accent) : c.textMuted, border: `1px solid ${sel ? (isLicense ? "rgba(139,92,246,0.4)" : c.accent + "40") : c.border}` }}>{isLicense ? "🔑 " : "👤 "}{opt.name}</button>;
+                                return <button key={opt.name} onClick={() => { const ents = svc.entities || []; updateService(prov.id, svc.id, "entities", sel ? ents.filter(x => x !== opt.name) : [...ents, opt.name]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? (isLicense ? "rgba(139,92,246,0.12)" : c.accentBg) : c.surface, color: sel ? (isLicense ? "#a78bfa" : c.accent) : c.textMuted, border: `1px solid ${sel ? (isLicense ? "rgba(139,92,246,0.4)" : c.accent + "40") : c.border}` }}>{isLicense ? "🔑 " : "👤 "}{opt.name}</button>;
                               })}
                               {options.length === 0 && <span style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>No gaming licenses or clients found</span>}
                             </div>
@@ -4079,7 +4083,7 @@ function AviroDashboard() {
 
           {/* Delete Provider */}
           <div style={{ marginTop: 16, textAlign: "right" }}>
-            <button onClick={() => { if (confirm("Delete this provider and all its services?")) { setProviders(providers.filter(p => p.id !== prov.id)); setSelectedProvider(null); } }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 8, padding: "8px 20px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Delete Provider</button>
+            <button onClick={() => { if (confirm("Delete this provider and all its services?")) { setProviders(providers.filter(p => p.id !== prov.id)); setSelectedProvider(null); } }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 8, padding: "8px 20px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Delete Provider</button>
           </div>
         </div>
       );
@@ -4090,7 +4094,7 @@ function AviroDashboard() {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Providers</h2>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Providers</h2>
             <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{providers.length} provider{providers.length !== 1 ? "s" : ""} · {providers.reduce((sum, p) => sum + (p.services || []).length, 0)} services</p>
           </div>
           <button onClick={() => setShowAddProvider(!showAddProvider)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Provider</button>
@@ -4270,7 +4274,7 @@ function AviroDashboard() {
                     ))}
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => setEditingEntityField(null)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Done</button>
-                      <button onClick={() => { setEntityServiceProviders({ ...entityServiceProviders, [entity.name]: providers.filter(sp => sp.id !== p.id) }); setEditingEntityField(null); }} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 10 }}>Delete</button>
+                      <button onClick={() => { setEntityServiceProviders({ ...entityServiceProviders, [entity.name]: providers.filter(sp => sp.id !== p.id) }); setEditingEntityField(null); }} style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 10 }}>Delete</button>
                     </div>
                   </div>
                 ) : (
@@ -4301,9 +4305,9 @@ function AviroDashboard() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
             {[
               { label: "Documents", value: allUserDocs.length, color: "#3b82f6" },
-              { label: "Expiring", value: allUserDocs.filter(d => getDocStatus(d) === "expiring").length, color: "#ef4444" },
-              { label: "Review Soon", value: allUserDocs.filter(d => getDocStatus(d) === "review_soon").length, color: "#f59e0b" },
-              { label: "Missing", value: missingDocs.length, color: "#8b5cf6" },
+              { label: "Expiring", value: allUserDocs.filter(d => getDocStatus(d) === "expiring").length, color: "#f87171" },
+              { label: "Review Soon", value: allUserDocs.filter(d => getDocStatus(d) === "review_soon").length, color: "#fbbf24" },
+              { label: "Missing", value: missingDocs.length, color: "#a78bfa" },
             ].map(s => (
               <div key={s.label} style={{ background: c.surface, borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
                 <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -4338,7 +4342,7 @@ function AviroDashboard() {
           {allUserDocs.map((doc, i) => {
             const status = getDocStatus(doc);
             const renewalDateStr = getDocRenewalDate(doc);
-            const statusColors = { expired: "#ef4444", expiring: "#f59e0b", review_soon: "#eab308", valid: "#22c55e", unknown: "#6b7280" };
+            const statusColors = { expired: "#f87171", expiring: "#fbbf24", review_soon: "#eab308", valid: "#34d399", unknown: "#6b7280" };
             const sc = statusColors[status] || statusColors.unknown;
             const isEditing = editingEntityField === `doc-${doc.id}`;
             const isShowingHistory = editingEntityField === `hist-${doc.id}`;
@@ -4476,7 +4480,7 @@ function AviroDashboard() {
                         </div>
                         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
                           <button onClick={() => setEditingEntityField(null)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Done</button>
-                          <button onClick={() => { setEntityDocs({ ...entityDocs, [entity.name]: allUserDocs.filter(d => d.id !== doc.id) }); setEditingEntityField(null); }} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11 }}>Delete Document</button>
+                          <button onClick={() => { setEntityDocs({ ...entityDocs, [entity.name]: allUserDocs.filter(d => d.id !== doc.id) }); setEditingEntityField(null); }} style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11 }}>Delete Document</button>
                         </div>
                       </div>
                     ) : (
@@ -4626,13 +4630,13 @@ function AviroDashboard() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ fontSize: 15, fontWeight: 600, color: c.text }}>{dom.domainName || "New Domain"}</span>
-                    {dom.proofFileUrl && <span style={{ fontSize: 9, color: "#22c55e", background: "rgba(34,197,94,0.12)", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>PROOF ✓</span>}
+                    {dom.proofFileUrl && <span style={{ fontSize: 9, color: "#34d399", background: "rgba(34,197,94,0.12)", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>PROOF ✓</span>}
                     {mirrorInfo && <span style={{ fontSize: 9, color: c.accent, background: `${c.accent}15`, padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>{mirrorInfo.count} MIRRORS</span>}
-                    {(dom.licenseSeals || []).length > 0 && <span style={{ fontSize: 9, color: "#f59e0b", background: "rgba(245,158,11,0.12)", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>{dom.licenseSeals.length} SEAL{dom.licenseSeals.length > 1 ? "S" : ""}</span>}
+                    {(dom.licenseSeals || []).length > 0 && <span style={{ fontSize: 9, color: "#fbbf24", background: "rgba(245,158,11,0.12)", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>{dom.licenseSeals.length} SEAL{dom.licenseSeals.length > 1 ? "S" : ""}</span>}
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button onClick={() => updateDomain(dom.id, "collapsed", !dom.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{dom.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
-                    <button onClick={() => updateDomains(domains.filter(d => d.id !== dom.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                    <button onClick={() => updateDomains(domains.filter(d => d.id !== dom.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
                   </div>
                 </div>
 
@@ -4650,9 +4654,9 @@ function AviroDashboard() {
                       <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, display: "block", marginBottom: 4, textTransform: "uppercase" }}>Domain Proof</label>
                       {dom.proofFileUrl ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34,197,94,0.08)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.2)" }}>
-                          <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, flex: 1 }}>📄 {dom.proofFileName || "proof"}</span>
+                          <span style={{ fontSize: 12, color: "#34d399", fontWeight: 500, flex: 1 }}>📄 {dom.proofFileName || "proof"}</span>
                           <a href={dom.proofFileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>Download</a>
-                          <button onClick={() => { updateDomain(dom.id, "proofFileUrl", ""); updateDomain(dom.id, "proofFileName", ""); }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                          <button onClick={() => { updateDomain(dom.id, "proofFileUrl", ""); updateDomain(dom.id, "proofFileName", ""); }} style={{ fontSize: 10, color: "#f87171", background: "transparent", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
                         </div>
                       ) : (
                         <div
@@ -4734,16 +4738,16 @@ function AviroDashboard() {
                             <button onClick={() => {
                               const updatedSeals = (dom.licenseSeals || []).filter(s => s.id !== seal.id);
                               updateDomain(dom.id, "licenseSeals", updatedSeals);
-                            }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                            }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
                           </div>
                           {seal.fileUrl ? (
                             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34,197,94,0.08)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.2)" }}>
-                              <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, flex: 1 }}>📄 {seal.fileName || "seal document"}</span>
+                              <span style={{ fontSize: 12, color: "#34d399", fontWeight: 500, flex: 1 }}>📄 {seal.fileName || "seal document"}</span>
                               <a href={seal.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>Download</a>
                               <button onClick={() => {
                                 const updatedSeals = (dom.licenseSeals || []).map(s => s.id === seal.id ? { ...s, fileUrl: "", fileName: "" } : s);
                                 updateDomain(dom.id, "licenseSeals", updatedSeals);
-                              }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                              }} style={{ fontSize: 10, color: "#f87171", background: "transparent", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
                             </div>
                           ) : (
                             <div
@@ -4870,7 +4874,7 @@ function AviroDashboard() {
                     <button onClick={() => setEditingEntityField(isEditing ? null : `ag-${ag.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 8px" }}>{isEditing ? "Done" : "Edit"}</button>
                     <button onClick={() => {
                       setEntityCorpAgreements({ ...entityCorpAgreements, [entity.name]: corpAgs.filter(a => a.id !== ag.id) });
-                    }} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                    }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
                   </div>
                 </div>
 
@@ -4891,9 +4895,9 @@ function AviroDashboard() {
                       <label style={agLabelStyle}>Document</label>
                       {ag.fileUrl ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34,197,94,0.08)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.2)" }}>
-                          <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, flex: 1 }}>📄 {ag.fileName || "document"}</span>
+                          <span style={{ fontSize: 12, color: "#34d399", fontWeight: 500, flex: 1 }}>📄 {ag.fileName || "document"}</span>
                           <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>Download</a>
-                          <button onClick={() => { updateCorp(ag.id, "fileUrl", ""); updateCorp(ag.id, "fileName", ""); }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                          <button onClick={() => { updateCorp(ag.id, "fileUrl", ""); updateCorp(ag.id, "fileName", ""); }} style={{ fontSize: 10, color: "#f87171", background: "transparent", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
                         </div>
                       ) : (
                         <div
@@ -5002,7 +5006,7 @@ function AviroDashboard() {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
           <div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Corporate Entity Matrix</h2>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Corporate Entity Matrix</h2>
             <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{corporateEntities.length} entities across {Object.keys(CORPORATE_ENTITIES).length} categories</p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -5056,7 +5060,7 @@ function AviroDashboard() {
           </div>
         )}
         {allDocAlerts.length > 0 && (
-          <div style={{ background: c.card, border: `1px solid rgba(239,68,68,0.25)`, borderRadius: 10, marginBottom: 20, overflow: "hidden" }}>
+          <div style={{ background: c.card, border: `1px solid rgba(248,113,113,0.15)`, borderRadius: 10, marginBottom: 20, overflow: "hidden" }}>
             <div onClick={() => setEntityAlertsCollapsed(!entityAlertsCollapsed)}
               style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", cursor: "pointer", background: "rgba(239,68,68,0.06)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -5069,13 +5073,13 @@ function AviroDashboard() {
               <div style={{ padding: "8px 16px 12px" }}>
                 {allDocAlerts.map((a, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: i < allDocAlerts.length - 1 ? `1px solid ${c.border}` : "none" }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: a.status === "expired" ? "#ef4444" : a.status === "expiring" ? "#f59e0b" : "#3b82f6" }} />
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: a.status === "expired" ? "#f87171" : a.status === "expiring" ? "#fbbf24" : "#3b82f6" }} />
                     <span style={{ fontSize: 12, color: c.text, flex: 1 }}>
                       <span style={{ fontWeight: 600 }}>{a.entity}</span>
                       <span style={{ color: c.textMuted }}> — </span>
                       <span>{a.doc}</span>
                       <span style={{ color: c.textMuted }}> — </span>
-                      <span style={{ fontWeight: 500, color: a.status === "expired" ? "#ef4444" : a.status === "expiring" ? "#f59e0b" : "#3b82f6" }}>
+                      <span style={{ fontWeight: 500, color: a.status === "expired" ? "#f87171" : a.status === "expiring" ? "#fbbf24" : "#3b82f6" }}>
                         {a.status === "expired" ? "Expired" : a.status === "expiring" ? "Expiring Soon" : "Review Soon"}
                       </span>
                       {a.renewalDate && a.renewalDate !== "No date" && (
@@ -5123,7 +5127,7 @@ function AviroDashboard() {
                 const eDocs = entityDocs[entity.name] || [];
                 const ac = eDocs.filter(d => { const s = getDocStatusGlobal(d); return s === "expired" || s === "expiring" || s === "review_soon"; }).length;
                 return (
-                  <div key={entity.name || entity.id} style={{ background: c.card, border: `1px solid ${ac > 0 ? "rgba(239,68,68,0.3)" : c.border}`, borderRadius: 10, padding: 16, cursor: "pointer", position: "relative" }}
+                  <div key={entity.name || entity.id} style={{ background: c.card, border: `1px solid ${ac > 0 ? "rgba(248,113,113,0.2)" : c.border}`, borderRadius: 10, padding: 16, cursor: "pointer", position: "relative" }}
                     onMouseEnter={e => e.currentTarget.style.background = c.cardHover} onMouseLeave={e => e.currentTarget.style.background = c.card}>
                     <button onClick={e => { e.stopPropagation(); if (confirm("Delete " + entity.name + "?")) setCorporateEntities(corporateEntities.filter(ce => ce.id !== entity.id)); }} style={{ position: "absolute", top: 8, right: 8, background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 10, opacity: 0.5, padding: "2px 6px" }} title="Delete entity">✕</button>
                     <div onClick={() => { setSelectedEntity(entity.name); setSelectedCategory(category); }}>
@@ -5149,11 +5153,11 @@ function AviroDashboard() {
   };
 
   // ===== MONEY FLOW =====
-  const typeColors = { "Payment Processing": "#6366f1", "Software License": "#22c55e", "Management Fee": "#f59e0b", "Payment Gateway": "#06b6d4", "Revenue Distribution": "#ec4899", "Subsidiary Distribution": "#8b5cf6" };
+  const typeColors = { "Payment Processing": "#818cf8", "Software License": "#34d399", "Management Fee": "#fbbf24", "Payment Gateway": "#06b6d4", "Revenue Distribution": "#ec4899", "Subsidiary Distribution": "#a78bfa" };
   const AGREEMENT_TYPES = ["Payment Processing", "Software License", "Management Fee", "Revenue Share", "Sub-License", "Service Agreement", "Payment Gateway", "Foundation Agreement", "Other"];
   const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "AED", "BTC", "USDT", "Other"];
   const TERMS = ["Weekly", "Monthly", "Quarterly", "6 Months", "Yearly"];
-  const agreementTypeColors = { "Payment Processing": "#6366f1", "Software License": "#22c55e", "Management Fee": "#f59e0b", "Revenue Share": "#ec4899", "Sub-License": "#8b5cf6", "Service Agreement": "#06b6d4", "Payment Gateway": "#14b8a6", "Foundation Agreement": "#f97316", "Other": "#6b7280" };
+  const agreementTypeColors = { "Payment Processing": "#818cf8", "Software License": "#34d399", "Management Fee": "#fbbf24", "Revenue Share": "#ec4899", "Sub-License": "#a78bfa", "Service Agreement": "#06b6d4", "Payment Gateway": "#14b8a6", "Foundation Agreement": "#f97316", "Other": "#6b7280" };
 
   const renderMoneyFlow = () => {
     const allNames = corporateEntities.map(e => e.name);
@@ -5201,7 +5205,7 @@ function AviroDashboard() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Corporate Flow</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Corporate Flow</h2>
           <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{entityIntraAgreements.length} intra-company agreement{entityIntraAgreements.length !== 1 ? "s" : ""} across {connectedEntities.size} entities</p>
         </div>
         <button onClick={() => {
@@ -5242,7 +5246,7 @@ function AviroDashboard() {
             {nodes.map(name => {
               const pos = nodePositions[name];
               const entObj = corporateEntities.find(ce => ce.name === name);
-              const catColor = entObj?.category === "Gaming License" ? "#6366f1" : entObj?.category === "Payment Agent" ? "#22c55e" : entObj?.category === "Technology Company" ? "#06b6d4" : entObj?.category === "Management Company" ? "#f59e0b" : c.accent;
+              const catColor = entObj?.category === "Gaming License" ? "#818cf8" : entObj?.category === "Payment Agent" ? "#34d399" : entObj?.category === "Technology Company" ? "#06b6d4" : entObj?.category === "Management Company" ? "#fbbf24" : c.accent;
               return (
                 <g key={name}>
                   <circle cx={pos.x} cy={pos.y} r={28} fill={c.card} stroke={catColor} strokeWidth="2.5" />
@@ -5272,12 +5276,12 @@ function AviroDashboard() {
               <span style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{ag.toEntity || "?"}</span>
               {ag.agreementType && <span style={{ fontSize: 10, color: typeColor, background: `${typeColor}15`, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{ag.agreementType}</span>}
               {ag.amount && <span style={{ fontSize: 11, color: c.textMuted }}>{ag.currency || ""} {ag.amount}{ag.term ? ` / ${ag.term}` : ""}</span>}
-              {ag.fileUrl && <span style={{ fontSize: 9, color: "#22c55e", fontWeight: 600 }}>DOC ✓</span>}
+              {ag.fileUrl && <span style={{ fontSize: 9, color: "#34d399", fontWeight: 600 }}>DOC ✓</span>}
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               {ag.fileUrl && <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>↓</a>}
               <button onClick={() => updateAg(ag.id, "collapsed", !ag.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{ag.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
-              <button onClick={() => setEntityIntraAgreements(entityIntraAgreements.filter(a => a.id !== ag.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+              <button onClick={() => setEntityIntraAgreements(entityIntraAgreements.filter(a => a.id !== ag.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
             </div>
           </div>
 
@@ -5361,9 +5365,9 @@ function AviroDashboard() {
                 <label style={labelStyle}>Document</label>
                 {ag.fileUrl ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(34,197,94,0.08)", borderRadius: 6, border: "1px solid rgba(34,197,94,0.2)" }}>
-                    <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 500, flex: 1 }}>📄 {ag.fileName || "document"}</span>
+                    <span style={{ fontSize: 12, color: "#34d399", fontWeight: 500, flex: 1 }}>📄 {ag.fileName || "document"}</span>
                     <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "3px 8px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>Download</a>
-                    <button onClick={() => { updateAg(ag.id, "fileUrl", ""); updateAg(ag.id, "fileName", ""); }} style={{ fontSize: 10, color: "#ef4444", background: "transparent", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                    <button onClick={() => { updateAg(ag.id, "fileUrl", ""); updateAg(ag.id, "fileName", ""); }} style={{ fontSize: 10, color: "#f87171", background: "transparent", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
                   </div>
                 ) : (
                   <div
@@ -5470,7 +5474,7 @@ function AviroDashboard() {
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => updateRel(rel.id, "collapsed", !rel.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{rel.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
-                <button onClick={() => setBankRelationships(bankRelationships.filter(r => r.id !== rel.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                <button onClick={() => setBankRelationships(bankRelationships.filter(r => r.id !== rel.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
               </div>
             </div>
 
@@ -5516,7 +5520,7 @@ function AviroDashboard() {
                   {(rel.supportChannels || []).map((ch, ci) => (
                     <div key={ci} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
                       <input value={ch} onChange={e => updateSupportChannel(rel.id, ci, e.target.value)} placeholder="e.g. Slack #bank-support, WhatsApp group..." style={{ ...inputStyle, flex: 1 }} />
-                      <button onClick={() => removeSupportChannel(rel.id, ci)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, padding: "2px 6px" }}>✕</button>
+                      <button onClick={() => removeSupportChannel(rel.id, ci)} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 12, padding: "2px 6px" }}>✕</button>
                     </div>
                   ))}
                   {(rel.supportChannels || []).length === 0 && <div style={{ fontSize: 11, color: c.textMuted }}>No channels added</div>}
@@ -5574,7 +5578,7 @@ function AviroDashboard() {
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => updateAcct(acct.id, "collapsed", !acct.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{acct.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
-                <button onClick={() => setBankAccountsList(bankAccountsList.filter(a => a.id !== acct.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                <button onClick={() => setBankAccountsList(bankAccountsList.filter(a => a.id !== acct.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
               </div>
             </div>
 
@@ -5624,7 +5628,7 @@ function AviroDashboard() {
                       <button onClick={() => updateAcct(acct.id, "feesOverride", linkedRel.fees ? { ...linkedRel.fees } : { B2B: { pct: "", tx: "" }, B2C: { pct: "", tx: "" }, C2B: { pct: "", tx: "" }, FX: { pct: "", tx: "" } })} style={{ fontSize: 10, color: c.accent, background: `${c.accent}15`, border: `1px solid ${c.accent}40`, borderRadius: 4, padding: "2px 8px", cursor: "pointer" }}>Override Manually</button>
                     )}
                     {acct.feesOverride && (
-                      <button onClick={() => updateAcct(acct.id, "feesOverride", null)} style={{ fontSize: 10, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 4, padding: "2px 8px", cursor: "pointer" }}>Use Bank Fees</button>
+                      <button onClick={() => updateAcct(acct.id, "feesOverride", null)} style={{ fontSize: 10, color: "#fbbf24", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 4, padding: "2px 8px", cursor: "pointer" }}>Use Bank Fees</button>
                     )}
                   </div>
                   {acctFees ? (
@@ -5721,7 +5725,7 @@ function AviroDashboard() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Gaming Brands</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Gaming Brands</h2>
           <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gamingBrands.length} brand{gamingBrands.length !== 1 ? "s" : ""}</p>
         </div>
         <button onClick={() => {
@@ -5757,7 +5761,7 @@ function AviroDashboard() {
               </div>
               <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 8 }}>
                 <button onClick={() => updateBrand(brand.id, "collapsed", !brand.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{brand.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
-                <button onClick={() => setGamingBrands(gamingBrands.filter(b => b.id !== brand.id))} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                <button onClick={() => setGamingBrands(gamingBrands.filter(b => b.id !== brand.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
               </div>
             </div>
 
@@ -5781,7 +5785,7 @@ function AviroDashboard() {
                     {(brand.mirrors || []).map((m, mi) => (
                       <div key={mi} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <input value={m} onChange={e => updateMirror(brand.id, mi, e.target.value)} placeholder="mirror.com" style={{ ...inputStyle, width: 160 }} />
-                        <button onClick={() => removeMirror(brand.id, mi)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, padding: "2px 4px" }}>✕</button>
+                        <button onClick={() => removeMirror(brand.id, mi)} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 12, padding: "2px 4px" }}>✕</button>
                       </div>
                     ))}
                   </div>
@@ -5831,7 +5835,7 @@ function AviroDashboard() {
                     {(brand.paymentMethods || []).map((pm, pi) => (
                       <div key={pi} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <input value={pm} onChange={e => updatePaymentMethod(brand.id, pi, e.target.value)} placeholder="e.g. Visa, Crypto..." style={{ ...inputStyle, width: 150 }} />
-                        <button onClick={() => removePaymentMethod(brand.id, pi)} style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, padding: "2px 4px" }}>✕</button>
+                        <button onClick={() => removePaymentMethod(brand.id, pi)} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 12, padding: "2px 4px" }}>✕</button>
                       </div>
                     ))}
                   </div>
@@ -5898,7 +5902,7 @@ function AviroDashboard() {
                   {/* Task breakdown */}
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {day.tasks.map((t, i) => (
-                      <span key={i} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, background: t.completed ? c.successBg : c.dangerBg, color: t.completed ? c.success : c.danger, border: `1px solid ${t.completed ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}` }}>
+                      <span key={i} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, background: t.completed ? c.successBg : c.dangerBg, color: t.completed ? c.success : c.danger, border: `1px solid ${t.completed ? "rgba(34,197,94,0.3)" : "rgba(248,113,113,0.2)"}` }}>
                         {t.completed ? "✓" : "✗"} {t.name}
                       </span>
                     ))}
@@ -5925,7 +5929,7 @@ function AviroDashboard() {
     return (
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0 }}>Notes</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Notes</h2>
           <span style={{ fontSize: 12, color: c.textMuted }}>{allNotes.length} note{allNotes.length !== 1 ? "s" : ""}</span>
         </div>
         <p style={{ color: c.textSecondary, fontSize: 13, margin: "0 0 16px 0" }}>All notes in one place — meeting notes, quick job notes, and manual entries. Ordered by date.</p>
@@ -5983,7 +5987,7 @@ function AviroDashboard() {
                   <div style={{ fontSize: 13, color: c.text, whiteSpace: "pre-wrap", lineHeight: 1.7 }}>{note.text}</div>
                   {note.type === "manual" && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
-                      <button onClick={() => setGlobalNotes(globalNotes.filter(n => n.id !== note.id))} style={{ background: "transparent", border: `1px solid rgba(239,68,68,0.3)`, color: c.danger, borderRadius: 6, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete Note</button>
+                      <button onClick={() => setGlobalNotes(globalNotes.filter(n => n.id !== note.id))} style={{ background: "transparent", border: `1px solid rgba(248,113,113,0.2)`, color: c.danger, borderRadius: 6, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete Note</button>
                     </div>
                   )}
                 </div>
@@ -5998,41 +6002,41 @@ function AviroDashboard() {
   // ===== HOMEPAGE =====
   const renderHome = () => {
     const homeCards = [
-      { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #6366f1, #8b5cf6)", defaultSection: "clients" },
-      { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #f59e0b, #ef4444)", defaultSection: null },
-      { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #10b981, #059669)", defaultSection: "entities" },
-      { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)", defaultSection: "calendar" },
-      { key: "crm", title: "Client Management", desc: "Contacts, Deals & Communication", icon: "delegate", gradient: "linear-gradient(135deg, #ec4899, #be185d)", defaultSection: "crm" },
-      { key: "settings", title: "Settings", desc: "FX Rates, Connections & Configuration", icon: "bank", gradient: "linear-gradient(135deg, #6b7280, #4b5563)", defaultSection: "settings" },
+      { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #818cf8, #a78bfa)", defaultSection: "clients" },
+      { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #fbbf24, #f87171)", defaultSection: null },
+      { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #34d399, #10b981)", defaultSection: "entities" },
+      { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #60a5fa, #3b82f6)", defaultSection: "calendar" },
+      { key: "crm", title: "Client Management", desc: "Contacts, Deals & Communication", icon: "delegate", gradient: "linear-gradient(135deg, #f472b6, #ec4899)", defaultSection: "crm" },
+      { key: "settings", title: "Settings", desc: "FX Rates, Connections & Configuration", icon: "bank", gradient: "linear-gradient(135deg, #9ca3af, #6b7280)", defaultSection: "settings" },
     ];
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 64px)" }}>
         {/* Branding */}
-        <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <div style={{ width: 80, height: 80, borderRadius: 20, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 36, color: "#fff", margin: "0 auto 20px", boxShadow: "0 8px 32px rgba(99,102,241,0.3)" }}>A</div>
-          <h1 style={{ fontSize: 36, fontWeight: 800, color: c.text, margin: "0 0 6px 0", letterSpacing: "-0.5px" }}>The Aviro Group</h1>
-          <p style={{ fontSize: 16, color: c.textMuted, margin: "0 0 8px 0", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 500 }}>Global Enterprise</p>
-          <div style={{ width: 60, height: 3, background: "linear-gradient(90deg, #6366f1, #8b5cf6)", borderRadius: 2, margin: "16px auto 0" }} />
+        <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <div style={{ width: 88, height: 88, borderRadius: 22, background: "linear-gradient(135deg, #818cf8, #a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 40, color: "#fff", margin: "0 auto 24px", boxShadow: "0 12px 40px rgba(129,140,248,0.2)" }}>A</div>
+          <h1 style={{ fontSize: 38, fontWeight: 800, color: c.text, margin: "0 0 8px 0", letterSpacing: "-0.5px" }}>The Aviro Group</h1>
+          <p style={{ fontSize: 15, color: c.textMuted, margin: "0 0 8px 0", letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 500 }}>Global Enterprise</p>
+          <div style={{ width: 48, height: 2, background: "linear-gradient(90deg, transparent, #818cf8, transparent)", borderRadius: 2, margin: "20px auto 0" }} />
         </div>
 
         {/* Section title */}
-        <h2 style={{ fontSize: 14, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 24 }}>Company Dashboard</h2>
+        <h2 style={{ fontSize: 12, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: 28 }}>Company Dashboard</h2>
 
         {/* Cards grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, width: "100%", maxWidth: 900 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18, width: "100%", maxWidth: 920 }}>
           {homeCards.map(card => (
             <div key={card.key}
               onClick={() => { if (card.defaultSection) setSection(card.defaultSection); }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.15)"; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.06)"; }}
-              style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 28, cursor: card.defaultSection ? "pointer" : "default", transition: "all 0.2s ease", boxShadow: "0 4px 16px rgba(0,0,0,0.06)", position: "relative", overflow: "hidden", opacity: card.defaultSection ? 1 : 0.6 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: card.gradient, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, boxShadow: `0 4px 12px ${card.gradient.includes("6366f1") ? "rgba(99,102,241,0.3)" : card.gradient.includes("f59e0b") ? "rgba(245,158,11,0.3)" : card.gradient.includes("10b981") ? "rgba(16,185,129,0.3)" : "rgba(59,130,246,0.3)"}` }}>
-                <Icon type={card.icon} size={22} color="#fff" />
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = "0 16px 48px rgba(0,0,0,0.2)"; e.currentTarget.style.borderColor = c.borderLight; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)"; e.currentTarget.style.borderColor = c.border; }}
+              style={{ background: c.card, borderRadius: 18, border: `1px solid ${c.border}`, padding: 28, cursor: card.defaultSection ? "pointer" : "default", transition: "all 0.25s ease", boxShadow: "0 4px 20px rgba(0,0,0,0.1)", position: "relative", overflow: "hidden", opacity: card.defaultSection ? 1 : 0.5 }}>
+              <div style={{ width: 46, height: 46, borderRadius: 13, background: card.gradient, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18, boxShadow: `0 4px 16px ${card.gradient.includes("818cf8") || card.gradient.includes("6366f1") ? "rgba(129,140,248,0.25)" : card.gradient.includes("f59e0b") ? "rgba(245,158,11,0.25)" : card.gradient.includes("10b981") ? "rgba(52,211,153,0.25)" : "rgba(59,130,246,0.25)"}` }}>
+                <Icon type={card.icon} size={21} color="#fff" />
               </div>
-              <h3 style={{ fontSize: 18, fontWeight: 700, color: c.text, margin: "0 0 6px 0" }}>{card.title}</h3>
-              <p style={{ fontSize: 13, color: c.textMuted, margin: 0, lineHeight: 1.4 }}>{card.desc}</p>
-              {!card.defaultSection && <div style={{ position: "absolute", top: 12, right: 12, background: c.surface, borderRadius: 6, padding: "3px 8px", fontSize: 10, color: c.textMuted, fontWeight: 600 }}>Coming Soon</div>}
-              {card.defaultSection && <div style={{ marginTop: 12, fontSize: 12, color: c.accent, fontWeight: 600 }}>Open →</div>}
+              <h3 style={{ fontSize: 17, fontWeight: 700, color: c.text, margin: "0 0 6px 0" }}>{card.title}</h3>
+              <p style={{ fontSize: 13, color: c.textMuted, margin: 0, lineHeight: 1.5 }}>{card.desc}</p>
+              {!card.defaultSection && <div style={{ position: "absolute", top: 14, right: 14, background: c.surface, borderRadius: 6, padding: "3px 10px", fontSize: 10, color: c.textMuted, fontWeight: 500, letterSpacing: "0.03em" }}>Coming Soon</div>}
+              {card.defaultSection && <div style={{ marginTop: 14, fontSize: 12, color: c.accent, fontWeight: 600, letterSpacing: "0.02em" }}>Open →</div>}
             </div>
           ))}
         </div>
@@ -6043,14 +6047,14 @@ function AviroDashboard() {
   // ===== CLIENT MANAGEMENT (CRM) =====
   const renderClientMgmt = () => {
     const STATUSES = ["In Discussion", "Onboarding", "Active", "Inactive"];
-    const statusColors3 = { "In Discussion": "#8b5cf6", "Onboarding": "#f59e0b", "Active": "#22c55e", "Inactive": "#6b7280" };
+    const statusColors3 = { "In Discussion": "#a78bfa", "Onboarding": "#fbbf24", "Active": "#34d399", "Inactive": "#6b7280" };
     const PROGRESS_OPTS = ["Started", "Progressing", "Going Slow", "Nearly Finished", "Testing"];
-    const progressColors = { "Started": "#8b5cf6", "Progressing": "#3b82f6", "Going Slow": "#f59e0b", "Nearly Finished": "#06b6d4", "Testing": "#22c55e" };
+    const progressColors = { "Started": "#a78bfa", "Progressing": "#3b82f6", "Going Slow": "#fbbf24", "Nearly Finished": "#06b6d4", "Testing": "#34d399" };
     const SERVICE_OPTIONS = ["Gateway", "PSP", "Luxon Integration", "Banking", "UK Payments", "Operator Brand", "Other"];
 
     const inputSt3 = { fontSize: 12, padding: "8px 10px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
     const labelSt3 = { fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, display: "block" };
-    const cardSt = { background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 };
+    const cardSt = { background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 22, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" };
 
     const addCrmClient = () => {
       const name = prompt("Client name:");
@@ -6152,7 +6156,7 @@ function AviroDashboard() {
               <button onClick={() => setCrmSelectedClient(null)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.textSecondary, cursor: "pointer", fontWeight: 600 }}>← All Clients</button>
               <h2 style={{ fontSize: 20, fontWeight: 800, color: c.text, margin: 0 }}>{cl.name}</h2>
             </div>
-            <button onClick={() => deleteCrmClient(cl.id)} style={{ fontSize: 10, padding: "5px 10px", borderRadius: 6, border: "none", background: "rgba(239,68,68,0.08)", color: "#ef4444", cursor: "pointer", fontWeight: 600 }}>Delete</button>
+            <button onClick={() => deleteCrmClient(cl.id)} style={{ fontSize: 10, padding: "5px 10px", borderRadius: 6, border: "none", background: "rgba(248,113,113,0.06)", color: "#f87171", cursor: "pointer", fontWeight: 600 }}>Delete</button>
           </div>
         </div>
 
@@ -6221,7 +6225,7 @@ function AviroDashboard() {
                       <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5 }}>{nt.text}</div>
                       <div style={{ fontSize: 9, color: c.textMuted, marginTop: 3 }}>{nt.date}</div>
                     </div>
-                    <button onClick={() => updateCrm(cl.id, "notes", (cl.notes || []).filter(n => n.id !== nt.id))} style={{ fontSize: 9, padding: "2px 5px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.08)", color: "#ef4444", cursor: "pointer", marginLeft: 8, flexShrink: 0 }}>×</button>
+                    <button onClick={() => updateCrm(cl.id, "notes", (cl.notes || []).filter(n => n.id !== nt.id))} style={{ fontSize: 9, padding: "2px 5px", borderRadius: 4, border: "none", background: "rgba(248,113,113,0.06)", color: "#f87171", cursor: "pointer", marginLeft: 8, flexShrink: 0 }}>×</button>
                   </div>
                 ))}
               </div>
@@ -6242,11 +6246,11 @@ function AviroDashboard() {
 
               {/* Aviro Side input */}
               <div style={{ background: "rgba(99,102,241,0.06)", borderRadius: 10, padding: 12, marginBottom: 10, border: `1px solid rgba(99,102,241,0.15)` }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#6366f1", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Aviro Side</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#818cf8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Aviro Side</div>
                 <textarea value={crmNewAviroText} onChange={e => setCrmNewAviroText(e.target.value)} placeholder="What did the Aviro side discuss..." rows={2} style={{ ...inputSt3, width: "100%", resize: "vertical", fontFamily: "inherit", lineHeight: 1.5, marginBottom: 6 }} />
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input value={crmNewAttendees} onChange={e => setCrmNewAttendees(e.target.value)} placeholder="Who was present..." style={{ ...inputSt3, flex: 1, fontSize: 11 }} />
-                  <button onClick={() => addConvEntry(cl.id, "Aviro", cl.convLog)} style={{ fontSize: 10, padding: "6px 14px", borderRadius: 6, border: "none", background: "#6366f1", color: "#fff", cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>Add</button>
+                  <button onClick={() => addConvEntry(cl.id, "Aviro", cl.convLog)} style={{ fontSize: 10, padding: "6px 14px", borderRadius: 6, border: "none", background: "#818cf8", color: "#fff", cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>Add</button>
                 </div>
               </div>
 
@@ -6263,14 +6267,14 @@ function AviroDashboard() {
               {/* Logged entries */}
               {(cl.convLog || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No conversations logged yet</div>}
               {(cl.convLog || []).map(cv => (
-                <div key={cv.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8, borderLeft: `3px solid ${cv.side === "Aviro" ? "#6366f1" : "#ec4899"}` }}>
+                <div key={cv.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 12, marginBottom: 8, borderLeft: `3px solid ${cv.side === "Aviro" ? "#818cf8" : "#ec4899"}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: cv.side === "Aviro" ? "#6366f1" : "#ec4899" }}>{cv.side} Side</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: cv.side === "Aviro" ? "#818cf8" : "#ec4899" }}>{cv.side} Side</span>
                       <span style={{ fontSize: 10, color: c.textMuted }}>{cv.date}</span>
                       {cv.attendees && <span style={{ fontSize: 9, color: c.textSecondary, background: `${c.border}40`, padding: "2px 6px", borderRadius: 4 }}>👥 {cv.attendees}</span>}
                     </div>
-                    <button onClick={() => updateCrm(cl.id, "convLog", (cl.convLog || []).filter(c2 => c2.id !== cv.id))} style={{ fontSize: 9, padding: "3px 6px", borderRadius: 4, border: "none", background: "rgba(239,68,68,0.08)", color: "#ef4444", cursor: "pointer" }}>×</button>
+                    <button onClick={() => updateCrm(cl.id, "convLog", (cl.convLog || []).filter(c2 => c2.id !== cv.id))} style={{ fontSize: 9, padding: "3px 6px", borderRadius: 4, border: "none", background: "rgba(248,113,113,0.06)", color: "#f87171", cursor: "pointer" }}>×</button>
                   </div>
                   <div style={{ fontSize: 12, color: c.text, lineHeight: 1.5 }}>{cv.notes}</div>
                 </div>
@@ -6304,8 +6308,8 @@ function AviroDashboard() {
               </div>
               <label style={labelSt3}>Legals Done?</label>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => updateCrm(cl.id, "legalsDone", true)} style={{ fontSize: 11, padding: "6px 16px", borderRadius: 6, border: cl.legalsDone === true ? "none" : `1px solid ${c.border}`, background: cl.legalsDone === true ? "#22c55e" : "transparent", color: cl.legalsDone === true ? "#fff" : c.textMuted, cursor: "pointer", fontWeight: 700 }}>YES</button>
-                <button onClick={() => updateCrm(cl.id, "legalsDone", false)} style={{ fontSize: 11, padding: "6px 16px", borderRadius: 6, border: cl.legalsDone === false || !cl.legalsDone ? "none" : `1px solid ${c.border}`, background: cl.legalsDone === false || !cl.legalsDone ? "#ef4444" : "transparent", color: cl.legalsDone === false || !cl.legalsDone ? "#fff" : c.textMuted, cursor: "pointer", fontWeight: 700 }}>NO</button>
+                <button onClick={() => updateCrm(cl.id, "legalsDone", true)} style={{ fontSize: 11, padding: "6px 16px", borderRadius: 6, border: cl.legalsDone === true ? "none" : `1px solid ${c.border}`, background: cl.legalsDone === true ? "#34d399" : "transparent", color: cl.legalsDone === true ? "#fff" : c.textMuted, cursor: "pointer", fontWeight: 700 }}>YES</button>
+                <button onClick={() => updateCrm(cl.id, "legalsDone", false)} style={{ fontSize: 11, padding: "6px 16px", borderRadius: 6, border: cl.legalsDone === false || !cl.legalsDone ? "none" : `1px solid ${c.border}`, background: cl.legalsDone === false || !cl.legalsDone ? "#f87171" : "transparent", color: cl.legalsDone === false || !cl.legalsDone ? "#fff" : c.textMuted, cursor: "pointer", fontWeight: 700 }}>NO</button>
               </div>
             </div>
           </div>
@@ -6332,7 +6336,7 @@ function AviroDashboard() {
               const target = parseFloat(cl.targetVolume.replace(/[^0-9.]/g, "")) || 0;
               const actual = parseFloat(cl.lastMonthVolume.replace(/[^0-9.]/g, "")) || 0;
               const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
-              const barColor = pct >= 80 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+              const barColor = pct >= 80 ? "#34d399" : pct >= 50 ? "#fbbf24" : "#f87171";
               return (
                 <div style={{ marginTop: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
@@ -6427,22 +6431,22 @@ function AviroDashboard() {
               <div style={{ fontSize: 12, color: c.textMuted }}>All rates expressed as 1 unit of currency = X EUR {fxLastUpdated && <span style={{ marginLeft: 8, fontSize: 10, color: c.accent }}>Last updated: {new Date(fxLastUpdated).toLocaleString()}</span>}</div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              {mbFetchStatus && <span style={{ fontSize: 11, color: mbFetchStatus.includes("fail") ? "#ef4444" : "#22c55e", alignSelf: "center" }}>{mbFetchStatus}</span>}
-              <button onClick={fetchLiveRates} style={{ fontSize: 12, padding: "8px 20px", borderRadius: 8, cursor: "pointer", border: "none", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff", fontWeight: 600, boxShadow: "0 2px 8px rgba(99,102,241,0.3)" }}>Fetch Live Rates</button>
+              {mbFetchStatus && <span style={{ fontSize: 11, color: mbFetchStatus.includes("fail") ? "#f87171" : "#34d399", alignSelf: "center" }}>{mbFetchStatus}</span>}
+              <button onClick={fetchLiveRates} style={{ fontSize: 12, padding: "8px 20px", borderRadius: 8, cursor: "pointer", border: "none", background: "linear-gradient(135deg, #818cf8, #a78bfa)", color: "#fff", fontWeight: 600, boxShadow: "0 2px 8px rgba(129,140,248,0.2)" }}>Fetch Live Rates</button>
             </div>
           </div>
 
           {/* Currency Grid */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
             {sortedCurrencies.map(([curr, rate]) => (
-              <div key={curr} style={{ background: c.surface, borderRadius: 12, border: `1px solid ${curr === "EUR" ? "rgba(99,102,241,0.3)" : c.border}`, padding: 14, position: "relative" }}>
+              <div key={curr} style={{ background: c.surface, borderRadius: 12, border: `1px solid ${curr === "EUR" ? "rgba(129,140,248,0.2)" : c.border}`, padding: 14, position: "relative" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 16, fontWeight: 800, color: c.text }}>{curr}</span>
                     {curr === "EUR" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(99,102,241,0.15)", color: c.accent, fontWeight: 700 }}>BASE</span>}
                   </div>
                   {curr !== "EUR" && (
-                    <button onClick={() => removeCurrency(curr)} style={{ fontSize: 14, width: 22, height: 22, borderRadius: 6, cursor: "pointer", border: "none", background: "rgba(239,68,68,0.1)", color: "#ef4444", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>×</button>
+                    <button onClick={() => removeCurrency(curr)} style={{ fontSize: 14, width: 22, height: 22, borderRadius: 6, cursor: "pointer", border: "none", background: "rgba(248,113,113,0.08)", color: "#f87171", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>×</button>
                   )}
                 </div>
                 {curr === "EUR" ? (
@@ -6498,7 +6502,7 @@ function AviroDashboard() {
           {clickupToken && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#6366f1" }}>{clickupDavidTasks.length}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#818cf8" }}>{clickupDavidTasks.length}</div>
                 <div style={{ fontSize: 10, color: c.textMuted }}>David's Open Tasks</div>
               </div>
               <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
@@ -6519,7 +6523,7 @@ function AviroDashboard() {
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {gcalSyncStatus === "syncing" && <span style={{ fontSize: 11, color: c.accent }}>Syncing...</span>}
               {gcalSyncStatus === "synced" && gcalLastSync && <span style={{ fontSize: 10, color: c.success }}>Last synced: {gcalLastSync}</span>}
-              {gcalIcsUrl && <button onClick={syncGoogleCalendar} disabled={gcalSyncStatus === "syncing"} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 6, border: "none", background: "#4285f4", color: "#fff", cursor: gcalSyncStatus === "syncing" ? "wait" : "pointer", fontWeight: 600 }}>Sync Now</button>}
+              {gcalIcsUrl && <button onClick={syncGoogleCalendar} disabled={gcalSyncStatus === "syncing"} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 6, border: "none", background: "#60a5fa", color: "#fff", cursor: gcalSyncStatus === "syncing" ? "wait" : "pointer", fontWeight: 600 }}>Sync Now</button>}
             </div>
           </div>
           <div style={{ marginBottom: 12 }}>
@@ -6533,11 +6537,11 @@ function AviroDashboard() {
           {gcalIcsUrl && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#4285f4" }}>{calEvents.filter(e => e.isGcal).length}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#60a5fa" }}>{calEvents.filter(e => e.isGcal).length}</div>
                 <div style={{ fontSize: 10, color: c.textMuted }}>Calendar Events Loaded</div>
               </div>
               <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#4285f4" }}>{calEvents.filter(e => e.isGcal && e.meet).length}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "#60a5fa" }}>{calEvents.filter(e => e.isGcal && e.meet).length}</div>
                 <div style={{ fontSize: 10, color: c.textMuted }}>With Meet Links</div>
               </div>
             </div>
@@ -6604,7 +6608,7 @@ function AviroDashboard() {
     return (
       <div style={{ display: "flex", height: "100vh", background: c.bg, alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
         <div style={{ textAlign: "center" }}>
-          <div style={{ width: 60, height: 60, borderRadius: 16, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 28, color: "#fff", margin: "0 auto 16px", boxShadow: "0 8px 32px rgba(99,102,241,0.3)" }}>A</div>
+          <div style={{ width: 60, height: 60, borderRadius: 16, background: "linear-gradient(135deg, #818cf8, #a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 28, color: "#fff", margin: "0 auto 16px", boxShadow: "0 8px 32px rgba(129,140,248,0.2)" }}>A</div>
           <div style={{ fontSize: 14, color: c.textMuted }}>Loading...</div>
         </div>
       </div>
@@ -6616,13 +6620,13 @@ function AviroDashboard() {
     return (
       <div style={{ display: "flex", height: "100vh", background: c.bg, alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
         <div style={{ width: 400, textAlign: "center" }}>
-          <div style={{ width: 80, height: 80, borderRadius: 20, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 36, color: "#fff", margin: "0 auto 20px", boxShadow: "0 8px 32px rgba(99,102,241,0.3)" }}>A</div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: c.text, margin: "0 0 4px 0" }}>The Aviro Group</h1>
-          <p style={{ fontSize: 14, color: c.textMuted, margin: "0 0 32px 0", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 500 }}>Global Enterprise</p>
+          <div style={{ width: 80, height: 80, borderRadius: 22, background: "linear-gradient(135deg, #818cf8, #a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 36, color: "#fff", margin: "0 auto 24px", boxShadow: "0 12px 40px rgba(129,140,248,0.2)" }}>A</div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: c.text, margin: "0 0 6px 0" }}>The Aviro Group</h1>
+          <p style={{ fontSize: 14, color: c.textMuted, margin: "0 0 36px 0", letterSpacing: "0.18em", textTransform: "uppercase", fontWeight: 500 }}>Global Enterprise</p>
 
-          <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 32, textAlign: "left" }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: c.text, margin: "0 0 20px 0", textAlign: "center" }}>Sign In</h2>
-            {loginError && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#ef4444" }}>{loginError}</div>}
+          <div style={{ background: c.card, borderRadius: 18, border: `1px solid ${c.border}`, padding: 32, textAlign: "left", boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: c.text, margin: "0 0 24px 0", textAlign: "center" }}>Sign In</h2>
+            {loginError && <div style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#f87171" }}>{loginError}</div>}
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Email</label>
               <input value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="you@aviro-group.com" type="email" onKeyDown={e => { if (e.key === "Enter") handleLogin(); }}
@@ -6633,7 +6637,7 @@ function AviroDashboard() {
               <input value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="Enter password" type="password" onKeyDown={e => { if (e.key === "Enter") handleLogin(); }}
                 style={{ width: "100%", padding: "10px 14px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, color: c.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
             </div>
-            <button onClick={handleLogin} disabled={loginLoading} style={{ width: "100%", padding: "12px", background: loginLoading ? c.textMuted : "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, cursor: loginLoading ? "wait" : "pointer", letterSpacing: "0.02em" }}>
+            <button onClick={handleLogin} disabled={loginLoading} style={{ width: "100%", padding: "12px", background: loginLoading ? c.textMuted : "linear-gradient(135deg, #818cf8, #a78bfa)", border: "none", borderRadius: 10, color: "#fff", fontSize: 14, fontWeight: 700, cursor: loginLoading ? "wait" : "pointer", letterSpacing: "0.02em", transition: "opacity 0.2s" }}>
               {loginLoading ? "Signing in..." : "Sign In"}
             </button>
           </div>
@@ -6647,10 +6651,10 @@ function AviroDashboard() {
   return (
     <div style={{ display: "flex", height: "100vh", background: c.bg, fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: c.text, overflow: "hidden" }}>
       {section !== "home" && (
-      <div style={{ width: collapsed ? 60 : 220, background: c.surface, borderRight: `1px solid ${c.border}`, display: "flex", flexDirection: "column", transition: "width 0.2s", flexShrink: 0, overflow: "hidden" }}>
-        <div style={{ padding: collapsed ? "20px 10px" : "20px 16px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setCollapsed(!collapsed)}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#fff", flexShrink: 0 }}>A</div>
-          {!collapsed && <div style={{ fontWeight: 700, fontSize: 14, color: c.text, whiteSpace: "nowrap" }}>AVIRO GROUP</div>}
+      <div style={{ width: collapsed ? 60 : 240, background: c.surface, borderRight: `1px solid ${c.border}`, display: "flex", flexDirection: "column", transition: "width 0.25s ease", flexShrink: 0, overflow: "hidden" }}>
+        <div style={{ padding: collapsed ? "20px 10px" : "20px 18px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={() => setCollapsed(!collapsed)}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg, #818cf8, #a78bfa)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 15, color: "#fff", flexShrink: 0, boxShadow: "0 2px 8px rgba(129,140,248,0.25)" }}>A</div>
+          {!collapsed && <div style={{ fontWeight: 700, fontSize: 14, color: c.text, whiteSpace: "nowrap", letterSpacing: "0.03em" }}>AVIRO GROUP</div>}
         </div>
         {/* Back to Homepage */}
         <div onClick={() => setSection("home")} style={{ display: "flex", alignItems: "center", gap: 8, padding: collapsed ? "10px 16px" : "10px 16px", margin: "8px 6px 2px", borderRadius: 6, cursor: "pointer", background: "transparent", color: c.textMuted, fontSize: 12, fontWeight: 500 }}
@@ -6668,8 +6672,9 @@ function AviroDashboard() {
             const isAct = section === item.section;
             return (
               <div key={i} onClick={() => setSection(item.section)} style={{
-                display: "flex", alignItems: "center", gap: 10, padding: collapsed ? "10px 18px" : "8px 16px", margin: "1px 6px", borderRadius: 6, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 10, padding: collapsed ? "10px 18px" : "9px 16px", margin: "2px 8px", borderRadius: 8, cursor: "pointer",
                 background: isAct ? c.accentBg : "transparent", color: isAct ? c.accent : c.textSecondary, fontSize: 13, fontWeight: isAct ? 600 : 400,
+                borderLeft: isAct ? `2px solid ${c.accent}` : "2px solid transparent", transition: "all 0.15s ease",
               }}
               onMouseEnter={e => { if (!isAct) e.currentTarget.style.background = c.surfaceHover; }}
               onMouseLeave={e => { if (!isAct) e.currentTarget.style.background = "transparent"; }}>
@@ -6691,13 +6696,13 @@ function AviroDashboard() {
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={() => setShowChangePassword(!showChangePassword)} style={{ flex: 1, background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 10, fontWeight: 500 }}>Password</button>
-              <button onClick={handleLogout} style={{ flex: 1, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Sign Out</button>
+              <button onClick={handleLogout} style={{ flex: 1, background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Sign Out</button>
             </div>
             {showChangePassword && (
               <div style={{ marginTop: 8, padding: 8, background: c.surface, borderRadius: 6, border: `1px solid ${c.border}` }}>
                 <input value={changePasswordVal} onChange={e => setChangePasswordVal(e.target.value)} type="password" placeholder="New password (min 6 chars)" style={{ width: "100%", padding: "6px 8px", background: c.bg, border: `1px solid ${c.border}`, borderRadius: 4, color: c.text, fontSize: 11, boxSizing: "border-box", marginBottom: 6 }} onKeyDown={e => { if (e.key === "Enter") handleChangePassword(); }} />
                 <button onClick={handleChangePassword} style={{ width: "100%", background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "5px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Update Password</button>
-                {changePasswordMsg && <div style={{ fontSize: 10, color: changePasswordMsg.includes("updated") ? c.success : "#ef4444", marginTop: 4 }}>{changePasswordMsg}</div>}
+                {changePasswordMsg && <div style={{ fontSize: 10, color: changePasswordMsg.includes("updated") ? c.success : "#f87171", marginTop: 4 }}>{changePasswordMsg}</div>}
               </div>
             )}
           </div>
@@ -6711,7 +6716,7 @@ function AviroDashboard() {
         )}
       </div>
       )}
-      <div style={{ flex: 1, overflowY: "auto", padding: section === "home" ? 0 : 32 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: section === "home" ? 0 : "28px 36px" }}>
         {/* Top bar on homepage with user info */}
         {section === "home" && (
           <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", padding: "16px 24px", gap: 12 }}>
@@ -6719,11 +6724,11 @@ function AviroDashboard() {
               <div style={{ width: 32, height: 32, borderRadius: 8, background: c.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: c.accent }}>{getAuthUserName().charAt(0).toUpperCase()}</div>
               <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{getAuthUserName()}</span>
             </div>
-            {saveStatus && <span style={{ fontSize: 10, fontWeight: 600, color: saveStatus === "saved" ? "#22c55e" : saveStatus === "synced" ? "#06b6d4" : saveStatus === "saving" || saveStatus === "syncing" ? "#f59e0b" : "#ef4444", animation: saveStatus === "saving" || saveStatus === "syncing" ? "pulse 1s infinite" : "none" }}>{saveStatus === "saving" ? "Saving..." : saveStatus === "syncing" ? "Newer data found, syncing..." : saveStatus === "saved" ? "Saved to cloud" : saveStatus === "synced" ? "Updated from cloud" : "Sync error"}</span>}
-            {authUser.email === "david@aviro-group.com" && <button onClick={() => { saveState(); }} style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", color: "#fff", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Push to Cloud</button>}
+            {saveStatus && <span style={{ fontSize: 10, fontWeight: 600, color: saveStatus === "saved" ? "#34d399" : saveStatus === "synced" ? "#06b6d4" : saveStatus === "saving" || saveStatus === "syncing" ? "#fbbf24" : "#f87171", animation: saveStatus === "saving" || saveStatus === "syncing" ? "pulse 1s infinite" : "none" }}>{saveStatus === "saving" ? "Saving..." : saveStatus === "syncing" ? "Newer data found, syncing..." : saveStatus === "saved" ? "Saved to cloud" : saveStatus === "synced" ? "Updated from cloud" : "Sync error"}</span>}
+            {authUser.email === "david@aviro-group.com" && <button onClick={() => { saveState(); }} style={{ background: "linear-gradient(135deg, #818cf8, #a78bfa)", border: "none", color: "#fff", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Push to Cloud</button>}
             <button onClick={() => setShowChangePassword(!showChangePassword)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 500 }}>Change Password</button>
             {authUser.email === "david@aviro-group.com" && <button onClick={() => setShowUserAdmin(!showUserAdmin)} style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Manage Users</button>}
-            <button onClick={handleLogout} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Sign Out</button>
+            <button onClick={handleLogout} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Sign Out</button>
           </div>
         )}
         {/* Change password modal on homepage */}
@@ -6736,7 +6741,7 @@ function AviroDashboard() {
                 <button onClick={handleChangePassword} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Update</button>
                 <button onClick={() => { setShowChangePassword(false); setChangePasswordMsg(""); }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
               </div>
-              {changePasswordMsg && <div style={{ fontSize: 11, color: changePasswordMsg.includes("updated") ? c.success : "#ef4444", marginTop: 8 }}>{changePasswordMsg}</div>}
+              {changePasswordMsg && <div style={{ fontSize: 11, color: changePasswordMsg.includes("updated") ? c.success : "#f87171", marginTop: 8 }}>{changePasswordMsg}</div>}
             </div>
           </div>
         )}
@@ -6763,7 +6768,7 @@ function AviroDashboard() {
                   { name: "russaviro", email: "russ@aviro-group.com", role: "User" },
                 ].map(u => (
                   <div key={u.email} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${c.border}` }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 7, background: u.role === "Admin" ? "linear-gradient(135deg, #6366f1, #8b5cf6)" : c.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: u.role === "Admin" ? "#fff" : c.accent, flexShrink: 0 }}>{u.name.charAt(0).toUpperCase()}</div>
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: u.role === "Admin" ? "linear-gradient(135deg, #818cf8, #a78bfa)" : c.accentBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: u.role === "Admin" ? "#fff" : c.accent, flexShrink: 0 }}>{u.name.charAt(0).toUpperCase()}</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{u.name}</div>
                       <div style={{ fontSize: 11, color: c.textMuted }}>{u.email}</div>
