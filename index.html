@@ -144,156 +144,10 @@ const DocStatusBadge = ({ status }) => {
   return <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 3, background: s.bg, color: s.co }}>{s.l}</span>;
 };
 
-// Time zone helpers - all offsets from GMT/UTC
-// GST (Gulf) = UTC+4, BST (British Summer) = UTC+1, CEST (Central Europe Summer) = UTC+2
-const toGST = (h) => ((h + 4) % 24);
-const toBST = (h) => ((h + 1) % 24);
-const toGMT = (h) => h;
-const toCEST = (h) => ((h + 2) % 24);
-const fmt12 = (h) => { const hr = h % 12 || 12; const ap = h < 12 ? "am" : "pm"; return `${hr}${ap}`; };
-
-// 69 events from Google Calendar (2026-06-08 to 2026-06-21) — refreshed 2026-06-11 via live API
-const GCAL_DEFAULT_EVENTS = [
-  { id: "gcal-0", date: "2026-06-08", startHour: 7.5, endHour: 8.5, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "https://meet.google.com/pnx-eoxn-nhi", attendees: "aleksandra, martin", location: "", notes: "", isGcal: true },
-  { id: "gcal-1", date: "2026-06-08", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "https://meet.google.com/jjh-zitv-exy", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, mohammad, tim", location: "", notes: "", isGcal: true },
-  { id: "gcal-2", date: "2026-06-08", startHour: 9.0, endHour: 9.5, title: "Luxon and gateway discussion", cat: "aviro", meet: "", attendees: "arya, rui, Tom Waters", location: "Zoom - details below", notes: "", isGcal: true },
-  { id: "gcal-3", date: "2026-06-08", startHour: 9.5, endHour: 10.0, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "https://meet.google.com/baq-dtyp-dhn", attendees: "sophie", location: "", notes: "", isGcal: true },
-  { id: "gcal-4", date: "2026-06-08", startHour: 11.0, endHour: 12.5, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "https://meet.google.com/edi-gnmc-ksa", attendees: "martin, sportingbetruss, sophie, russ", location: "", notes: "", isGcal: true },
-  { id: "gcal-5", date: "2026-06-08", startHour: 12.0, endHour: 12.5, title: "Catch-up", cat: "gateway", meet: "", attendees: "James Burke, Mark Hartson", location: "Microsoft Teams Meeting", notes: "", isGcal: true },
-  { id: "gcal-6", date: "2026-06-08", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-7", date: "2026-06-09", startHour: 7.0, endHour: 7.5, title: "Aviro / GG Poker / Libernetix", cat: "gateway", meet: "https://meet.google.com/amh-mvqn-mwm", attendees: "karan.johal, mo.awada", location: "", notes: "", isGcal: true },
-  { id: "gcal-8", date: "2026-06-09", startHour: 9.5, endHour: 10.5, title: "Backlog Refinement", cat: "aviro", meet: "https://meet.google.com/cfh-tqee-qnd", attendees: "owen, adam, robert.bostock23, sportingbetruss, sophie, josh, rmcquater, tom, robert, rob", location: "", notes: "", isGcal: true },
-  { id: "gcal-9", date: "2026-06-09", startHour: 10.0, endHour: 10.5, title: "Betglobala managment call", cat: "aviro", meet: "", attendees: "Ross McQuater, Tom Waters", location: "Zoom", notes: "", isGcal: true },
-  { id: "gcal-10", date: "2026-06-09", startHour: 10.0, endHour: 18.0, title: "House", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-11", date: "2026-06-09", startHour: 12.0, endHour: 13.0, title: "MM", cat: "aviro", meet: "https://meet.google.com/boo-jmng-zys", attendees: "mark, russ, andy", location: "", notes: "", isGcal: true },
-  { id: "gcal-12", date: "2026-06-10", startHour: 3.0, endHour: 4.0, title: "Monkey Tilt Payments", cat: "gateway", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-13", date: "2026-06-10", startHour: 10.0, endHour: 10.33, title: "TW | DN", cat: "aviro", meet: "https://meet.google.com/gwt-ijak-zny", attendees: "tom.waters", location: "", notes: "", isGcal: true },
-  { id: "gcal-14", date: "2026-06-10", startHour: 11.0, endHour: 12.0, title: "Chainalysis Demo  (David  Nicholson )", cat: "gateway", meet: "https://meet.google.com/rif-xrzb-wht", attendees: "christian.dossantos", location: "", notes: "", isGcal: true },
-  { id: "gcal-15", date: "2026-06-10", startHour: 12.0, endHour: 13.0, title: "Topspins", cat: "gateway", meet: "https://meet.google.com/kin-ckrr-pyg", attendees: "martin, tipsearch1, aleksandra, kirsty, marc.lee, mark", location: "", notes: "", isGcal: true },
-  { id: "gcal-16", date: "2026-06-10", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-17", date: "2026-06-10", startHour: 16.5, endHour: 17.33, title: "Preply lesson - Beyza O.", cat: "personal", meet: "", attendees: "", location: "Preply", notes: "", isGcal: true },
-  { id: "gcal-18", date: "2026-06-11", startHour: 8.0, endHour: 8.5, title: "MM Chat", cat: "aviro", meet: "https://meet.google.com/hhv-amej-ffw", attendees: "martin, mark, russ, james", location: "", notes: "", isGcal: true },
-  { id: "gcal-19", date: "2026-06-11", startHour: 10.0, endHour: 10.75, title: "CubePay <> Chainalysis | Onboarding", cat: "gateway", meet: "https://meet.google.com/exx-psfa-ewr", attendees: "neha.gurnani, christian.dossantos, sophie", location: "", notes: "", isGcal: true },
-  { id: "gcal-20", date: "2026-06-11", startHour: 12.0, endHour: 12.75, title: "Turbo (Alina & David", cat: "aviro", meet: "https://meet.google.com/cjq-dsaz-iab", attendees: "alina, janis", location: "", notes: "", isGcal: true },
-  { id: "gcal-21", date: "2026-06-11", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-22", date: "2026-06-11", startHour: 17.75, endHour: 19.75, title: "⚽ Mexico vs South Africa (Group A)", cat: "personal", meet: "", attendees: "", location: "Mexico City", notes: "", isGcal: true },
-  { id: "gcal-23", date: "2026-06-12", startHour: 0.75, endHour: 2.75, title: "⚽ South Korea vs Czech Republic (Group A)", cat: "personal", meet: "", attendees: "", location: "Guadalajara", notes: "", isGcal: true },
-  { id: "gcal-24", date: "2026-06-12", startHour: 8.0, endHour: 9.5, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "https://meet.google.com/nam-zqfo-wso", attendees: "martin, sophie, russ", location: "", notes: "", isGcal: true },
-  { id: "gcal-25", date: "2026-06-12", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-26", date: "2026-06-13", startHour: 2.75, endHour: 4.75, title: "⚽ USA vs Paraguay (Group D)", cat: "personal", meet: "", attendees: "", location: "Los Angeles", notes: "", isGcal: true },
-  { id: "gcal-27", date: "2026-06-13", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-28", date: "2026-06-14", startHour: 2.75, endHour: 4.75, title: "⚽ Haiti vs Scotland (Group C)", cat: "personal", meet: "", attendees: "", location: "Boston", notes: "", isGcal: true },
-  { id: "gcal-29", date: "2026-06-14", startHour: 5.75, endHour: 7.75, title: "⚽ Australia vs Turkey (Group D)", cat: "personal", meet: "", attendees: "", location: "Vancouver", notes: "", isGcal: true },
-  { id: "gcal-30", date: "2026-06-14", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-31", date: "2026-06-14", startHour: 18.75, endHour: 20.75, title: "⚽ Germany vs Curacao (Group E)", cat: "personal", meet: "", attendees: "", location: "Houston", notes: "", isGcal: true },
-  { id: "gcal-32", date: "2026-06-15", startHour: 3.75, endHour: 5.75, title: "⚽ Sweden vs Tunisia (Group F)", cat: "personal", meet: "", attendees: "", location: "Monterrey", notes: "", isGcal: true },
-  { id: "gcal-33", date: "2026-06-15", startHour: 6.0, endHour: 6.5, title: "FYI - Update Mirror domains on all licenses", cat: "aviro", meet: "https://meet.google.com/wsj-htfo-gab", attendees: "sophie", location: "", notes: "", isGcal: true },
-  { id: "gcal-34", date: "2026-06-15", startHour: 6.5, endHour: 7.5, title: "FYI License updates - weekly checks", cat: "aviro", meet: "", attendees: "sophie", location: "", notes: "", isGcal: true },
-  { id: "gcal-35", date: "2026-06-15", startHour: 7.5, endHour: 8.5, title: "Payments - AM|DN\\MT", cat: "gateway", meet: "https://meet.google.com/pnx-eoxn-nhi", attendees: "aleksandra, martin", location: "", notes: "", isGcal: true },
-  { id: "gcal-36", date: "2026-06-15", startHour: 8.5, endHour: 9.25, title: "Payments Weekly", cat: "gateway", meet: "https://meet.google.com/jjh-zitv-exy", attendees: "martin, jayne, charlie, chris.d, aleksandra, james, tom, mohammad, tim", location: "", notes: "", isGcal: true },
-  { id: "gcal-37", date: "2026-06-15", startHour: 9.5, endHour: 10.5, title: "Sophie / David - Weekly 121", cat: "aviro", meet: "https://meet.google.com/baq-dtyp-dhn", attendees: "sophie", location: "", notes: "", isGcal: true },
-  { id: "gcal-38", date: "2026-06-15", startHour: 11.0, endHour: 12.5, title: "DN/MT/SW/RW - Monday planning sessions", cat: "aviro", meet: "https://meet.google.com/edi-gnmc-ksa", attendees: "martin, sportingbetruss, sophie, russ", location: "", notes: "", isGcal: true },
-  { id: "gcal-39", date: "2026-06-15", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-40", date: "2026-06-15", startHour: 17.75, endHour: 19.75, title: "⚽ Spain vs Cape Verde (Group H)", cat: "personal", meet: "", attendees: "", location: "Atlanta", notes: "", isGcal: true },
-  { id: "gcal-41", date: "2026-06-15", startHour: 20.75, endHour: 22.75, title: "⚽ France vs Senegal (Group I)", cat: "personal", meet: "", attendees: "", location: "New York/New Jersey", notes: "", isGcal: true },
-  { id: "gcal-42", date: "2026-06-16", startHour: 2.75, endHour: 4.75, title: "⚽ Iran vs New Zealand (Group G)", cat: "personal", meet: "", attendees: "", location: "Los Angeles", notes: "", isGcal: true },
-  { id: "gcal-43", date: "2026-06-16", startHour: 9.5, endHour: 11.0, title: "End Of Sprint Review/Planning", cat: "aviro", meet: "https://meet.google.com/icw-antj-zmy", attendees: "owen, adam, robert.bostock23, sportingbetruss, sophie, josh, rmcquater, robert, tom, rob", location: "", notes: "", isGcal: true },
-  { id: "gcal-44", date: "2026-06-16", startHour: 10.0, endHour: 10.5, title: "Betglobala managment call", cat: "aviro", meet: "", attendees: "Ross McQuater, Tom Waters", location: "Zoom", notes: "", isGcal: true },
-  { id: "gcal-45", date: "2026-06-16", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-46", date: "2026-06-16", startHour: 13.0, endHour: 14.0, title: "EDD Bi-Weekly", cat: "aviro", meet: "https://meet.google.com/xop-ukfp-vup", attendees: "charlie, martin, chris.d, aleksandra", location: "", notes: "", isGcal: true },
-  { id: "gcal-47", date: "2026-06-16", startHour: 23.75, endHour: 23.99, title: "⚽ Iraq vs Norway (Group I)", cat: "personal", meet: "", attendees: "", location: "Boston", notes: "", isGcal: true },
-  { id: "gcal-48", date: "2026-06-17", startHour: 2.75, endHour: 4.75, title: "⚽ Argentina vs Algeria (Group J)", cat: "personal", meet: "", attendees: "", location: "Kansas City", notes: "", isGcal: true },
-  { id: "gcal-49", date: "2026-06-17", startHour: 5.75, endHour: 7.75, title: "⚽ Austria vs Jordan (Group J)", cat: "personal", meet: "", attendees: "", location: "Santa Clara", notes: "", isGcal: true },
-  { id: "gcal-50", date: "2026-06-17", startHour: 10.0, endHour: 10.33, title: "TW | DN", cat: "aviro", meet: "https://meet.google.com/gwt-ijak-zny", attendees: "tom.waters", location: "", notes: "", isGcal: true },
-  { id: "gcal-51", date: "2026-06-17", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-52", date: "2026-06-17", startHour: 15.0, endHour: 16.0, title: "Radon - Bi-Weekly Call", cat: "gateway", meet: "https://meet.google.com/kao-awwg-gip", attendees: "martin, chris.d, tom, james, rowan, mohammad.hidayathullah", location: "", notes: "", isGcal: true },
-  { id: "gcal-53", date: "2026-06-17", startHour: 18.75, endHour: 20.75, title: "⚽ Portugal vs DR Congo (Group K)", cat: "personal", meet: "", attendees: "", location: "Houston", notes: "", isGcal: true },
-  { id: "gcal-54", date: "2026-06-18", startHour: 3.75, endHour: 5.75, title: "⚽ Uzbekistan vs Colombia (Group K)", cat: "personal", meet: "", attendees: "", location: "Mexico City", notes: "", isGcal: true },
-  { id: "gcal-55", date: "2026-06-18", startHour: 9.0, endHour: 9.5, title: "MP/DN - biweekly", cat: "aviro", meet: "https://meet.google.com/ews-sctj-ard", attendees: "mark, meetingroom", location: "", notes: "", isGcal: true },
-  { id: "gcal-56", date: "2026-06-18", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-57", date: "2026-06-18", startHour: 17.75, endHour: 19.75, title: "⚽ Czech Republic vs South Africa (Group A)", cat: "personal", meet: "", attendees: "", location: "Atlanta", notes: "", isGcal: true },
-  { id: "gcal-58", date: "2026-06-19", startHour: 2.75, endHour: 4.75, title: "⚽ Mexico vs South Korea (Group A)", cat: "personal", meet: "", attendees: "", location: "Guadalajara", notes: "", isGcal: true },
-  { id: "gcal-59", date: "2026-06-19", startHour: 8.0, endHour: 9.5, title: "DN/MT/SW/RW - Friday wrap up", cat: "aviro", meet: "https://meet.google.com/nam-zqfo-wso", attendees: "martin, sophie, russ", location: "", notes: "", isGcal: true },
-  { id: "gcal-60", date: "2026-06-19", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-61", date: "2026-06-20", startHour: 2.25, endHour: 4.25, title: "⚽ Brazil vs Haiti (Group C)", cat: "personal", meet: "", attendees: "", location: "Philadelphia", notes: "", isGcal: true },
-  { id: "gcal-62", date: "2026-06-20", startHour: 4.75, endHour: 6.75, title: "⚽ Turkey vs Paraguay (Group D)", cat: "personal", meet: "", attendees: "", location: "Santa Clara", notes: "", isGcal: true },
-  { id: "gcal-63", date: "2026-06-20", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-64", date: "2026-06-20", startHour: 18.75, endHour: 20.75, title: "⚽ Netherlands vs Sweden (Group F)", cat: "personal", meet: "", attendees: "", location: "Houston", notes: "", isGcal: true },
-  { id: "gcal-65", date: "2026-06-21", startHour: 1.75, endHour: 3.75, title: "⚽ Ecuador vs Curacao (Group E)", cat: "personal", meet: "", attendees: "", location: "Kansas City", notes: "", isGcal: true },
-  { id: "gcal-66", date: "2026-06-21", startHour: 5.75, endHour: 7.75, title: "⚽ Tunisia vs Japan (Group F)", cat: "personal", meet: "", attendees: "", location: "Monterrey", notes: "", isGcal: true },
-  { id: "gcal-67", date: "2026-06-21", startHour: 13.0, endHour: 15.0, title: "Dinner", cat: "personal", meet: "", attendees: "", location: "", notes: "", isGcal: true },
-  { id: "gcal-68", date: "2026-06-21", startHour: 17.75, endHour: 19.75, title: "⚽ Spain vs Saudi Arabia (Group H)", cat: "personal", meet: "", attendees: "", location: "Atlanta", notes: "", isGcal: true },
-];
 
 function AviroDashboard() {
   const [section, setSection] = useState("home");
   const [collapsed, setCollapsed] = useState(false);
-
-  // Calendar state
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [calEvents, setCalEvents] = useState([]);
-  // Recurring events - from Gmail and manual
-  const [recurringEvents, setRecurringEvents] = useState([]);
-  const [showAddRecurring, setShowAddRecurring] = useState(false);
-  const [newRecurring, setNewRecurring] = useState({ title: "", day: 1, startHour: 9, endHour: 10, cat: "aviro" });
-
-  // Full-day notes (banners)
-  const [dayBanners, setDayBanners] = useState([
-    { id: "gb0", startDate: "2026-04-11", endDate: "2026-04-23", text: "Sophie in Jamaica", color: "#818cf8" },
-    { id: "gb1", startDate: "2026-04-11", endDate: "2026-04-20", text: "Wiseman's in Orlando", color: "#818cf8" },
-    { id: "gb2", startDate: "2026-04-24", endDate: "2026-04-26", text: "Billesley Manor Hotel & Spa", color: "#fbbf24" },
-    { id: "gb3", startDate: "2026-04-25", endDate: "2026-04-25", text: "Wedding in Midlands", color: "#fbbf24" },
-    { id: "gb4", startDate: "2026-04-26", endDate: "2026-05-01", text: "The Kensington Hotel", color: "#fbbf24" },
-  ]);
-  const [showAddBanner, setShowAddBanner] = useState(false);
-  const [newBanner, setNewBanner] = useState({ text: "", startDate: "", endDate: "", color: "#fbbf24" });
-
-  const [calNotes, setCalNotes] = useState([]);
-  // Enhanced meeting creation form
-  const [newEventForm, setNewEventForm] = useState({ title: "", startTime: "09:00", endTime: "10:00", cat: "aviro", attendees: "", location: "", createMeet: false, emailInvite: false, attendeeEmails: "" });
-  const [showAddEvent, setShowAddEvent] = useState(false);
-  const [editingNote, setEditingNote] = useState(null);
-  const [noteText, setNoteText] = useState("");
-  const [meetingCreated, setMeetingCreated] = useState(null);
-  const [selectedEventId, setSelectedEventId] = useState(null);
-  const [draggingEvent, setDraggingEvent] = useState(null);
-  const [dragOverHour, setDragOverHour] = useState(null);
-  const [unscheduledItems, setUnscheduledItems] = useState([]);
-  const [newUnscheduled, setNewUnscheduled] = useState("");
-  const [schedulingItem, setSchedulingItem] = useState(null); // { id, text, type, source, jobId?, startTime, endTime, cat }
-  const [draggingUnscheduled, setDraggingUnscheduled] = useState(null); // { id, text, source, cat, jobId? }
-
-  // Google Calendar sync — events loaded from Supabase gcal_events row
-  const [gcalSyncStatus, setGcalSyncStatus] = useState("idle");
-  const [gcalLastSync, setGcalLastSync] = useState(null);
-  const [gcalIcsUrl, setGcalIcsUrl] = useState(""); // Private ICS URL from Google Calendar settings
-
-  // Manual Google Calendar sync — fetches ICS feed via Netlify proxy, updates Supabase + local state
-  const syncGoogleCalendar = useCallback(async () => {
-    if (!gcalIcsUrl) { alert("Set your Google Calendar ICS URL in Settings first"); return; }
-    setGcalSyncStatus("syncing");
-    try {
-      const res = await fetch("/api/gcal-sync?ics_url=" + encodeURIComponent(gcalIcsUrl));
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || "Sync failed: " + res.status); }
-      const data = await res.json();
-      if (data.ok && data.events) {
-        setCalEvents(prev => {
-          const nonGcal = prev.filter(e => !e.isGcal);
-          return [...nonGcal, ...data.events];
-        });
-        setGcalLastSync(new Date().toLocaleString());
-        setGcalSyncStatus("synced");
-        console.log("Google Calendar synced: " + data.count + " events (" + data.dateRange + "), Supabase: " + (data.supabaseWritten ? "written" : "skipped"));
-      } else { throw new Error("No events returned"); }
-    } catch (e) {
-      console.error("Google Calendar sync failed:", e);
-      setGcalSyncStatus("error");
-      setTimeout(() => setGcalSyncStatus(gcalLastSync ? "synced" : "idle"), 3000);
-    }
-  }, [gcalIcsUrl, gcalLastSync]);
-
-  // Google Calendar events are loaded inside the init load() function below (not a separate effect)
-  // to avoid a hoisting issue where hasLoaded is undefined in the dependency array.
 
   // Quick jobs
   const [quickJobs, setQuickJobs] = useState([]);
@@ -388,8 +242,6 @@ function AviroDashboard() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [expandedFlows, setExpandedFlows] = useState({});
   const [copiedText, setCopiedText] = useState(null);
-  const [calSubSection, setCalSubSection] = useState("day"); // day, notes
-  const [primaryTZ, setPrimaryTZ] = useState("GST"); // GST (UTC+4), BST (UTC+1 summer), CEST (UTC+2 summer)
 
   // ===== REVENUE STATE =====
   const [revenueSubSection, setRevenueSubSection] = useState("overview"); // overview, cubepay, gatewayrev, bettingrev
@@ -453,18 +305,18 @@ function AviroDashboard() {
   const lastSyncedRef = useRef(null); // track when we last loaded/saved — ref to avoid re-render loops
 
   const buildState = useCallback(() => ({
-    calEvents: calEvents.filter(e => !e.isGcal), quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
-    signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems,
-    calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection,
+    quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
+    signalSlotNotes, signalCompleted, globalNotes, personalJobs,
+    dailyProgress,
     corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters,
     entityIntraAgreements, entityCorpAgreements,
     bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers,
-    supabaseUrl, supabaseKey, clickupToken, gcalIcsUrl,
+    supabaseUrl, supabaseKey, clickupToken,
     cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs,
     fxRates, fxBaseCurrency, fxLastUpdated,
     pmPipeline, pmRoadmap, pmClients,
     crmClients,
-  }), [calEvents, quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, unscheduledItems, calNotes, dayBanners, dailyProgress, primaryTZ, calSubSection, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, gcalIcsUrl, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, crmClients]);
+  }), [quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, dailyProgress, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, crmClients]);
 
   const saveState = useCallback(async () => {
     if (!hasLoaded) return; // NEVER save before data has loaded
@@ -494,11 +346,6 @@ function AviroDashboard() {
 
   // Apply state helper
   const applyState = useCallback((s) => {
-    if (s.calEvents) setCalEvents(prev => {
-      // Only load non-gcal (manually added) events from saved state; gcal events come from separate sync
-      const manualEvents = (s.calEvents || []).filter(e => !e.isGcal);
-      return manualEvents;
-    });
     if (s.quickJobs) setQuickJobs(s.quickJobs);
     if (s.delegatedTasks) setDelegatedTasks(s.delegatedTasks);
     if (s.signalSlots) setSignalSlots(s.signalSlots);
@@ -508,12 +355,7 @@ function AviroDashboard() {
     if (s.signalCompleted) setSignalCompleted(s.signalCompleted);
     if (s.globalNotes) setGlobalNotes(s.globalNotes);
     if (s.personalJobs) setPersonalJobs(s.personalJobs);
-    if (s.unscheduledItems) setUnscheduledItems(s.unscheduledItems);
-    if (s.calNotes) setCalNotes(s.calNotes);
-    if (s.dayBanners) setDayBanners(s.dayBanners);
     if (s.dailyProgress) setDailyProgress(s.dailyProgress);
-    if (s.primaryTZ) setPrimaryTZ(s.primaryTZ);
-    if (s.calSubSection) setCalSubSection(s.calSubSection);
     if (s.corporateEntities) setCorporateEntities(s.corporateEntities);
     if (s.entityOverrides) setEntityOverrides(s.entityOverrides);
     if (s.entityDocs) setEntityDocs(s.entityDocs);
@@ -543,7 +385,6 @@ function AviroDashboard() {
     if (s.supabaseUrl) setSupabaseUrl(s.supabaseUrl);
     if (s.supabaseKey) setSupabaseKey(s.supabaseKey);
     if (s.clickupToken) setClickupToken(s.clickupToken);
-    if (s.gcalIcsUrl) setGcalIcsUrl(s.gcalIcsUrl);
     if (s.cubePayDeals) setCubePayDeals(s.cubePayDeals);
     if (s.cubePayMonthlyData) setCubePayMonthlyData(s.cubePayMonthlyData);
     if (s.cubePayOperatingCosts) setCubePayOperatingCosts(s.cubePayOperatingCosts);
@@ -592,32 +433,6 @@ function AviroDashboard() {
           }
         } catch (e) { console.warn("localStorage load also failed:", e); }
       }
-      // Load Google Calendar events — from Supabase gcal_events row, or hardcoded defaults
-      let gcalEvts = null;
-      try {
-        const gcalRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.gcal_events&select=state,updated_at", {
-          headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY },
-        });
-        if (gcalRes.ok) {
-          const gcalRows = await gcalRes.json();
-          if (gcalRows.length > 0 && gcalRows[0].state && gcalRows[0].state.events && gcalRows[0].state.events.length > 0) {
-            gcalEvts = gcalRows[0].state.events;
-            setGcalLastSync(gcalRows[0].updated_at ? new Date(gcalRows[0].updated_at).toLocaleString() : "recently");
-            console.log("Loaded " + gcalEvts.length + " Google Calendar events from Supabase");
-          }
-        }
-      } catch (e) { console.warn("Google Calendar Supabase load failed, using defaults:", e); }
-      if (!gcalEvts) {
-        gcalEvts = GCAL_DEFAULT_EVENTS;
-        setGcalLastSync("defaults (scheduled sync pending)");
-        console.log("Using " + gcalEvts.length + " default Google Calendar events");
-      }
-      setCalEvents(prev => {
-        const nonGcal = prev.filter(e => !e.isGcal);
-        return [...nonGcal, ...gcalEvts];
-      });
-      setGcalSyncStatus("synced");
-
       // Load cached ClickUp tasks from Supabase (live fetch will overlay later if token is set)
       try {
         const [cuDRes, cuSRes] = await Promise.all([
@@ -1119,129 +934,7 @@ function AviroDashboard() {
     setPackDownloading(false);
   };
 
-  const dateStr = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  const selDateStr = dateStr(selectedDate);
-
-  // Generate recurring event instances for the selected date
-  const selectedDayOfWeek = selectedDate.getDay(); // 0=Sun, 1=Mon, ...
-  const recurringToday = recurringEvents
-    .filter(r => r.day === selectedDayOfWeek)
-    .map(r => ({
-      id: `${r.id}-${selDateStr}`, date: selDateStr, startHour: r.startHour, endHour: r.endHour,
-      title: r.title, cat: r.cat, meet: r.meet, attendees: r.attendees, notes: "",
-      isRecurring: true, recurringId: r.id,
-    }));
-
-  // Merge one-off events with recurring (avoid duplicates by title match on same day)
-  const oneOffToday = calEvents.filter(e => e.date === selDateStr);
-  const recurringFiltered = recurringToday.filter(r => !oneOffToday.some(o => o.title === r.title));
-  const todayEvents = [...oneOffToday, ...recurringFiltered].sort((a,b) => a.startHour - b.startHour);
-
   const copyToClipboard = (text) => { navigator.clipboard?.writeText(text); setCopiedText(text); setTimeout(() => setCopiedText(null), 2000); };
-
-  // Parse "HH:MM" to decimal hour
-  const parseTime = (t) => { const [h, m] = (t || "09:00").split(":").map(Number); return h + (m || 0) / 60; };
-  const fmtTime = (h) => { const hr = Math.floor(h); const mn = Math.round((h - hr) * 60); return `${String(hr).padStart(2,"0")}:${String(mn).padStart(2,"0")}`; };
-
-  const addCalEvent = () => {
-    if (!newEventForm.title.trim()) return;
-    const startH = parseTime(newEventForm.startTime);
-    const endH = parseTime(newEventForm.endTime);
-    const meetLink = newEventForm.createMeet ? `meet.google.com/aviro-${Date.now().toString(36)}` : null;
-    setCalEvents([...calEvents, {
-      id: `e${Date.now()}`, date: selDateStr, startHour: startH, endHour: endH,
-      title: newEventForm.title, cat: newEventForm.cat, meet: meetLink,
-      attendees: newEventForm.attendees, location: newEventForm.location, notes: "",
-    }]);
-    if (newEventForm.createMeet || newEventForm.emailInvite) {
-      setMeetingCreated({ title: newEventForm.title, meet: meetLink, emails: newEventForm.attendeeEmails, date: selDateStr, start: newEventForm.startTime, end: newEventForm.endTime });
-    }
-    setNewEventForm({ title: "", startTime: "09:00", endTime: "10:00", cat: "aviro", attendees: "", location: "", createMeet: false, emailInvite: false, attendeeEmails: "" });
-    setShowAddEvent(false);
-  };
-
-  const saveNote = (eventId) => {
-    const ev = [...calEvents, ...recurringEvents.map(r => ({ ...r, id: `${r.id}-note` }))].find(e => e.id === eventId) || {};
-    const savedAt = new Date().toISOString();
-    setCalNotes([...calNotes.filter(n => n.eventId !== eventId), { eventId, text: noteText, savedAt }]);
-    // Auto-save to global notes
-    const existingGlobal = globalNotes.find(n => n.sourceId === eventId);
-    if (existingGlobal) {
-      setGlobalNotes(globalNotes.map(n => n.sourceId === eventId ? { ...n, text: noteText, savedAt } : n));
-    } else {
-      setGlobalNotes([...globalNotes, { id: `gn${Date.now()}`, title: ev.title || "Meeting Note", text: noteText, cat: ev.cat || "aviro", type: "meeting", sourceId: eventId, date: ev.date || selDateStr, savedAt }]);
-    }
-    setEditingNote(null);
-    setNoteText("");
-  };
-
-  const addDayBanner = () => {
-    if (!newBanner.text.trim()) return;
-    setDayBanners([...dayBanners, { id: `b${Date.now()}`, ...newBanner, startDate: newBanner.startDate || selDateStr, endDate: newBanner.endDate || selDateStr }]);
-    setNewBanner({ text: "", startDate: "", endDate: "", color: "#fbbf24" });
-    setShowAddBanner(false);
-  };
-
-  const handleDrop = (targetHour) => {
-    // Handle drop of unscheduled items / quick jobs onto timeline
-    if (draggingUnscheduled) {
-      const du = draggingUnscheduled;
-      const newStart = targetHour;
-      const newEnd = targetHour + 0.5; // default 30 min
-      setCalEvents([...calEvents, { id: `e${Date.now()}`, date: selDateStr, startHour: newStart, endHour: newEnd, title: du.text, cat: du.cat || "aviro", meet: null, attendees: "", location: "", notes: "" }]);
-      // Remove from source
-      if (du.source === "unscheduled") {
-        setUnscheduledItems(unscheduledItems.filter(u => u.id !== du.id));
-      } else if (du.source === "quickjob") {
-        setQuickJobs(quickJobs.map(j => j.id === du.jobId ? { ...j, onCalendar: false } : j));
-      }
-      setDraggingUnscheduled(null);
-      setDragOverHour(null);
-      return;
-    }
-    // Handle existing calendar event drag (reorder)
-    if (!draggingEvent) return;
-    const ev = todayEvents.find(e => e.id === draggingEvent);
-    if (!ev) { setDraggingEvent(null); setDragOverHour(null); return; }
-    const duration = ev.endHour - ev.startHour;
-    const newStart = targetHour;
-    const newEnd = targetHour + duration;
-    if (ev.isRecurring) {
-      setCalEvents([...calEvents, { ...ev, id: `e${Date.now()}`, date: selDateStr, startHour: newStart, endHour: newEnd, isRecurring: false }]);
-    } else {
-      setCalEvents(calEvents.map(e => e.id === ev.id ? { ...e, startHour: newStart, endHour: newEnd } : e));
-    }
-    setDraggingEvent(null);
-    setDragOverHour(null);
-  };
-
-  const todayBanners = dayBanners.filter(b => selDateStr >= b.startDate && selDateStr <= b.endDate);
-
-  // Helper: get events for any date string
-  const getEventsForDate = (ds) => {
-    const d = new Date(ds + "T00:00:00");
-    const dow = d.getDay();
-    const oneOff = calEvents.filter(e => e.date === ds);
-    const recur = recurringEvents.filter(r => r.day === dow).map(r => ({
-      id: `${r.id}-${ds}`, date: ds, startHour: r.startHour, endHour: r.endHour,
-      title: r.title, cat: r.cat, meet: r.meet, attendees: r.attendees, notes: "",
-      isRecurring: true, recurringId: r.id,
-    })).filter(r => !oneOff.some(o => o.title === r.title));
-    return [...oneOff, ...recur].sort((a, b) => a.startHour - b.startHour);
-  };
-
-  // Week view helpers
-  const getWeekDates = () => {
-    const d = new Date(selectedDate);
-    const day = d.getDay(); // 0=Sun
-    const monday = new Date(d);
-    monday.setDate(d.getDate() - ((day + 6) % 7)); // get Monday
-    return Array.from({ length: 7 }, (_, i) => {
-      const dt = new Date(monday);
-      dt.setDate(monday.getDate() + i);
-      return dt;
-    });
-  };
 
   const signalTasks = [
     ...clickupDavidTasks.filter(t => t.priority === "urgent" || t.priority === "high" || (t.dueDate && t.dueDate <= new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10))).map(t => ({ ...t, source: "clickup" })),
@@ -1263,670 +956,8 @@ function AviroDashboard() {
   });
 
   // Bank accounts are now managed centrally via bankRelationships + bankAccountsList state
-
-  const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0-23 (midnight to midnight)
-  const scrollRef = useRef(null);
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 3 * 52; }, [selDateStr, calSubSection]); // scroll to 3am GMT = 7am GST
-
-  // Live clock - ticks every 30 seconds, uses proper UTC-based timezone math
-  const [liveNow, setLiveNow] = useState(Date.now());
-  useEffect(() => { const t = setInterval(() => setLiveNow(Date.now()), 30000); return () => clearInterval(t); }, []);
-  const liveTimeForZone = (offsetHours) => {
-    const now = new Date(liveNow);
-    const utcH = now.getUTCHours();
-    const utcM = now.getUTCMinutes();
-    let h = (utcH + offsetHours) % 24;
-    if (h < 0) h += 24;
-    const ap = h < 12 ? "am" : "pm";
-    const hr12 = h % 12 || 12;
-    return `${hr12}:${String(utcM).padStart(2, "0")}${ap}`;
-  };
-
-  // ===== CALENDAR =====
-  const renderCalendar = () => {
-    const year = selectedDate.getFullYear(), month = selectedDate.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay();
-    const today = (() => { const n = new Date(); return n.getFullYear() + "-" + String(n.getMonth()+1).padStart(2,"0") + "-" + String(n.getDate()).padStart(2,"0"); })();
-    const days = [];
-    for (let i = 0; i < firstDay; i++) days.push(null);
-    for (let i = 1; i <= daysInMonth; i++) days.push(i);
-    const monthStr = selectedDate.toLocaleString("default", { month: "long", year: "numeric" });
-    const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
-    return (
-      <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>David Calendar</h2>
-            {gcalSyncStatus === "syncing" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.2)", color: "#60a5fa", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
-                <div style={{ width: 6, height: 6, borderRadius: 3, background: "#60a5fa", animation: "pulse 1s infinite" }} />
-                Syncing Google Calendar...
-              </div>
-            )}
-            {gcalSyncStatus === "error" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
-                Sync failed — check ICS URL in Settings
-              </div>
-            )}
-            {gcalSyncStatus === "synced" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontWeight: 600 }}>
-                <div style={{ width: 6, height: 6, borderRadius: 3, background: "#60a5fa" }} />
-                Google Calendar{gcalLastSync ? ` · ${gcalLastSync}` : ""}
-              </div>
-            )}
-            {gcalIcsUrl && (
-              <button onClick={syncGoogleCalendar} disabled={gcalSyncStatus === "syncing"} style={{ background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa", borderRadius: 6, padding: "4px 10px", cursor: gcalSyncStatus === "syncing" ? "wait" : "pointer", fontSize: 10, fontWeight: 700 }}>
-                ↻ Sync Now
-              </button>
-            )}
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            {[{ k: "day", l: "Day View" }, { k: "week", l: "Week View" }, { k: "recurring", l: "Recurring" }, { k: "notes", l: "Meeting Notes" }].map(t => (
-              <button key={t.k} onClick={() => setCalSubSection(t.k)} style={{
-                background: calSubSection === t.k ? c.accentBg : "transparent", border: `1px solid ${calSubSection === t.k ? c.accent : c.border}`,
-                color: calSubSection === t.k ? c.accent : c.textSecondary, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600,
-              }}>{t.l}</button>
-            ))}
-          </div>
-        </div>
-
-        {/* Mini calendar nav + timezone header */}
-        <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 20, marginBottom: 20 }}>
-          {/* Mini calendar */}
-          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <button onClick={() => setSelectedDate(new Date(year, month - 1, 1))} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 12 }}>&lt;</button>
-              <span style={{ fontWeight: 700, color: c.text, fontSize: 13 }}>{monthStr}</span>
-              <button onClick={() => setSelectedDate(new Date(year, month + 1, 1))} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 4, padding: "4px 8px", cursor: "pointer", fontSize: 12 }}>&gt;</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, textAlign: "center" }}>
-              {dayNames.map(d => <div key={d} style={{ padding: 4, fontSize: 10, color: c.textMuted, fontWeight: 600 }}>{d}</div>)}
-              {days.map((d, i) => {
-                if (!d) return <div key={`e${i}`} />;
-                const ds = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-                const hasEv = calEvents.some(e => e.date === ds);
-                const isToday = ds === today;
-                const isSel = ds === selDateStr;
-                return (
-                  <div key={d} onClick={() => setSelectedDate(new Date(year, month, d))} style={{
-                    padding: 5, borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: isToday ? 700 : 400,
-                    background: isSel ? c.accent : isToday ? c.accentBg : "transparent",
-                    color: isSel ? c.white : isToday ? c.accent : c.text,
-                  }}>
-                    {d}
-                    {hasEv && <div style={{ width: 3, height: 3, borderRadius: 2, background: isSel ? c.white : c.accent, margin: "1px auto 0" }} />}
-                  </div>
-                );
-              })}
-            </div>
-            {/* Color legend */}
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${c.border}` }}>
-              {Object.entries(CAL_COLORS).map(([k, v]) => (
-                <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0" }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 3, background: v.bg, border: `1px solid ${v.border}` }} />
-                  <span style={{ fontSize: 10, color: c.textSecondary }}>{v.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Day header */}
-          <div>
-            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 16, marginBottom: 12 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: c.text, marginBottom: 4 }}>
-                {selectedDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-              </div>
-              {/* Timezone bar */}
-              <div style={{ display: "flex", gap: 20, marginTop: 8, alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600 }}>Primary:</span>
-                  <select value={primaryTZ} onChange={e => setPrimaryTZ(e.target.value)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                    <option value="GST">GST (Dubai, UTC+4)</option>
-                    <option value="BST">BST (London, UTC+1)</option>
-                    <option value="CEST">CEST (Europe, UTC+2)</option>
-                  </select>
-                </div>
-                {[
-                  { key: "GST", label: "GST (Dubai)", time: liveTimeForZone(4), color: "#fbbf24" },
-                  { key: "BST", label: "BST (London)", time: liveTimeForZone(1), color: "#3b82f6" },
-                  { key: "CEST", label: "CEST (Europe)", time: liveTimeForZone(2), color: "#34d399" },
-                ].map(tz => (
-                  <div key={tz.label} style={{ display: "flex", alignItems: "center", gap: 6, opacity: tz.key === primaryTZ ? 1 : 0.6, padding: "3px 8px", borderRadius: 6, background: tz.key === primaryTZ ? `${tz.color}18` : "transparent", border: tz.key === primaryTZ ? `1px solid ${tz.color}40` : "1px solid transparent" }}>
-                    <div style={{ width: 8, height: 8, borderRadius: 4, background: tz.color }} />
-                    <span style={{ fontSize: 11, color: c.textSecondary }}>{tz.label}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: c.text }}>{tz.time}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 8, fontSize: 12, color: c.textSecondary }}>
-                {todayEvents.length} event{todayEvents.length !== 1 ? "s" : ""} scheduled
-              </div>
-            </div>
-
-            {/* Unscheduled items */}
-            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 16 }}>
-              <h3 style={{ fontSize: 12, fontWeight: 700, color: c.textSecondary, margin: "0 0 8px 0", textTransform: "uppercase", letterSpacing: "0.05em" }}>Unscheduled Calls & Items</h3>
-              {unscheduledItems.map(item => (
-                <div key={item.id}>
-                  <div draggable
-                    onDragStart={e => { setDraggingUnscheduled({ id: item.id, text: item.text, source: "unscheduled", cat: "aviro" }); e.dataTransfer.effectAllowed = "move"; }}
-                    onDragEnd={() => { setDraggingUnscheduled(null); setDragOverHour(null); }}
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: schedulingItem?.id === item.id ? "none" : `1px solid ${c.border}`, cursor: "grab" }}>
-                    <span style={{ fontSize: 10, color: c.textMuted, cursor: "grab" }}>⠿</span>
-                    <span style={{ fontSize: 12, color: item.type === "call" ? c.accent : c.warning }}>{item.type === "call" ? "CALL" : "TODO"}</span>
-                    <span style={{ fontSize: 12, color: c.text, flex: 1 }}>{item.text}</span>
-                    <button onClick={() => setSchedulingItem(schedulingItem?.id === item.id ? null : { id: item.id, text: item.text, source: "unscheduled", cat: "aviro", startTime: "09:00", endTime: "09:30" })} style={{ background: schedulingItem?.id === item.id ? c.accentBg : "transparent", border: `1px solid ${schedulingItem?.id === item.id ? c.accent : c.border}`, color: schedulingItem?.id === item.id ? c.accent : c.textMuted, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Schedule</button>
-                    <button onClick={() => setUnscheduledItems(unscheduledItems.filter(u => u.id !== item.id))} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer" }}><Icon type="trash" size={12} /></button>
-                  </div>
-                  {schedulingItem?.id === item.id && (
-                    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, padding: 10, marginBottom: 6, marginTop: 4 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600 }}>From</label>
-                        <input type="time" value={schedulingItem.startTime} onChange={e => setSchedulingItem({ ...schedulingItem, startTime: e.target.value })} style={{ background: c.card, border: `1px solid ${c.border}`, color: c.text, borderRadius: 4, padding: "3px 6px", fontSize: 11 }} />
-                        <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600 }}>To</label>
-                        <input type="time" value={schedulingItem.endTime} onChange={e => setSchedulingItem({ ...schedulingItem, endTime: e.target.value })} style={{ background: c.card, border: `1px solid ${c.border}`, color: c.text, borderRadius: 4, padding: "3px 6px", fontSize: 11 }} />
-                        <select value={schedulingItem.cat} onChange={e => setSchedulingItem({ ...schedulingItem, cat: e.target.value })} style={{ background: c.card, border: `1px solid ${c.border}`, color: c.text, borderRadius: 4, padding: "3px 6px", fontSize: 10 }}>
-                          {Object.entries(CAL_COLORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                        </select>
-                        <button onClick={() => { const startH = parseTime(schedulingItem.startTime); const endH = parseTime(schedulingItem.endTime); setCalEvents([...calEvents, { id: `e${Date.now()}`, date: selDateStr, startHour: startH, endHour: endH, title: schedulingItem.text, cat: schedulingItem.cat, meet: null, attendees: "", location: "", notes: "" }]); setUnscheduledItems(unscheduledItems.filter(u => u.id !== item.id)); setSchedulingItem(null); }} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "3px 12px", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>Add to Calendar</button>
-                        <button onClick={() => setSchedulingItem(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {quickJobs.filter(j => j.onCalendar && !j.done).map(job => {
-                const cc = CAL_COLORS[job.cat] || CAL_COLORS.aviro;
-                const schId = `qj-${job.id}`;
-                return (
-                <div key={`qjcal-${job.id}`}>
-                  <div draggable
-                    onDragStart={e => { setDraggingUnscheduled({ id: schId, text: job.text, source: "quickjob", jobId: job.id, cat: job.cat || "aviro" }); e.dataTransfer.effectAllowed = "move"; }}
-                    onDragEnd={() => { setDraggingUnscheduled(null); setDragOverHour(null); }}
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: schedulingItem?.id === schId ? "none" : `1px solid ${c.border}`, cursor: "grab" }}>
-                    <span style={{ fontSize: 10, color: c.textMuted, cursor: "grab" }}>⠿</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: cc.bg, background: `${cc.bg}22`, border: `1px solid ${cc.bg}44`, borderRadius: 3, padding: "1px 5px" }}>{cc.label.toUpperCase()}</span>
-                    <span style={{ fontSize: 12, color: c.text, flex: 1 }}>{job.text}</span>
-                    <button onClick={() => setSchedulingItem(schedulingItem?.id === schId ? null : { id: schId, text: job.text, source: "quickjob", jobId: job.id, cat: job.cat || "aviro", startTime: "09:00", endTime: "09:30" })} style={{ background: schedulingItem?.id === schId ? c.accentBg : "transparent", border: `1px solid ${schedulingItem?.id === schId ? c.accent : c.border}`, color: schedulingItem?.id === schId ? c.accent : c.textMuted, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>Schedule</button>
-                    <button onClick={() => setQuickJobs(quickJobs.map(j => j.id === job.id ? { ...j, onCalendar: false } : j))} title="Remove from calendar" style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer" }}><Icon type="trash" size={12} /></button>
-                  </div>
-                  {schedulingItem?.id === schId && (
-                    <div style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 8, padding: 10, marginBottom: 6, marginTop: 4 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600 }}>From</label>
-                        <input type="time" value={schedulingItem.startTime} onChange={e => setSchedulingItem({ ...schedulingItem, startTime: e.target.value })} style={{ background: c.card, border: `1px solid ${c.border}`, color: c.text, borderRadius: 4, padding: "3px 6px", fontSize: 11 }} />
-                        <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600 }}>To</label>
-                        <input type="time" value={schedulingItem.endTime} onChange={e => setSchedulingItem({ ...schedulingItem, endTime: e.target.value })} style={{ background: c.card, border: `1px solid ${c.border}`, color: c.text, borderRadius: 4, padding: "3px 6px", fontSize: 11 }} />
-                        <select value={schedulingItem.cat} onChange={e => setSchedulingItem({ ...schedulingItem, cat: e.target.value })} style={{ background: c.card, border: `1px solid ${c.border}`, color: c.text, borderRadius: 4, padding: "3px 6px", fontSize: 10 }}>
-                          {Object.entries(CAL_COLORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                        </select>
-                        <button onClick={() => { const startH = parseTime(schedulingItem.startTime); const endH = parseTime(schedulingItem.endTime); setCalEvents([...calEvents, { id: `e${Date.now()}`, date: selDateStr, startHour: startH, endHour: endH, title: schedulingItem.text, cat: schedulingItem.cat, meet: null, attendees: "", location: "", notes: "" }]); setQuickJobs(quickJobs.map(j => j.id === job.id ? { ...j, onCalendar: false } : j)); setSchedulingItem(null); }} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "3px 12px", cursor: "pointer", fontSize: 10, fontWeight: 700 }}>Add to Calendar</button>
-                        <button onClick={() => setSchedulingItem(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                );
-              })}
-              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                <input value={newUnscheduled} onChange={e => setNewUnscheduled(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && newUnscheduled.trim()) { setUnscheduledItems([...unscheduledItems, { id: `u${Date.now()}`, text: newUnscheduled.trim(), type: "call" }]); setNewUnscheduled(""); }}} placeholder="Add call or item..." style={{ flex: 1, background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "6px 10px", fontSize: 11, outline: "none" }} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {calSubSection === "day" ? (
-          <>
-            {/* Full-day banners */}
-            {todayBanners.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                {todayBanners.map(b => (
-                  <div key={b.id} style={{ background: `${b.color}20`, border: `1px solid ${b.color}60`, borderRadius: 8, padding: "8px 16px", marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 5, background: b.color }} />
-                      <span style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{b.text}</span>
-                      {b.startDate !== b.endDate && <span style={{ fontSize: 11, color: c.textMuted }}>({b.startDate} — {b.endDate})</span>}
-                    </div>
-                    <button onClick={() => setDayBanners(dayBanners.filter(x => x.id !== b.id))} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer" }}><Icon type="trash" size={12} /></button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Meeting created notification */}
-            {meetingCreated && (
-              <div style={{ background: c.successBg, border: `1px solid rgba(34,197,94,0.3)`, borderRadius: 10, padding: 16, marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: c.success }}>Meeting Created: {meetingCreated.title}</div>
-                    <div style={{ fontSize: 12, color: c.textSecondary, marginTop: 4 }}>
-                      {meetingCreated.date} · {meetingCreated.start} - {meetingCreated.end} GST
-                      {meetingCreated.meet && <span> · <span style={{ color: c.accent }}>{meetingCreated.meet}</span></span>}
-                    </div>
-                    {meetingCreated.emails && <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>Invite will be sent to: {meetingCreated.emails}</div>}
-                  </div>
-                  <button onClick={() => setMeetingCreated(null)} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 18 }}>&times;</button>
-                </div>
-              </div>
-            )}
-
-            {/* Action buttons */}
-            <div style={{ marginBottom: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={() => setShowAddBanner(!showAddBanner)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                <Icon type="alert" size={14} /> Day Note
-              </button>
-              <button onClick={() => setShowAddEvent(!showAddEvent)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                <Icon type="plus" size={14} /> New Event / Meeting
-              </button>
-            </div>
-
-            {/* Add day banner form */}
-            {showAddBanner && (
-              <div style={{ background: c.card, border: `1px solid ${c.warning}`, borderRadius: 10, padding: 16, marginBottom: 12 }}>
-                <h4 style={{ fontSize: 12, fontWeight: 700, color: c.warning, margin: "0 0 12px 0" }}>Add Full-Day Note</h4>
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-                  <div style={{ flex: 2 }}>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Note</label>
-                    <input value={newBanner.text} onChange={e => setNewBanner({...newBanner, text: e.target.value})} placeholder="e.g. Sophie on holiday" style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>From</label>
-                    <input type="date" value={newBanner.startDate || selDateStr} onChange={e => setNewBanner({...newBanner, startDate: e.target.value})} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 6px", fontSize: 12 }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>To</label>
-                    <input type="date" value={newBanner.endDate || selDateStr} onChange={e => setNewBanner({...newBanner, endDate: e.target.value})} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 6px", fontSize: 12 }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Color</label>
-                    <input type="color" value={newBanner.color} onChange={e => setNewBanner({...newBanner, color: e.target.value})} style={{ width: 36, height: 32, border: "none", borderRadius: 6, cursor: "pointer" }} />
-                  </div>
-                  <button onClick={addDayBanner} style={{ background: c.warning, border: "none", color: "#000", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Add</button>
-                </div>
-              </div>
-            )}
-
-            {/* Enhanced meeting/event creation form */}
-            {showAddEvent && (
-              <div style={{ background: c.card, border: `1px solid ${c.accent}`, borderRadius: 10, padding: 20, marginBottom: 16 }}>
-                <h4 style={{ fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 14px 0" }}>Create Event / Meeting</h4>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                  <div>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Title *</label>
-                    <input value={newEventForm.title} onChange={e => setNewEventForm({...newEventForm, title: e.target.value})} placeholder="Meeting name..." style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Business</label>
-                    <select value={newEventForm.cat} onChange={e => setNewEventForm({...newEventForm, cat: e.target.value})} style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 6px", fontSize: 12, boxSizing: "border-box" }}>
-                      {Object.entries(CAL_COLORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
-                  <div>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Start Time ({primaryTZ})</label>
-                    <input type="time" value={newEventForm.startTime} onChange={e => setNewEventForm({...newEventForm, startTime: e.target.value})} style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>End Time ({primaryTZ})</label>
-                    <input type="time" value={newEventForm.endTime} onChange={e => setNewEventForm({...newEventForm, endTime: e.target.value})} style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Location</label>
-                    <input value={newEventForm.location} onChange={e => setNewEventForm({...newEventForm, location: e.target.value})} placeholder="Office / Virtual / Address" style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
-                  </div>
-                </div>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Attendees (names)</label>
-                  <input value={newEventForm.attendees} onChange={e => setNewEventForm({...newEventForm, attendees: e.target.value})} placeholder="e.g. Sophie, Martin, Aleksandra" style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
-                </div>
-                <div style={{ display: "flex", gap: 16, marginBottom: 12, padding: "12px 0", borderTop: `1px solid ${c.border}`, borderBottom: `1px solid ${c.border}` }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: c.text }}>
-                    <input type="checkbox" checked={newEventForm.createMeet} onChange={e => setNewEventForm({...newEventForm, createMeet: e.target.checked})} style={{ accentColor: c.accent }} />
-                    Create Google Meet link
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: c.text }}>
-                    <input type="checkbox" checked={newEventForm.emailInvite} onChange={e => setNewEventForm({...newEventForm, emailInvite: e.target.checked})} style={{ accentColor: c.accent }} />
-                    Email invite to participants
-                  </label>
-                </div>
-                {newEventForm.emailInvite && (
-                  <div style={{ marginBottom: 12 }}>
-                    <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Participant emails (comma separated)</label>
-                    <input value={newEventForm.attendeeEmails} onChange={e => setNewEventForm({...newEventForm, attendeeEmails: e.target.value})} placeholder="e.g. sophie@aviro-group.com, martin@aviro-group.com" style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
-                  </div>
-                )}
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={addCalEvent} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 6, padding: "10px 20px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Create Event</button>
-                  <button onClick={() => setShowAddEvent(false)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 6, padding: "10px 20px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
-                </div>
-              </div>
-            )}
-
-            {/* Google Calendar sync status */}
-            {gcalSyncStatus === "synced" && gcalLastSync && (
-              <div style={{ fontSize: 10, color: "#34d399", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 3, background: "#34d399", display: "inline-block" }} />
-                Google Calendar synced · {gcalLastSync}
-              </div>
-            )}
-
-            {/* Scrollable hourly timeline */}
-            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, overflow: "hidden" }}>
-              {/* Timezone header row - primary TZ shown first & highlighted */}
-              {(() => {
-                const tzCols = [
-                  { key: "GST", label: "GST", color: "#fbbf24" },
-                  { key: "BST", label: "BST", color: "#3b82f6" },
-                  { key: "CEST", label: "CEST", color: "#34d399" },
-                ];
-                const sorted = [...tzCols].sort((a, b) => (a.key === primaryTZ ? -1 : b.key === primaryTZ ? 1 : 0));
-                return (
-                <div style={{ display: "grid", gridTemplateColumns: "60px 60px 60px 1fr", borderBottom: `2px solid ${c.border}`, background: c.surface, position: "sticky", top: 0, zIndex: 2 }}>
-                  {sorted.map((tz, i) => (
-                    <div key={tz.key} style={{ padding: "10px 6px", fontSize: 10, fontWeight: 700, color: tz.color, textAlign: "center", borderRight: `1px solid ${c.border}`, letterSpacing: "0.05em", background: tz.key === primaryTZ ? `${tz.color}10` : "transparent" }}>{tz.label}{tz.key === primaryTZ ? " ★" : ""}</div>
-                  ))}
-                  <div style={{ padding: "10px 12px", fontSize: 10, fontWeight: 700, color: c.textMuted, letterSpacing: "0.08em" }}>SCHEDULE</div>
-                </div>
-                );
-              })()}
-
-              <div ref={scrollRef} style={{ maxHeight: 560, overflowY: "auto", position: "relative" }}>
-              {/* Current time indicator (red line) */}
-              {(() => {
-                const now = new Date(liveNow);
-                const gmtHour = now.getUTCHours() + now.getUTCMinutes() / 60;
-                const topPx = gmtHour * 52; // 52px per hour row
-                return <div style={{ position: "absolute", top: topPx, left: 0, right: 0, zIndex: 3, pointerEvents: "none", display: "flex", alignItems: "center" }}>
-                  <div style={{ width: 8, height: 8, borderRadius: 4, background: "#f87171", marginLeft: -4, flexShrink: 0 }} />
-                  <div style={{ flex: 1, height: 2, background: "#f87171" }} />
-                </div>;
-              })()}
-              {HOURS.map(hour => {
-                const eventsThisHour = todayEvents.filter(e => e.startHour <= hour && e.endHour > hour);
-                const startsThisHour = todayEvents.filter(e => Math.floor(e.startHour) === hour);
-                const gst = toGST(hour), bst = toBST(hour), cet = toCEST(hour);
-
-                return (
-                  <div key={hour}
-                    onDragOver={e => { e.preventDefault(); setDragOverHour(hour); }}
-                    onDragLeave={() => setDragOverHour(null)}
-                    onDrop={e => { e.preventDefault(); handleDrop(hour); }}
-                    style={{ display: "grid", gridTemplateColumns: "60px 60px 60px 1fr", minHeight: 52, borderBottom: `1px solid rgba(42,42,58,0.5)`,
-                      background: dragOverHour === hour ? (draggingUnscheduled ? "rgba(234,179,8,0.12)" : "rgba(99,102,241,0.08)") : "transparent",
-                      transition: "background 0.15s",
-                    }}>
-                    {(() => {
-                      const tzVals = [
-                        { key: "GST", time: fmt12(gst), color: "#fbbf24" },
-                        { key: "BST", time: fmt12(bst), color: "#3b82f6" },
-                        { key: "CEST", time: fmt12(cet), color: "#34d399" },
-                      ];
-                      const sorted = [...tzVals].sort((a, b) => (a.key === primaryTZ ? -1 : b.key === primaryTZ ? 1 : 0));
-                      return sorted.map(tz => (
-                        <div key={tz.key} style={{ padding: "8px 4px", fontSize: tz.key === primaryTZ ? 11 : 10, color: tz.color, textAlign: "center", borderRight: `1px solid rgba(42,42,58,0.4)`, opacity: tz.key === primaryTZ ? 1 : 0.7, fontWeight: tz.key === primaryTZ ? 600 : 400, background: tz.key === primaryTZ ? `${tz.color}08` : "transparent" }}>{tz.time}</div>
-                      ));
-                    })()}
-                    <div style={{ padding: "4px 10px" }}>
-                      {startsThisHour.map(ev => {
-                        const cc = CAL_COLORS[ev.cat] || CAL_COLORS.aviro;
-                        const duration = ev.endHour - ev.startHour;
-                        const existingNote = calNotes.find(n => n.eventId === ev.id);
-                        const isExpanded = selectedEventId === ev.id;
-                        return (
-                          <div key={ev.id} draggable
-                            onDragStart={e => { setDraggingEvent(ev.id); setSelectedEventId(null); e.dataTransfer.effectAllowed = "move"; }}
-                            onDragEnd={() => { setDraggingEvent(null); setDragOverHour(null); }}
-                            onClick={() => setSelectedEventId(isExpanded ? null : ev.id)} style={{
-                            background: isExpanded ? cc.bg : `linear-gradient(135deg, ${cc.bg}, rgba(22,22,31,0.6))`,
-                            borderLeft: `4px solid ${cc.text}`, borderRadius: "0 8px 8px 0",
-                            padding: "8px 12px", marginBottom: 4, cursor: draggingEvent ? "grabbing" : "pointer",
-                            boxShadow: isExpanded ? `0 4px 16px rgba(0,0,0,0.4)` : `0 1px 3px rgba(0,0,0,0.15)`,
-                            opacity: draggingEvent === ev.id ? 0.5 : 1,
-                            transition: "all 0.2s ease",
-                            border: isExpanded ? `1px solid ${cc.border}` : "none", borderLeftWidth: 4, borderLeftStyle: "solid", borderLeftColor: cc.text,
-                          }}>
-                            {/* Header row */}
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                              <div>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ev.title}</div>
-                                <div style={{ fontSize: 11, color: c.textSecondary, marginTop: 2 }}>
-                                  {(() => { const off = primaryTZ === "GST" ? 4 : primaryTZ === "CEST" ? 2 : 1; return `${fmtTime((ev.startHour + off) % 24)} - ${fmtTime((ev.endHour + off) % 24)} ${primaryTZ}`; })()} · {duration >= 1 ? `${duration}h` : `${Math.round(duration * 60)}m`}
-                                  {ev.meet && <span style={{ marginLeft: 8, color: ev.meet.includes("teams") ? "#5b5fc7" : "#06b6d4", fontSize: 10, fontWeight: 600 }}>{ev.meet.includes("teams") ? "📞 Teams" : ev.meet.includes("preply") ? "📖 Preply" : "📹 Meet"}</span>}
-                                </div>
-                              </div>
-                              <div style={{ display: "flex", gap: 4 }}>
-                                {ev.isGcal && <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: "rgba(66,133,244,0.15)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.25)", fontWeight: 700, letterSpacing: "0.05em" }}>GCAL</span>}
-                                {ev.calSource === "pluto" && <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: "rgba(99,102,241,0.15)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.4)", fontWeight: 700, letterSpacing: "0.05em" }}>PLUTO FIN</span>}
-                                <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: cc.bg, color: cc.text, border: `1px solid ${cc.border}`, fontWeight: 700 }}>{cc.label}</span>
-                                {ev.isRecurring && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: c.accentBg, color: c.accent, border: `1px solid rgba(129,140,248,0.2)`, fontWeight: 700 }}>RECURRING</span>}
-                                {existingNote && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: c.successBg, color: c.success, border: `1px solid rgba(34,197,94,0.3)`, fontWeight: 700 }}>NOTES</span>}
-                              </div>
-                            </div>
-                            {/* Expanded detail panel */}
-                            {isExpanded && (
-                              <div onClick={e => e.stopPropagation()} style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${cc.border}40` }}>
-                                <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "6px 12px", fontSize: 12 }}>
-                                  <span style={{ color: c.textMuted, fontWeight: 600 }}>Time</span>
-                                  <span style={{ color: c.text }}>{(() => { const off = primaryTZ === "GST" ? 4 : primaryTZ === "CEST" ? 2 : 1; return `${fmtTime((ev.startHour + off) % 24)} - ${fmtTime((ev.endHour + off) % 24)} ${primaryTZ} (${fmtTime(ev.startHour)} - ${fmtTime(ev.endHour)} GMT)`; })()}</span>
-                                  {ev.attendees && <><span style={{ color: c.textMuted, fontWeight: 600 }}>With</span><span style={{ color: c.text }}>{ev.attendees}</span></>}
-                                  {ev.location && <><span style={{ color: c.textMuted, fontWeight: 600 }}>Location</span><span style={{ color: c.text }}>{ev.location}</span></>}
-                                  {ev.meet && <><span style={{ color: c.textMuted, fontWeight: 600 }}>Meeting</span><div style={{ display: "flex", alignItems: "center", gap: 8 }}><a href={ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`} target="_blank" rel="noopener noreferrer" style={{ color: ev.meet.includes("teams") ? "#5b5fc7" : ev.meet.includes("preply") ? "#fbbf24" : c.accent, textDecoration: "none", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }} onClick={e => e.stopPropagation()}>{ev.meet.includes("teams.microsoft") ? "📞 Join Teams Meeting" : ev.meet.includes("preply") ? "📖 Open Preply Lesson" : "📹 Join Google Meet"}</a><button onClick={e => { e.stopPropagation(); copyToClipboard(ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`); }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>{copiedText === (ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`) ? "Copied!" : "Copy Link"}</button></div></>}
-                                  <span style={{ color: c.textMuted, fontWeight: 600 }}>Category</span>
-                                  <span style={{ color: cc.text }}>{cc.label}</span>
-                                </div>
-                                {/* Action buttons: Cancel event */}
-                                <div style={{ display: "flex", gap: 8, marginTop: 10, paddingTop: 8, borderTop: `1px solid ${cc.border}30` }}>
-                                  {ev.meet && <a href={ev.meet.startsWith("http") ? ev.meet : `https://${ev.meet}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ background: ev.meet.includes("teams") ? "rgba(91,95,199,0.15)" : ev.meet.includes("preply") ? "rgba(245,158,11,0.15)" : "rgba(6,182,212,0.15)", border: `1px solid ${ev.meet.includes("teams") ? "rgba(91,95,199,0.4)" : ev.meet.includes("preply") ? "rgba(245,158,11,0.4)" : "rgba(6,182,212,0.4)"}`, color: ev.meet.includes("teams") ? "#5b5fc7" : ev.meet.includes("preply") ? "#fbbf24" : "#06b6d4", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 700, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>{ev.meet.includes("teams") ? "📞 Join Teams" : ev.meet.includes("preply") ? "📖 Open Lesson" : "📹 Join Meet"}</a>}
-                                  <button onClick={e => { e.stopPropagation(); setUnscheduledItems([...unscheduledItems, { id: `u${Date.now()}`, text: ev.title, type: "call" }]); setCalEvents(calEvents.filter(ce => ce.id !== ev.id)); setSelectedEventId(null); }} style={{ background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", color: "#eab308", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Unschedule</button>
-                                  <button onClick={e => { e.stopPropagation(); if (confirm(`Cancel "${ev.title}"?`)) { setCalEvents(calEvents.filter(ce => ce.id !== ev.id)); setSelectedEventId(null); } }} style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)", color: "#f87171", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Cancel Event</button>
-                                  <button onClick={e => { e.stopPropagation(); setCalEvents(calEvents.filter(ce => ce.id !== ev.id)); setSelectedEventId(null); }} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11 }}>Remove from View</button>
-                                </div>
-                                {/* Notes section */}
-                                <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${cc.border}30` }}>
-                                  <div style={{ fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 4 }}>Meeting Notes</div>
-                                  {editingNote === ev.id ? (
-                                    <div>
-                                      <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} placeholder="Add meeting notes, action items, follow-ups..." style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
-                                      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                                        <button onClick={() => saveNote(ev.id)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Save Note</button>
-                                        <button onClick={() => setEditingNote(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11 }}>Cancel</button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      {existingNote ? (
-                                        <div style={{ fontSize: 12, color: c.text, whiteSpace: "pre-wrap", lineHeight: 1.5, background: c.surface, borderRadius: 6, padding: 8, marginBottom: 6 }}>{existingNote.text}</div>
-                                      ) : (
-                                        <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic", marginBottom: 6 }}>No notes yet</div>
-                                      )}
-                                      <button onClick={() => { setEditingNote(ev.id); setNoteText(existingNote?.text || ""); }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.accent, borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
-                                        {existingNote ? "Edit Note" : "Add Note"}
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {startsThisHour.length === 0 && eventsThisHour.length > 0 && (
-                        <div style={{ height: "100%", background: CAL_COLORS[eventsThisHour[0].cat]?.bg || c.accentBg, borderLeft: `3px solid ${CAL_COLORS[eventsThisHour[0].cat]?.border}`, borderRadius: "0 4px 4px 0", opacity: 0.4 }} />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              </div>
-            </div>
-          </>
-        ) : calSubSection === "week" ? (
-          /* Week View */
-          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, overflow: "hidden" }}>
-            {/* Week navigation */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${c.border}`, background: c.surface }}>
-              <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate() - 7); setSelectedDate(d); }} style={{ background: c.card, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>&larr; Prev Week</button>
-              <span style={{ fontSize: 14, fontWeight: 700, color: c.text }}>
-                {(() => { const wd = getWeekDates(); return `${wd[0].toLocaleDateString("en-GB", { day: "numeric", month: "short" })} - ${wd[6].toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`; })()}
-              </span>
-              <button onClick={() => { const d = new Date(selectedDate); d.setDate(d.getDate() + 7); setSelectedDate(d); }} style={{ background: c.card, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Next Week &rarr;</button>
-            </div>
-            {/* Day columns */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
-              {getWeekDates().map((wd, i) => {
-                const ds = dateStr(wd);
-                const dayEvents = getEventsForDate(ds);
-                const isToday = ds === today;
-                const isSel = ds === selDateStr;
-                const dayBannersForDate = dayBanners.filter(b => ds >= b.startDate && ds <= b.endDate);
-                return (
-                  <div key={i} onClick={() => { setSelectedDate(wd); setCalSubSection("day"); }} style={{
-                    borderRight: i < 6 ? `1px solid ${c.border}` : "none", minHeight: 400, cursor: "pointer",
-                    background: isToday ? "rgba(99,102,241,0.05)" : "transparent",
-                    transition: "background 0.15s",
-                  }}
-                  onMouseEnter={e => { if (!isToday) e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-                  onMouseLeave={e => { if (!isToday) e.currentTarget.style.background = "transparent"; }}
-                  >
-                    {/* Day header */}
-                    <div style={{ padding: "10px 8px", borderBottom: `1px solid ${c.border}`, textAlign: "center", background: isSel ? c.accentBg : "transparent" }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                        {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][wd.getDay()]}
-                      </div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: isToday ? c.accent : c.text, marginTop: 2 }}>{wd.getDate()}</div>
-                      <div style={{ fontSize: 9, color: c.textMuted }}>{dayEvents.length} event{dayEvents.length !== 1 ? "s" : ""}</div>
-                    </div>
-                    {/* Banners */}
-                    {dayBannersForDate.map(b => (
-                      <div key={b.id} style={{ padding: "4px 6px", fontSize: 9, fontWeight: 600, background: `${b.color}22`, color: b.color, borderBottom: `1px solid ${c.border}`, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {b.text}
-                      </div>
-                    ))}
-                    {/* Events */}
-                    <div style={{ padding: 6 }}>
-                      {dayEvents.map(ev => {
-                        const cc = CAL_COLORS[ev.cat] || CAL_COLORS.aviro;
-                        return (
-                          <div key={ev.id} style={{
-                            background: cc.bg, borderLeft: `3px solid ${cc.border}`, borderRadius: "0 6px 6px 0",
-                            padding: "6px 8px", marginBottom: 4, transition: "transform 0.1s",
-                          }}>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: c.text, lineHeight: 1.3, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.title}</div>
-                            <div style={{ fontSize: 9, color: c.textSecondary }}>
-                              {fmt12(ev.startHour)} - {fmt12(ev.endHour)}
-                            </div>
-                            {ev.attendees && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.attendees}</div>}
-                            {ev.isRecurring && <div style={{ fontSize: 8, color: c.accent, marginTop: 2, fontWeight: 700 }}>RECURRING</div>}
-                          </div>
-                        );
-                      })}
-                      {dayEvents.length === 0 && (
-                        <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: "20px 4px", opacity: 0.5 }}>No events</div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : calSubSection === "recurring" ? (
-          /* Recurring Events management */
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: c.text, margin: 0 }}>Recurring Events</h3>
-              <button onClick={() => setShowAddRecurring(!showAddRecurring)} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                <Icon type="plus" size={14} /> Add Recurring
-              </button>
-            </div>
-
-            {showAddRecurring && (
-              <div style={{ background: c.card, border: `1px solid ${c.accent}`, borderRadius: 10, padding: 16, marginBottom: 16, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-                <div style={{ flex: 2 }}>
-                  <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Title</label>
-                  <input value={newRecurring.title} onChange={e => setNewRecurring({...newRecurring, title: e.target.value})} style={{ width: "100%", background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none", boxSizing: "border-box" }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Day</label>
-                  <select value={newRecurring.day} onChange={e => setNewRecurring({...newRecurring, day: parseInt(e.target.value)})} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 6px", fontSize: 12 }}>
-                    {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map((d,i) => <option key={i} value={i}>{d}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Start</label>
-                  <select value={newRecurring.startHour} onChange={e => setNewRecurring({...newRecurring, startHour: parseFloat(e.target.value)})} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 6px", fontSize: 12 }}>
-                    {HOURS.flatMap(h => [<option key={h} value={h}>{fmt12(h)}</option>, <option key={h+0.5} value={h+0.5}>{fmt12(h)}:30</option>])}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>End</label>
-                  <select value={newRecurring.endHour} onChange={e => setNewRecurring({...newRecurring, endHour: parseFloat(e.target.value)})} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 6px", fontSize: 12 }}>
-                    {HOURS.flatMap(h => [<option key={h} value={h}>{fmt12(h)}</option>, <option key={h+0.5} value={h+0.5}>{fmt12(h)}:30</option>])}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 10, color: c.textMuted, display: "block", marginBottom: 4 }}>Category</label>
-                  <select value={newRecurring.cat} onChange={e => setNewRecurring({...newRecurring, cat: e.target.value})} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, padding: "8px 6px", fontSize: 12 }}>
-                    {Object.entries(CAL_COLORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
-                </div>
-                <button onClick={() => { if (newRecurring.title.trim()) { setRecurringEvents([...recurringEvents, { id: `r${Date.now()}`, ...newRecurring, meet: null, attendees: "", source: "manual" }]); setNewRecurring({ title: "", day: 1, startHour: 9, endHour: 10, cat: "aviro" }); setShowAddRecurring(false); }}} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Add</button>
-              </div>
-            )}
-
-            {recurringEvents.map(ev => {
-              const dayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][ev.day];
-              const cc = CAL_COLORS[ev.cat] || CAL_COLORS.aviro;
-              return (
-                <div key={ev.id} style={{ display: "flex", alignItems: "center", gap: 12, background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "14px 20px", marginBottom: 6 }}>
-                  <div style={{ width: 4, height: 36, borderRadius: 2, background: cc.border, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{ev.title}</div>
-                    <div style={{ fontSize: 12, color: c.textSecondary, marginTop: 2 }}>
-                      Every {dayName} · {fmt12(ev.startHour)}{ev.startHour % 1 ? ":30" : ""} - {fmt12(ev.endHour)}{ev.endHour % 1 ? ":30" : ""} GMT
-                      {ev.attendees && ` · ${ev.attendees}`}
-                    </div>
-                  </div>
-                  <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 3, background: cc.bg, color: cc.text, border: `1px solid ${cc.border}`, fontWeight: 700 }}>{cc.label}</span>
-                  <span style={{ fontSize: 10, color: ev.source === "gmail" ? c.accent : c.textMuted, background: ev.source === "gmail" ? c.accentBg : c.surface, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>
-                    {ev.source === "gmail" ? "GMAIL" : "MANUAL"}
-                  </span>
-                  <button onClick={() => setRecurringEvents(recurringEvents.filter(r => r.id !== ev.id))} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer" }}><Icon type="trash" size={14} /></button>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* Meeting Notes section */
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: c.text, margin: "0 0 16px 0" }}>Meeting Notes</h3>
-            {calNotes.length === 0 ? (
-              <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 32, textAlign: "center" }}>
-                <div style={{ color: c.textMuted, fontSize: 14 }}>No meeting notes yet. Add notes from the Day View after calls.</div>
-              </div>
-            ) : calNotes.map(note => {
-              const ev = calEvents.find(e => e.id === note.eventId);
-              return (
-                <div key={note.eventId} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 16, marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{ev?.title || "Unknown event"}</div>
-                    <span style={{ fontSize: 11, color: c.textMuted }}>{ev?.date}</span>
-                  </div>
-                  <div style={{ fontSize: 13, color: c.textSecondary, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{note.text}</div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // ===== QUICK JOBS =====
   const [newQJCat, setNewQJCat] = useState("aviro");
-  const [newQJCalendar, setNewQJCalendar] = useState(true);
   const [editingQJNote, setEditingQJNote] = useState(null);
   const [qjNoteText, setQjNoteText] = useState("");
   const [qjFilter, setQjFilter] = useState("all");
@@ -1941,8 +972,8 @@ function AviroDashboard() {
       {/* Add new job form */}
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 16, marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <input value={newQuickJob} onChange={e => setNewQuickJob(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && newQuickJob.trim()) { setQuickJobs([...quickJobs, { id: `qj${Date.now()}`, text: newQuickJob.trim(), done: false, inSignal: false, cat: newQJCat, onCalendar: newQJCalendar, note: "", createdAt: new Date().toISOString() }]); setNewQuickJob(""); }}} placeholder="Add a quick job..." style={{ flex: 1, background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 8, padding: "10px 14px", fontSize: 13, outline: "none" }} />
-          <button onClick={() => { if (newQuickJob.trim()) { setQuickJobs([...quickJobs, { id: `qj${Date.now()}`, text: newQuickJob.trim(), done: false, inSignal: false, cat: newQJCat, onCalendar: newQJCalendar, note: "", createdAt: new Date().toISOString() }]); setNewQuickJob(""); }}} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 8, padding: "10px 18px", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+          <input value={newQuickJob} onChange={e => setNewQuickJob(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && newQuickJob.trim()) { setQuickJobs([...quickJobs, { id: `qj${Date.now()}`, text: newQuickJob.trim(), done: false, inSignal: false, cat: newQJCat, onCalendar: false, note: "", createdAt: new Date().toISOString() }]); setNewQuickJob(""); }}} placeholder="Add a quick job..." style={{ flex: 1, background: c.surface, border: `1px solid ${c.border}`, color: c.text, borderRadius: 8, padding: "10px 14px", fontSize: 13, outline: "none" }} />
+          <button onClick={() => { if (newQuickJob.trim()) { setQuickJobs([...quickJobs, { id: `qj${Date.now()}`, text: newQuickJob.trim(), done: false, inSignal: false, cat: newQJCat, onCalendar: false, note: "", createdAt: new Date().toISOString() }]); setNewQuickJob(""); }}} style={{ background: c.accent, border: "none", color: c.white, borderRadius: 8, padding: "10px 18px", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
             <Icon type="plus" size={14} /> Add
           </button>
         </div>
@@ -1953,10 +984,6 @@ function AviroDashboard() {
               {Object.entries(CAL_COLORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
           </div>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11, color: c.text }}>
-            <input type="checkbox" checked={newQJCalendar} onChange={e => setNewQJCalendar(e.target.checked)} style={{ accentColor: c.accent }} />
-            Show on Calendar
-          </label>
         </div>
       </div>
 
@@ -2003,9 +1030,6 @@ function AviroDashboard() {
               <select value={job.cat || "aviro"} onChange={e => setQuickJobs(quickJobs.map(j => j.id === job.id ? { ...j, cat: e.target.value } : j))} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 4, padding: "2px 4px", fontSize: 9, width: 70 }}>
                 {Object.entries(CAL_COLORS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
-              <button onClick={() => setQuickJobs(quickJobs.map(j => j.id === job.id ? { ...j, onCalendar: !j.onCalendar } : j))} style={{ background: job.onCalendar ? "rgba(234,179,8,0.15)" : "transparent", border: `1px solid ${job.onCalendar ? "rgba(234,179,8,0.5)" : c.border}`, color: job.onCalendar ? "#eab308" : c.textMuted, borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontSize: 9, fontWeight: 600 }}>
-                {job.onCalendar ? "CAL" : "+ CAL"}
-              </button>
               <button onClick={() => setQuickJobs(quickJobs.map(j => j.id === job.id ? { ...j, inSignal: !j.inSignal } : j))} style={{ background: job.inSignal ? c.accentBg : "transparent", border: `1px solid ${job.inSignal ? c.accent : c.border}`, color: job.inSignal ? c.accent : c.textMuted, borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontSize: 9, fontWeight: 600 }}>
                 {job.inSignal ? "SIGNAL" : "+ SIGNAL"}
               </button>
@@ -2067,8 +1091,8 @@ function AviroDashboard() {
   const spaces = [...new Set(allClickUpTasks.map(t => t.space))].sort();
   const filteredClickUp = signalSpaceFilter === "all" ? sortedClickUp : sortedClickUp.filter(t => t.space === signalSpaceFilter);
 
-  // Count today's calendar events
-  const todayCallCount = todayEvents.filter(e => e.meet || e.attendees).length;
+  // Calendar removed — call count no longer available
+  const todayCallCount = 0;
 
   // Completed signal tasks (stay until marked done on ClickUp)
   const [signalDone, setSignalDone] = useState([]); // { ...task, note, completedAt, clickupDone }
@@ -2185,7 +1209,7 @@ function AviroDashboard() {
             {/* Day header */}
             <div style={{ padding: "16px 20px", borderBottom: `1px solid ${c.border}`, background: signalDayStarted ? "rgba(34,197,94,0.05)" : c.surface }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: c.text }}>
-                {selectedDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
               </div>
               <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
                 <div style={{ fontSize: 12, color: c.textSecondary }}>
@@ -2499,9 +1523,6 @@ function AviroDashboard() {
           {/* Action buttons row */}
           {!job.done && (
             <div style={{ display: "flex", gap: 6, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${c.border}` }}>
-              <button onClick={() => { setUnscheduledItems([...unscheduledItems, { id: `u${Date.now()}`, text: job.text, type: "call" }]); setPersonalJobs(personalJobs.filter(j => j.id !== job.id)); setSection("calendar"); }} style={{ background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", color: "#eab308", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                <Icon type="calendar" size={11} /> Send to Calendar
-              </button>
               <button onClick={() => { setDelegatedTasks([...delegatedTasks, { id: job.id, text: job.text, cat: "personal", delegatedAt: new Date().toISOString() }]); setPersonalJobs(personalJobs.filter(j => j.id !== job.id)); }} style={{ background: c.accentBg, border: "1px solid rgba(129,140,248,0.2)", color: c.accent, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                 <Icon type="delegate" size={11} /> Delegate to Sophie
               </button>
@@ -6005,7 +5026,7 @@ function AviroDashboard() {
       { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #818cf8, #a78bfa)", defaultSection: "clients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #fbbf24, #f87171)", defaultSection: null },
       { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #34d399, #10b981)", defaultSection: "entities" },
-      { key: "david", title: "David Calendar", desc: "Schedule, Tasks & Daily Operations", icon: "calendar", gradient: "linear-gradient(135deg, #60a5fa, #3b82f6)", defaultSection: "calendar" },
+      { key: "david", title: "David Tasks", desc: "Quick Jobs, Signal Tasks & Daily Operations", icon: "zap", gradient: "linear-gradient(135deg, #60a5fa, #3b82f6)", defaultSection: "quickjobs" },
       { key: "crm", title: "Client Management", desc: "Contacts, Deals & Communication", icon: "delegate", gradient: "linear-gradient(135deg, #f472b6, #ec4899)", defaultSection: "crm" },
       { key: "settings", title: "Settings", desc: "FX Rates, Connections & Configuration", icon: "bank", gradient: "linear-gradient(135deg, #9ca3af, #6b7280)", defaultSection: "settings" },
     ];
@@ -6513,41 +5534,6 @@ function AviroDashboard() {
           )}
         </div>
 
-        {/* Google Calendar */}
-        <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 24, marginBottom: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: c.text }}>Google Calendar</div>
-              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2 }}>Sync events from your Google Calendar ICS feed</div>
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {gcalSyncStatus === "syncing" && <span style={{ fontSize: 11, color: c.accent }}>Syncing...</span>}
-              {gcalSyncStatus === "synced" && gcalLastSync && <span style={{ fontSize: 10, color: c.success }}>Last synced: {gcalLastSync}</span>}
-              {gcalIcsUrl && <button onClick={syncGoogleCalendar} disabled={gcalSyncStatus === "syncing"} style={{ fontSize: 11, padding: "6px 14px", borderRadius: 6, border: "none", background: "#60a5fa", color: "#fff", cursor: gcalSyncStatus === "syncing" ? "wait" : "pointer", fontWeight: 600 }}>Sync Now</button>}
-            </div>
-          </div>
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle5}>Google Calendar ICS URL</label>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input type="password" value={gcalIcsUrl} onChange={e => setGcalIcsUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/..." style={{ ...inputStyle5, flex: 1 }} />
-              {gcalIcsUrl && <span style={{ fontSize: 10, color: c.success, fontWeight: 600 }}>Set</span>}
-            </div>
-            <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>Google Calendar → Settings → your calendar → "Secret address in iCal format". Events sync to Supabase and show on your calendar.</div>
-          </div>
-          {gcalIcsUrl && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#60a5fa" }}>{calEvents.filter(e => e.isGcal).length}</div>
-                <div style={{ fontSize: 10, color: c.textMuted }}>Calendar Events Loaded</div>
-              </div>
-              <div style={{ background: c.surface, borderRadius: 8, padding: 12, textAlign: "center" }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#60a5fa" }}>{calEvents.filter(e => e.isGcal && e.meet).length}</div>
-                <div style={{ fontSize: 10, color: c.textMuted }}>With Meet Links</div>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* Metabase Connections — future: move metabase config management here */}
         <div style={{ background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 24, opacity: 0.5 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 4 }}>Metabase Connections</div>
@@ -6559,7 +5545,7 @@ function AviroDashboard() {
 
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
-    david: { label: "DAVID CALENDAR", sections: ["calendar", "quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
+    david: { label: "DAVID", sections: ["quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
     gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
     crm: { label: "CLIENT MANAGEMENT", sections: ["crm"] },
@@ -6577,7 +5563,6 @@ function AviroDashboard() {
 
   const allNavItems = [
     { section: "david", label: "DAVID", isHeader: true, group: "david" },
-    { section: "calendar", icon: "calendar", label: "David Calendar", group: "david" },
     { section: "quickjobs", icon: "zap", label: "Quick Jobs", group: "david" },
     { section: "signal", icon: "signal", label: "Signal Tasks", group: "david" },
     { section: "sophie", icon: "delegate", label: "Sophie Tasks", group: "david" },
@@ -6601,7 +5586,7 @@ function AviroDashboard() {
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, calendar: renderCalendar, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, crm: renderClientMgmt, settings: renderSettings };
+  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBanks, brands: renderBrands, crm: renderClientMgmt, settings: renderSettings };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
