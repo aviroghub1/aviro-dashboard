@@ -3173,6 +3173,24 @@ function AviroDashboard() {
     const SERVICE_TYPES_2 = ["Cards", "Open Banking", "APM", "Crypto", "Other"];
     const AGREEMENT_TYPES = ["MOR", "PayFac", "Payment Agent", "Direct to Merchant"];
     const PROVIDER_REGIONS = ["Global", "UK", "West Europe", "East Europe", "Scandinavia", "Turkey", "MENA", "GCC", "CIS", "Africa", "LATAM", "North America", "Oceania", "India", "Asia", "South East Asia", "Japan"];
+    const REGION_COUNTRIES = {
+      "UK": ["England", "Scotland", "Wales", "Northern Ireland"],
+      "West Europe": ["Germany", "France", "Netherlands", "Belgium", "Austria", "Switzerland", "Luxembourg", "Ireland", "Spain", "Portugal", "Italy"],
+      "East Europe": ["Poland", "Czech Republic", "Hungary", "Romania", "Bulgaria", "Slovakia", "Slovenia", "Croatia", "Serbia", "Bosnia", "Lithuania", "Latvia", "Estonia"],
+      "Scandinavia": ["Sweden", "Norway", "Denmark", "Finland", "Iceland"],
+      "Turkey": ["Turkey"],
+      "MENA": ["Egypt", "Morocco", "Tunisia", "Algeria", "Lebanon", "Jordan", "Iraq"],
+      "GCC": ["UAE", "Saudi Arabia", "Qatar", "Bahrain", "Kuwait", "Oman"],
+      "CIS": ["Russia", "Ukraine", "Kazakhstan", "Belarus", "Georgia", "Armenia", "Azerbaijan", "Uzbekistan"],
+      "Africa": ["South Africa", "Nigeria", "Kenya", "Ghana", "Tanzania", "Uganda"],
+      "LATAM": ["Brazil", "Mexico", "Argentina", "Colombia", "Chile", "Peru", "Uruguay"],
+      "North America": ["USA", "Canada"],
+      "Oceania": ["Australia", "New Zealand"],
+      "India": ["India"],
+      "Asia": ["China", "South Korea", "Hong Kong", "Taiwan", "Mongolia"],
+      "South East Asia": ["Thailand", "Vietnam", "Indonesia", "Malaysia", "Philippines", "Singapore", "Cambodia", "Myanmar"],
+      "Japan": ["Japan"]
+    };
     const GROUP_PLATFORMS_P = ["Signal", "Telegram", "WhatsApp", "Lark", "Teams", "Other"];
     const SETTLEMENT_TERMS_P = ["T+0", "T+1", "T+2", "T+3", "T+4", "T+5", "T+7", "Weekly", "Bi-Weekly", "Monthly"];
     const FEE_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "AED", "BTC", "USDT"];
@@ -3315,7 +3333,7 @@ function AviroDashboard() {
 
           {/* Add Service */}
           <button onClick={() => {
-            const newSvc = { id: `svc-${Date.now()}`, name: "", serviceType1: "", serviceType2: "", regions: [], processingCurrencies: [], agreementType: "", entities: [], payinPct: "", payinTxFee: "", payinTxCurrency: "USD", payoutPct: "", payoutTxFee: "", payoutTxCurrency: "USD", settlementTerms: "", settlementFee: "", applePay: false, googlePay: false, rollingReserveEnabled: false, rollingReservePct: "", rollingReserveTerm: "", rollingReserveCap: "", rollingReserveCapCurrency: "EUR", payinTiers: [], payoutTiers: [], payinTierType: "tiers", payoutTierType: "tiers", canResell: false, resellModel: "", resellHardCost: "", referralAgreement: false, referralDeal: "" };
+            const newSvc = { id: `svc-${Date.now()}`, name: "", serviceType1: "", serviceType2: "", regions: [], specificCountries: [], processingCurrencies: [], agreementTypes: [], entityMap: {}, payinPct: "", payinTxFee: "", payinTxCurrency: "USD", payoutPct: "", payoutTxFee: "", payoutTxCurrency: "USD", settlementTerms: "", settlementFee: "", applePay: false, googlePay: false, rollingReserveEnabled: false, rollingReservePct: "", rollingReserveTerm: "", rollingReserveCap: "", rollingReserveCapCurrency: "EUR", payinTiers: [], payoutTiers: [], payinTierType: "tiers", payoutTierType: "tiers", canResell: false, resellModel: "", resellHardCost: "", referralAgreement: false, referralDeal: "" };
             updateProvider(prov.id, "services", [...svcs, newSvc]);
           }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600, marginBottom: 20 }}>+ Add Service</button>
 
@@ -3442,10 +3460,36 @@ function AviroDashboard() {
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                         {PROVIDER_REGIONS.map(r => {
                           const sel = (svc.regions || []).includes(r);
-                          return <button key={r} onClick={() => { const regs = svc.regions || []; updateService(prov.id, svc.id, "regions", sel ? regs.filter(x => x !== r) : [...regs, r]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? c.accentBg : c.surface, color: sel ? c.accent : c.textMuted, border: `1px solid ${sel ? c.accent + "40" : c.border}` }}>{r}</button>;
+                          return <button key={r} onClick={() => {
+                            const regs = svc.regions || [];
+                            const newRegs = sel ? regs.filter(x => x !== r) : [...regs, r];
+                            if (sel) {
+                              const removedCountries = REGION_COUNTRIES[r] || [];
+                              const newSpecific = (svc.specificCountries || []).filter(sc => !removedCountries.includes(sc));
+                              updateServiceMulti(prov.id, svc.id, { regions: newRegs, specificCountries: newSpecific });
+                            } else {
+                              updateService(prov.id, svc.id, "regions", newRegs);
+                            }
+                          }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? c.accentBg : c.surface, color: sel ? c.accent : c.textMuted, border: `1px solid ${sel ? c.accent + "40" : c.border}` }}>{r}</button>;
                         })}
                       </div>
                     </div>
+
+                    {/* Specific Countries */}
+                    {(svc.regions || []).length > 0 && (() => {
+                      const availableCountries = (svc.regions || []).flatMap(r => REGION_COUNTRIES[r] || []);
+                      return availableCountries.length > 0 ? (
+                        <div>
+                          <label style={labelStyle3}>Specific Countries</label>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                            {availableCountries.map(ct => {
+                              const sel = (svc.specificCountries || []).includes(ct);
+                              return <button key={ct} onClick={() => { const cur = svc.specificCountries || []; updateService(prov.id, svc.id, "specificCountries", sel ? cur.filter(x => x !== ct) : [...cur, ct]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? "rgba(245,158,11,0.12)" : c.surface, color: sel ? "#f59e0b" : c.textMuted, border: `1px solid ${sel ? "rgba(245,158,11,0.4)" : c.border}` }}>{ct}</button>;
+                            })}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
 
                     {/* Processing Currencies */}
                     <div>
@@ -3458,52 +3502,74 @@ function AviroDashboard() {
                       </div>
                     </div>
 
-                    {/* Agreement & Entities */}
-                    <div><label style={labelStyle3}>Agreement Type</label><select value={svc.agreementType || ""} onChange={e => updateServiceMulti(prov.id, svc.id, { agreementType: e.target.value, entities: [] })} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{AGREEMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                    {svc.agreementType && (() => {
+                    {/* Agreement Types (multi-select pills) */}
+                    {(() => {
+                      const svcAgrTypes = svc.agreementTypes || (svc.agreementType ? [svc.agreementType] : []);
+                      const svcEntityMap = svc.entityMap || (svc.agreementType && svc.entities ? { [svc.agreementType]: svc.entities } : {});
                       const financialInstitutes = corporateEntities.filter(e => e.category === "Financial Institute").map(e => e.name);
                       const paymentAgents = corporateEntities.filter(e => e.category === "Payment Agent").map(e => e.name);
                       const gamingLicenses = corporateEntities.filter(e => e.category === "Gaming License").map(e => e.name);
                       const clientNames = gatewayClients.map(cl2 => cl2.name);
-
-                      let options = [];
-                      let label = "Entity/ies Onboarded With";
-                      if (svc.agreementType === "PayFac" || svc.agreementType === "MOR") {
-                        options = financialInstitutes;
-                        label = "Financial Institution(s)";
-                      } else if (svc.agreementType === "Payment Agent") {
-                        options = paymentAgents;
-                        label = "Payment Agent(s)";
-                      } else if (svc.agreementType === "Direct to Merchant") {
-                        options = [...gamingLicenses.map(n => ({ name: n, type: "License" })), ...clientNames.map(n => ({ name: n, type: "Client" }))];
-                      }
-
-                      if (svc.agreementType === "Direct to Merchant") {
-                        return (
-                          <div>
-                            <label style={labelStyle3}>Gaming License / Client</label>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                              {options.map(opt => {
-                                const sel = (svc.entities || []).includes(opt.name);
-                                const isLicense = opt.type === "License";
-                                return <button key={opt.name} onClick={() => { const ents = svc.entities || []; updateService(prov.id, svc.id, "entities", sel ? ents.filter(x => x !== opt.name) : [...ents, opt.name]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? (isLicense ? "rgba(139,92,246,0.12)" : c.accentBg) : c.surface, color: sel ? (isLicense ? "#a78bfa" : c.accent) : c.textMuted, border: `1px solid ${sel ? (isLicense ? "rgba(139,92,246,0.4)" : c.accent + "40") : c.border}` }}>{isLicense ? "🔑 " : "👤 "}{opt.name}</button>;
-                              })}
-                              {options.length === 0 && <span style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>No gaming licenses or clients found</span>}
-                            </div>
-                          </div>
-                        );
-                      }
-
                       return (
                         <div>
-                          <label style={labelStyle3}>{label}</label>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                            {options.map(en => {
-                              const sel = (svc.entities || []).includes(en);
-                              return <button key={en} onClick={() => { const ents = svc.entities || []; updateService(prov.id, svc.id, "entities", sel ? ents.filter(x => x !== en) : [...ents, en]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? c.accentBg : c.surface, color: sel ? c.accent : c.textMuted, border: `1px solid ${sel ? c.accent + "40" : c.border}` }}>{en}</button>;
+                          <label style={labelStyle3}>Agreement Type(s)</label>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: svcAgrTypes.length > 0 ? 10 : 0 }}>
+                            {AGREEMENT_TYPES.map(at => {
+                              const sel = svcAgrTypes.includes(at);
+                              return <button key={at} onClick={() => {
+                                const newTypes = sel ? svcAgrTypes.filter(x => x !== at) : [...svcAgrTypes, at];
+                                const newMap = { ...svcEntityMap };
+                                if (sel) { delete newMap[at]; }
+                                else { newMap[at] = newMap[at] || []; }
+                                updateServiceMulti(prov.id, svc.id, { agreementTypes: newTypes, entityMap: newMap });
+                              }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? c.accentBg : c.surface, color: sel ? c.accent : c.textMuted, border: `1px solid ${sel ? c.accent + "40" : c.border}` }}>{at}</button>;
                             })}
-                            {options.length === 0 && <span style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>No {svc.agreementType === "Payment Agent" ? "payment agents" : "financial institutions"} in Corporate Matrix</span>}
                           </div>
+                          {svcAgrTypes.map(at => {
+                            var entitiesForType = svcEntityMap[at] || [];
+                            var entityOptions = [];
+                            var entityLabel = "Entity/ies";
+                            if (at === "PayFac" || at === "MOR") {
+                              entityOptions = financialInstitutes;
+                              entityLabel = "Financial Institution(s)";
+                            } else if (at === "Payment Agent") {
+                              entityOptions = paymentAgents;
+                              entityLabel = "Payment Agent(s)";
+                            } else if (at === "Direct to Merchant") {
+                              entityOptions = [...gamingLicenses.map(n => ({ name: n, type: "License" })), ...clientNames.map(n => ({ name: n, type: "Client" }))];
+                              entityLabel = "Gaming License / Client";
+                            }
+                            return (
+                              <div key={at} style={{ background: c.surface, borderRadius: 8, padding: 10, marginBottom: 8, border: `1px solid ${c.border}` }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 6 }}>{at}</div>
+                                <label style={labelStyle3}>{entityLabel}</label>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                                  {at === "Direct to Merchant" ? (
+                                    entityOptions.length > 0 ? entityOptions.map(function(opt) {
+                                      var sel2 = entitiesForType.includes(opt.name);
+                                      var isLicense = opt.type === "License";
+                                      return React.createElement("button", { key: opt.name, onClick: function() {
+                                        var newEnts = sel2 ? entitiesForType.filter(function(x) { return x !== opt.name; }) : [].concat(entitiesForType, [opt.name]);
+                                        var newMap2 = Object.assign({}, svcEntityMap);
+                                        newMap2[at] = newEnts;
+                                        updateServiceMulti(prov.id, svc.id, { entityMap: newMap2 });
+                                      }, style: { padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel2 ? 600 : 400, cursor: "pointer", background: sel2 ? (isLicense ? "rgba(139,92,246,0.12)" : c.accentBg) : c.surface, color: sel2 ? (isLicense ? "#a78bfa" : c.accent) : c.textMuted, border: "1px solid " + (sel2 ? (isLicense ? "rgba(139,92,246,0.4)" : c.accent + "40") : c.border) } }, isLicense ? "🔑 " : "👤 ", opt.name);
+                                    }) : <span style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>No gaming licenses or clients found</span>
+                                  ) : (
+                                    entityOptions.length > 0 ? entityOptions.map(function(en) {
+                                      var sel2 = entitiesForType.includes(en);
+                                      return React.createElement("button", { key: en, onClick: function() {
+                                        var newEnts = sel2 ? entitiesForType.filter(function(x) { return x !== en; }) : [].concat(entitiesForType, [en]);
+                                        var newMap2 = Object.assign({}, svcEntityMap);
+                                        newMap2[at] = newEnts;
+                                        updateServiceMulti(prov.id, svc.id, { entityMap: newMap2 });
+                                      }, style: { padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel2 ? 600 : 400, cursor: "pointer", background: sel2 ? c.accentBg : c.surface, color: sel2 ? c.accent : c.textMuted, border: "1px solid " + (sel2 ? c.accent + "40" : c.border) } }, en);
+                                    }) : <span style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>No {at === "Payment Agent" ? "payment agents" : "financial institutions"} in Corporate Matrix</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       );
                     })()}
@@ -3560,7 +3626,7 @@ function AviroDashboard() {
                         <div><label style={labelStyle3}>Settlement Method</label><select value={svc.settlementMethod || ""} onChange={e => updateService(prov.id, svc.id, "settlementMethod", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option><option value="Fiat">Fiat</option><option value="Crypto">Crypto</option></select></div>
                       </div>
                       {svc.settlementMethod === "Fiat" && (() => {
-                        const selEntities = svc.entities || [];
+                        const selEntities = svc.entityMap ? [].concat(...Object.values(svc.entityMap)) : (svc.entities || []);
                         const matchedAccounts = bankAccountsList.filter(a => selEntities.includes(a.entityName));
                         return (
                           <div>
@@ -3669,6 +3735,7 @@ function AviroDashboard() {
       if (ovFilters.referral === false && s.referralAgreement) return false;
       if (ovFilters.reseller === true && !s.canResell) return false;
       if (ovFilters.reseller === false && s.canResell) return false;
+      if (ovFilters.agreement) { const sAgrTypes = s.agreementTypes || (s.agreementType ? [s.agreementType] : []); if (!sAgrTypes.includes(ovFilters.agreement)) return false; }
       return true;
     });
 
@@ -3697,15 +3764,15 @@ function AviroDashboard() {
             )}
             {providerViewTab === "overview" && (
               <button onClick={() => {
-                const cols = ["Provider", "Service", "Type", "Channel", "Card Type", "Apple Pay", "Google Pay", "Regions", "Currencies", "Referral", "Reseller"];
-                const rows = filteredOvServices.map(s => [
-                  s.providerName, s.name || "—", s.serviceType1 || "—", s.serviceType2 || "—", s.cardType || "—",
-                  s.applePay ? "Yes" : "No", s.googlePay ? "Yes" : "No",
-                  (s.regions || []).join(", ") || "—",
-                  (s.processingCurrencies || []).join(", ") || "—",
-                  s.referralAgreement ? "Yes" : "No",
-                  s.canResell ? "Yes" : "No"
-                ]);
+                const cols = ["Provider", "Service", "Type", "Channel", "Regions", "Currencies", "Agreements", "Referral", "Reseller"];
+                const rows = filteredOvServices.map(s => {
+                  var channelStr = s.serviceType2 || "—";
+                  if (s.serviceType2 === "Cards") { var parts = ["Cards"]; if (s.cardType) parts.push(s.cardType); if (s.applePay) parts.push("Apple Pay"); if (s.googlePay) parts.push("Google Pay"); channelStr = parts.join(" · "); }
+                  var regionParts = (s.regions || []).map(function(r) { var countries = (s.specificCountries || []).filter(function(sc) { return (REGION_COUNTRIES[r] || []).includes(sc); }); return countries.length > 0 ? r + " — " + countries.join(", ") : r; }); var regionStr = regionParts.join("; ") || "—";
+                  var agrTypes = s.agreementTypes || (s.agreementType ? [s.agreementType] : []);
+                  var agrStr = agrTypes.join(", ") || "—";
+                  return [s.providerName, s.name || "—", s.serviceType1 || "—", channelStr, regionStr, (s.processingCurrencies || []).join(", ") || "—", agrStr, s.referralAgreement ? "Yes" : "No", s.canResell ? "Yes" : "No"];
+                });
                 const tableHtml = `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>${cols.map(h => `<th style="background:linear-gradient(135deg,#4c1d95,#7c3aed);color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.05em">${h}</th>`).join("")}</tr></thead><tbody>${rows.map((row, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f9f7ff"}">${row.map(cell => `<td style="padding:7px 10px;border-bottom:1px solid #e5e7eb">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
                 const win = window.open("", "_blank");
                 win.document.write(`<!DOCTYPE html><html><head><title>Provider Overview</title><style>body{font-family:sans-serif;padding:20px;background:#fff;color:#111}@media print{button{display:none}}</style></head><body><h2 style="margin-bottom:16px">Provider Overview</h2>${tableHtml}<br><button onclick="window.print()" style="padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">Print</button></body></html>`);
@@ -3830,6 +3897,15 @@ function AviroDashboard() {
                     ))}
                   </div>
                 </div>
+                <div>
+                  <label style={labelStyle3}>Agreement</label>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    <button onClick={() => { const next = { ...ovFilters }; delete next.agreement; setProviderOverviewFilters(next); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: !ovFilters.agreement ? c.accentBg : c.surface, color: !ovFilters.agreement ? c.accent : c.textMuted, border: `1px solid ${!ovFilters.agreement ? c.accent + "40" : c.border}`, fontWeight: !ovFilters.agreement ? 600 : 400 }}>All</button>
+                    {AGREEMENT_TYPES.map(at => (
+                      <button key={at} onClick={() => { const next = { ...ovFilters }; if (next.agreement === at) { delete next.agreement; } else { next.agreement = at; } setProviderOverviewFilters(next); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: ovFilters.agreement === at ? c.accentBg : c.surface, color: ovFilters.agreement === at ? c.accent : c.textMuted, border: `1px solid ${ovFilters.agreement === at ? c.accent + "40" : c.border}`, fontWeight: ovFilters.agreement === at ? 600 : 400 }}>{at}</button>
+                    ))}
+                  </div>
+                </div>
                 {Object.keys(ovFilters).length > 0 && (
                   <button onClick={() => setProviderOverviewFilters({})} style={{ padding: "4px 10px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: "rgba(248,113,113,0.1)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", fontWeight: 600 }}>Clear Filters</button>
                 )}
@@ -3842,30 +3918,43 @@ function AviroDashboard() {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr>
-                      {["Provider", "Service", "Type", "Channel", "Card Type", "Apple Pay", "Google Pay", "Regions", "Currencies", "Referral", "Reseller"].map(h => (
+                      {["Provider", "Service", "Type", "Channel", "Regions", "Currencies", "Agreements", "Referral", "Reseller"].map(h => (
                         <th key={h} style={thStyleOv}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {filteredOvServices.length === 0 && (
-                      <tr><td colSpan={11} style={{ padding: 24, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No services match the current filters</td></tr>
+                      <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No services match the current filters</td></tr>
                     )}
-                    {filteredOvServices.map((s, idx) => (
-                      <tr key={s.id + s.providerId} style={{ background: idx % 2 === 0 ? c.card : c.surface }}>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, fontWeight: 600 }}>{s.providerName}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}` }}>{s.name || "—"}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}` }}>{s.serviceType1 || "—"}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}` }}>{s.serviceType2 || "—"}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}` }}>{s.cardType || "—"}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, textAlign: "center" }}>{s.applePay ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, textAlign: "center" }}>{s.googlePay ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, fontSize: 11 }}>{(s.regions || []).slice(0, 4).join(", ") || "—"}{(s.regions || []).length > 4 ? ` +${(s.regions || []).length - 4}` : ""}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, fontSize: 11 }}>{(s.processingCurrencies || []).join(", ") || "—"}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, textAlign: "center" }}>{s.referralAgreement ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
-                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, textAlign: "center" }}>{s.canResell ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
-                      </tr>
-                    ))}
+                    {filteredOvServices.map((s, idx) => {
+                      var channelDisplay = s.serviceType2 || "—";
+                      if (s.serviceType2 === "Cards") {
+                        var cParts = [React.createElement("span", { key: "ch" }, "Cards")];
+                        if (s.cardType) cParts.push(React.createElement("span", { key: "ct", style: { color: c.textMuted } }, " · " + s.cardType));
+                        if (s.applePay) cParts.push(React.createElement("span", { key: "ap", style: { display: "inline-block", marginLeft: 4, padding: "1px 5px", borderRadius: 4, fontSize: 9, fontWeight: 600, background: "rgba(0,0,0,0.06)", color: "#111" } }, "Apple Pay"));
+                        if (s.googlePay) cParts.push(React.createElement("span", { key: "gp", style: { display: "inline-block", marginLeft: 4, padding: "1px 5px", borderRadius: 4, fontSize: 9, fontWeight: 600, background: "rgba(66,133,244,0.1)", color: "#4285f4" } }, "Google Pay"));
+                        channelDisplay = cParts;
+                      }
+                      var regionParts = (s.regions || []).map(function(r) { var countries = (s.specificCountries || []).filter(function(sc) { return (REGION_COUNTRIES[r] || []).includes(sc); }); return countries.length > 0 ? r + " — " + countries.join(", ") : r; });
+                      var regionDisplay = regionParts.length > 0 ? regionParts.join("; ") : "—";
+                      var agrTypes = s.agreementTypes || (s.agreementType ? [s.agreementType] : []);
+                      var agrDisplay = agrTypes.length > 0 ? agrTypes.join(", ") : "—";
+                      var tdS = { padding: "8px 12px", borderBottom: "1px solid " + c.border };
+                      return (
+                        <tr key={s.id + s.providerId} style={{ background: idx % 2 === 0 ? c.card : c.surface }}>
+                          <td style={{ ...tdS, fontWeight: 600 }}>{s.providerName}</td>
+                          <td style={tdS}>{s.name || "—"}</td>
+                          <td style={tdS}>{s.serviceType1 || "—"}</td>
+                          <td style={{ ...tdS, fontSize: 11 }}>{channelDisplay}</td>
+                          <td style={{ ...tdS, fontSize: 11, maxWidth: 200 }}>{regionDisplay}</td>
+                          <td style={{ ...tdS, fontSize: 11 }}>{(s.processingCurrencies || []).join(", ") || "—"}</td>
+                          <td style={{ ...tdS, fontSize: 11 }}>{agrDisplay}</td>
+                          <td style={{ ...tdS, textAlign: "center" }}>{s.referralAgreement ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
+                          <td style={{ ...tdS, textAlign: "center" }}>{s.canResell ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
