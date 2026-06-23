@@ -3799,7 +3799,7 @@ function AviroDashboard() {
                 const rows = filteredOvServices.map(s => {
                   var channelStr = s.serviceType2 || "—";
                   if (s.serviceType2 === "Cards") { var parts = ["Cards"]; if (s.cardType) parts.push(s.cardType); if (s.applePay) parts.push('<span style="background:#1a1a1a;color:#fff;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700">Apple Pay</span>'); if (s.googlePay) parts.push('<span style="background:#4285f4;color:#fff;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700">Google Pay</span>'); channelStr = parts.join(" · "); }
-                  if (s.serviceType2 === "Open Banking") { channelStr = "Open Banking"; if (s.providesC2B === true) channelStr += " · C2B: Yes"; else if (s.providesC2B === false) channelStr += " · C2B: No"; }
+                  if (s.serviceType2 === "Open Banking") { channelStr = "Open Banking"; if (s.providesC2B === true) channelStr += " · C2B Account: Yes"; else if (s.providesC2B === false) channelStr += " · C2B Account: No"; }
                   var regionParts = (s.regions || []).map(function(r) { var countries = (s.specificCountries || []).filter(function(sc) { return (REGION_COUNTRIES[r] || []).includes(sc); }); var excluded = (s.excludedCountries || []).filter(function(ec) { return (REGION_COUNTRIES[r] || []).includes(ec); }); var str = r; if (countries.length > 0) str += " — " + countries.join(", "); if (excluded.length > 0) str += " (excl: " + excluded.join(", ") + ")"; return str; }); var regionStr = regionParts.join("; ") || "—";
                   var agrTypes = s.agreementTypes || (s.agreementType ? [s.agreementType] : []);
                   var svcEntityMap = s.entityMap || (s.agreementType && s.entities ? { [s.agreementType]: s.entities } : {});
@@ -3977,8 +3977,8 @@ function AviroDashboard() {
                       }
                       if (s.serviceType2 === "Open Banking") {
                         var obParts = ["Open Banking"];
-                        if (s.providesC2B === true) obParts.push("C2B: Yes");
-                        else if (s.providesC2B === false) obParts.push("C2B: No");
+                        if (s.providesC2B === true) obParts.push("C2B Account: Yes");
+                        else if (s.providesC2B === false) obParts.push("C2B Account: No");
                         channelDisplay = obParts.join(" · ");
                       }
                       var regionParts = (s.regions || []).map(function(r) { var countries = (s.specificCountries || []).filter(function(sc) { return (REGION_COUNTRIES[r] || []).includes(sc); }); var excluded = (s.excludedCountries || []).filter(function(ec) { return (REGION_COUNTRIES[r] || []).includes(ec); }); var str = r; if (countries.length > 0) str += " — " + countries.join(", "); if (excluded.length > 0) str += " (excl: " + excluded.join(", ") + ")"; return str; });
