@@ -2181,24 +2181,53 @@ function AviroDashboard() {
               };
               const fmtRR = (rr) => { if (!rr) return "None"; let s = rr.pct + "% / " + (rr.term || "—") + " days"; if (rr.cap) s += " / Cap: " + rr.capCur + " " + rr.cap; return s; };
 
-              const thStyle = { textAlign: "left", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "2px solid " + c.border, whiteSpace: "nowrap" };
-              const tdStyle = { padding: "8px 10px", fontSize: 11, color: c.text, verticalAlign: "top", borderBottom: "1px solid " + c.border + "40" };
+              // Branded table styles
+              const thStyle = { textAlign: "left", padding: "10px 12px", fontSize: 10, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap", background: "linear-gradient(135deg, #4c1d95, #7c3aed)" };
+              const tdStyle = { padding: "9px 12px", fontSize: 11, color: c.text, verticalAlign: "top", borderBottom: "1px solid " + c.border + "30" };
               const tdMuted = { ...tdStyle, color: c.textSecondary, fontSize: 10 };
 
-              // PDF download
+              // Cube Pay inline SVG logo
+              const CubePayLogo = ({ size }) => {
+                const s = size || 24;
+                return (
+                  <svg width={s * 5.2} height={s} viewBox="0 0 130 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="4" width="17" height="17" rx="3" stroke="#fff" strokeWidth="1.5" fill="none" />
+                    <circle cx="7" cy="9" r="1.2" fill="#a78bfa" />
+                    <circle cx="11" cy="9" r="1.2" fill="#a78bfa" />
+                    <circle cx="15" cy="9" r="1.2" fill="#a78bfa" />
+                    <circle cx="7" cy="13" r="1.2" fill="#c4b5fd" />
+                    <circle cx="11" cy="13" r="1.2" fill="#c4b5fd" />
+                    <circle cx="15" cy="13" r="1.2" fill="#c4b5fd" />
+                    <circle cx="7" cy="17" r="1.2" fill="#7c3aed" />
+                    <circle cx="11" cy="17" r="1.2" fill="#7c3aed" />
+                    <circle cx="15" cy="17" r="1.2" fill="#7c3aed" />
+                    <line x1="19" y1="9" x2="23" y2="9" stroke="#a78bfa" strokeWidth="1" />
+                    <line x1="19" y1="13" x2="25" y2="13" stroke="#c4b5fd" strokeWidth="1" />
+                    <line x1="19" y1="17" x2="23" y2="17" stroke="#7c3aed" strokeWidth="1" />
+                    <text x="30" y="18" fill="#ffffff" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontSize="15" fontWeight="800" letterSpacing="2">CUBE PAY</text>
+                  </svg>
+                );
+              };
+
+              // Gateway.io inline wordmark
+              const GatewayLogo = ({ size }) => {
+                const s = size || 20;
+                return (
+                  <svg width={s * 5.5} height={s} viewBox="0 0 110 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <text x="0" y="16" fill="#a78bfa" fontFamily="Georgia, 'Times New Roman', serif" fontSize="17" fontWeight="400" fontStyle="italic" letterSpacing="-0.5">gateway</text>
+                    <text x="74" y="16" fill="#7c3aed" fontFamily="Georgia, 'Times New Roman', serif" fontSize="17" fontWeight="700" fontStyle="italic" letterSpacing="-0.5">.io</text>
+                  </svg>
+                );
+              };
+
+              // PDF download — branded
               const downloadRateCard = (type) => {
-                const thPdf = "style='text-align:left;padding:8px 10px;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;border-bottom:2px solid #e5e7eb;white-space:nowrap'";
-                const tdPdf = "style='padding:8px 10px;font-size:11px;color:#1f2937;vertical-align:top;border-bottom:1px solid #f3f4f6'";
-                const tdMPdf = "style='padding:8px 10px;font-size:10px;color:#6b7280;vertical-align:top;border-bottom:1px solid #f3f4f6'";
-                const setupFeeStr = corp.setupFeeWaived ? "Waived" : (corp.setupFee ? "€" + corp.setupFee : "—");
-                const monthlyFeeStr = corp.monthlyFee ? ("€" + corp.monthlyFee + (corp.monthlyFeeWaivedAfter ? " (waived after €" + corp.monthlyFeeWaivedAfter + " vol)" : "")) : "—";
-                const txFeeStr = corp.transactionFee ? "€" + corp.transactionFee + " /tx" : "—";
+                const setupFeeStr = corp.setupFeeWaived ? "Waived" : (corp.setupFee ? "&euro;" + corp.setupFee : "&mdash;");
+                const monthlyFeeStr = corp.monthlyFee ? ("&euro;" + corp.monthlyFee + (corp.monthlyFeeWaivedAfter ? " (waived after &euro;" + corp.monthlyFeeWaivedAfter + " vol)" : "")) : "&mdash;";
+                const txFeeStr = corp.transactionFee ? "&euro;" + corp.transactionFee + " /tx" : "&mdash;";
                 var tableRows = "";
                 providerGroups.forEach(function(grp) {
                   var firstInGroup = true;
-                  var sharedRRStr = "";
-                  var hasSharedRR = grp.services.some(function(s) { return s.cp.shareRollingReserve && s.cp.rollingReserveEnabled !== false; });
-                  if (hasSharedRR) { var rrSrc = grp.services.find(function(s) { return s.cp.shareRollingReserve && s.cp.rollingReserveEnabled !== false && s.cp.rollingReservePct; }); if (rrSrc) sharedRRStr = fmtRR(getSharedRR(rrSrc.cp)); }
                   grp.services.forEach(function(svc) {
                     var cp2 = svc.cp; var r = resolveRow(cp2);
                     var tiers = (cp2.payinTiers || []).map(function(t) { return (cp2.tierType === "targets" ? "At " : "Up to ") + (t.upTo || "∞") + " → " + (t.rate || "—") + "%"; }).join(", ");
@@ -2206,24 +2235,29 @@ function AviroDashboard() {
                     if (cp2.rollingReserveEnabled === false) rrStr = "N/A";
                     var mm = cp2.monthlyMinAmount ? ((cp2.monthlyMinCurrency || "EUR") + " " + cp2.monthlyMinAmount + " " + (cp2.monthlyMinTerm || "Monthly")) : "—";
                     var settle = [cp2.settlementTerms, cp2.settlementFee ? "Fee: " + cp2.settlementFee + "%" : "", cp2.settlementMethod, cp2.currency].filter(Boolean).join(" · ") || "—";
-                    var provTd = firstInGroup ? "<td " + tdPdf + " rowspan='" + grp.services.length + "'><strong>" + r.provName + "</strong></td>" : "";
+                    var provTd = firstInGroup ? "<td class='td' rowspan='" + grp.services.length + "' style='font-weight:700;border-right:1px solid #2d2645'>" + r.provName + "</td>" : "";
                     firstInGroup = false;
                     var internalCols = "";
                     if (type === "internal") {
                       var marginStr = "—";
-                      if (cp2.feeModel === "Direct" && r.linkedSvc) { var mPct = ((parseFloat(cp2.clientPayinPct)||0) - (parseFloat(r.linkedSvc.payinPct)||0)).toFixed(2); var mTx = ((parseFloat(cp2.clientPayinTxFee)||0) - (parseFloat(r.linkedSvc.payinTxFee)||0)).toFixed(2); marginStr = "<span style='color:#10b981;font-weight:700'>+" + mPct + "% + €" + mTx + " tx</span>"; }
-                      else if (cp2.feeModel === "Profit Share") { var hc = parseFloat(cp2.hardCostPayinPct)||0; var pp = (parseFloat(cp2.clientPayinPct)||0) - hc; var sp = parseFloat(cp2.profitSharePct)||0; var wk = (pp - (pp * sp / 100)).toFixed(2); marginStr = "<span style='color:#10b981;font-weight:700'>" + wk + "%</span>"; }
-                      else if (cp2.feeModel === "Referral" && cp2.referralPct) { marginStr = "<span style='color:#10b981;font-weight:700'>" + (((parseFloat(cp2.referralPayinPct)||0) * (parseFloat(cp2.referralPct)||0) / 100).toFixed(3)) + "%</span>"; }
-                      internalCols = "<td " + tdPdf + ">" + (cp2.feeModel || "—") + "</td><td " + tdPdf + ">" + marginStr + "</td>";
+                      if (cp2.feeModel === "Direct" && r.linkedSvc) { var mPct = ((parseFloat(cp2.clientPayinPct)||0) - (parseFloat(r.linkedSvc.payinPct)||0)).toFixed(2); var mTx = ((parseFloat(cp2.clientPayinTxFee)||0) - (parseFloat(r.linkedSvc.payinTxFee)||0)).toFixed(2); marginStr = "<span style='color:#34d399;font-weight:700'>+" + mPct + "% + &euro;" + mTx + " tx</span>"; }
+                      else if (cp2.feeModel === "Profit Share") { var hc = parseFloat(cp2.hardCostPayinPct)||0; var pp = (parseFloat(cp2.clientPayinPct)||0) - hc; var sp = parseFloat(cp2.profitSharePct)||0; var wk = (pp - (pp * sp / 100)).toFixed(2); marginStr = "<span style='color:#34d399;font-weight:700'>" + wk + "%</span>"; }
+                      else if (cp2.feeModel === "Referral" && cp2.referralPct) { marginStr = "<span style='color:#34d399;font-weight:700'>" + (((parseFloat(cp2.referralPayinPct)||0) * (parseFloat(cp2.referralPct)||0) / 100).toFixed(3)) + "%</span>"; }
+                      internalCols = "<td class='td'>" + (cp2.feeModel || "—") + "</td><td class='td'>" + marginStr + "</td>";
                     }
-                    tableRows += "<tr>" + provTd + "<td " + tdPdf + ">" + r.svcName + "<div style='font-size:9px;color:#9ca3af'>" + r.typeStr + "</div></td><td " + tdPdf + "><strong>" + r.clientRate + "</strong>" + (tiers ? "<div style='font-size:9px;color:#6b7280;margin-top:2px'>" + tiers + "</div>" : "") + "</td><td " + tdMPdf + ">" + ((cp2.enabledRegions||[]).join(", ") || "—") + "</td><td " + tdMPdf + ">" + rrStr + "</td><td " + tdMPdf + ">" + mm + "</td><td " + tdMPdf + ">" + settle + "</td>" + internalCols + "</tr>";
+                    tableRows += "<tr>" + provTd + "<td class='td'>" + r.svcName + "<div style='font-size:9px;color:#8b8b9e;margin-top:2px'>" + r.typeStr + "</div></td><td class='td' style='font-weight:700;color:#a78bfa'>" + r.clientRate + (tiers ? "<div style='font-size:9px;color:#8b8b9e;margin-top:2px;font-weight:400'>" + tiers + "</div>" : "") + "</td><td class='tdm'>" + ((cp2.enabledRegions||[]).join(", ") || "—") + "</td><td class='tdm'>" + rrStr + "</td><td class='tdm'>" + mm + "</td><td class='tdm'>" + settle + "</td>" + internalCols + "</tr>";
                   });
                 });
-                var internalHeaders = type === "internal" ? "<th " + thPdf + ">Deal</th><th " + thPdf + ">Our Margin</th>" : "";
-                var html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Rate Card — " + (cl.name || "Client") + "</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:40px;color:#1f2937;font-size:13px;line-height:1.5}h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;color:#4f46e5;margin:28px 0 12px;text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid #e5e7eb;padding-bottom:6px}.meta{color:#6b7280;font-size:12px;margin-bottom:24px}.fees{display:flex;gap:20px;margin-bottom:24px}.fee{flex:1;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 16px}.fee .l{font-size:10px;text-transform:uppercase;color:#9ca3af;font-weight:600}.fee .v{font-size:18px;font-weight:700;margin-top:4px}table{width:100%;border-collapse:collapse}@media print{body{margin:20px}}</style></head><body>";
-                html += "<h1>Rate Card" + (type === "internal" ? " — Internal" : "") + "</h1><div class='meta'>" + (cl.name || "Client") + " · Generated " + new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) + "</div>";
-                html += "<h2>Gateway Fees</h2><div class='fees'><div class='fee'><div class='l'>Setup Fee</div><div class='v'>" + setupFeeStr + "</div></div><div class='fee'><div class='l'>Monthly Fee</div><div class='v'>" + monthlyFeeStr + "</div></div><div class='fee'><div class='l'>Transaction Fee</div><div class='v'>" + txFeeStr + "</div></div></div>";
-                html += "<h2>Provider Rates</h2><table><thead><tr><th " + thPdf + ">Provider</th><th " + thPdf + ">Service</th><th " + thPdf + ">Rate</th><th " + thPdf + ">Regions</th><th " + thPdf + ">Rolling Reserve</th><th " + thPdf + ">Monthly Min</th><th " + thPdf + ">Settlement</th>" + internalHeaders + "</tr></thead><tbody>" + tableRows + "</tbody></table></body></html>";
+                var internalHeaders = type === "internal" ? "<th class='th'>Deal</th><th class='th'>Our Margin</th>" : "";
+                var cubeLogo = "<svg width='130' height='25' viewBox='0 0 130 25' fill='none' xmlns='http://www.w3.org/2000/svg'><rect x='2' y='4' width='17' height='17' rx='3' stroke='#fff' stroke-width='1.5' fill='none'/><circle cx='7' cy='9' r='1.2' fill='#a78bfa'/><circle cx='11' cy='9' r='1.2' fill='#a78bfa'/><circle cx='15' cy='9' r='1.2' fill='#a78bfa'/><circle cx='7' cy='13' r='1.2' fill='#c4b5fd'/><circle cx='11' cy='13' r='1.2' fill='#c4b5fd'/><circle cx='15' cy='13' r='1.2' fill='#c4b5fd'/><circle cx='7' cy='17' r='1.2' fill='#7c3aed'/><circle cx='11' cy='17' r='1.2' fill='#7c3aed'/><circle cx='15' cy='17' r='1.2' fill='#7c3aed'/><line x1='19' y1='9' x2='23' y2='9' stroke='#a78bfa' stroke-width='1'/><line x1='19' y1='13' x2='25' y2='13' stroke='#c4b5fd' stroke-width='1'/><line x1='19' y1='17' x2='23' y2='17' stroke='#7c3aed' stroke-width='1'/><text x='30' y='18' fill='#fff' font-family=\"-apple-system,BlinkMacSystemFont,sans-serif\" font-size='15' font-weight='800' letter-spacing='2'>CUBE PAY</text></svg>";
+                var gwLogo = "<svg width='110' height='20' viewBox='0 0 110 20' fill='none' xmlns='http://www.w3.org/2000/svg'><text x='0' y='16' fill='#a78bfa' font-family=\"Georgia,'Times New Roman',serif\" font-size='17' font-style='italic' letter-spacing='-0.5'>gateway</text><text x='74' y='16' fill='#7c3aed' font-family=\"Georgia,'Times New Roman',serif\" font-size='17' font-weight='700' font-style='italic' letter-spacing='-0.5'>.io</text></svg>";
+                var html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Rate Card — " + (cl.name || "Client") + "</title><style>*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#0d0d15;color:#e2e2f0;font-size:12px;line-height:1.5}.page{max-width:1100px;margin:0 auto;padding:40px 48px}.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;padding-bottom:20px;border-bottom:1px solid #1e1b38}.title{font-size:22px;font-weight:800;color:#fff;letter-spacing:0.02em}.meta{font-size:11px;color:#8b8b9e;margin-top:4px}.section{margin-bottom:32px}.section-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}.section-head .bar{width:4px;height:22px;border-radius:2px}.section-head h2{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;margin:0}.fees{display:flex;gap:16px;margin-bottom:28px}.fee{flex:1;background:#161625;border:1px solid #1e1b38;border-radius:10px;padding:16px 20px}.fee .l{font-size:9px;text-transform:uppercase;color:#8b8b9e;font-weight:700;letter-spacing:0.06em}.fee .v{font-size:22px;font-weight:800;color:#fff;margin-top:6px}.fee .sub{font-size:9px;color:#6b6b80;margin-top:2px}table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden}.th{text-align:left;padding:10px 12px;font-size:9px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:0.06em;background:linear-gradient(135deg,#4c1d95,#7c3aed);white-space:nowrap}.td{padding:9px 12px;font-size:11px;color:#e2e2f0;vertical-align:top;border-bottom:1px solid #1e1b38}.tdm{padding:9px 12px;font-size:10px;color:#8b8b9e;vertical-align:top;border-bottom:1px solid #1e1b38}tbody tr:nth-child(even){background:#12121f}tbody tr:hover{background:#1a1a2e}.footer{margin-top:40px;padding-top:20px;border-top:1px solid #1e1b38;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#6b6b80}@media print{body{background:#0d0d15;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:24px 32px}}</style></head><body><div class='page'>";
+                html += "<div class='header'><div>" + cubeLogo + "<div class='meta'>" + (cl.name || "Client") + " &middot; " + (type === "internal" ? "Internal Rate Card" : "Client Rate Card") + "</div></div><div style='text-align:right'><div class='meta'>Generated " + new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) + "</div></div></div>";
+                html += "<div class='section'><div class='section-head'>" + gwLogo + "<div style='flex:1;height:1px;background:#1e1b38;margin-left:12px'></div></div>";
+                html += "<div class='fees'><div class='fee'><div class='l'>Setup Fee</div><div class='v'>" + setupFeeStr + "</div></div><div class='fee'><div class='l'>Monthly Fee</div><div class='v'>" + monthlyFeeStr + "</div></div><div class='fee'><div class='l'>Transaction Fee</div><div class='v'>" + txFeeStr + "</div></div></div></div>";
+                html += "<div class='section'><div class='section-head'><div class='bar' style='background:linear-gradient(180deg,#7c3aed,#4c1d95)'></div><h2 style='color:#a78bfa'>Provider Rates</h2></div>";
+                html += "<table><thead><tr><th class='th'>Provider</th><th class='th'>Service</th><th class='th'>Rate</th><th class='th'>Regions</th><th class='th'>Rolling Reserve</th><th class='th'>Monthly Min</th><th class='th'>Settlement</th>" + internalHeaders + "</tr></thead><tbody>" + tableRows + "</tbody></table></div>";
+                html += "<div class='footer'><div>" + cubeLogo + "</div><div>contact@cube-pay.io &middot; cube-pay.io</div></div></div></body></html>";
                 var w = window.open("", "_blank"); if (w) { w.document.write(html); w.document.close(); setTimeout(function() { w.print(); }, 400); }
               };
 
@@ -2238,53 +2272,56 @@ function AviroDashboard() {
               return (<>
 
               {/* Download Buttons */}
-              <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-                <button onClick={() => downloadRateCard("client")} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "9px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+                <button onClick={() => downloadRateCard("client")} style={{ background: "linear-gradient(135deg, #4c1d95, #7c3aed)", border: "none", color: "#fff", borderRadius: 10, padding: "10px 22px", cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 4px 14px rgba(124,58,237,0.3)", letterSpacing: "0.02em" }}>
                   <span style={{ fontSize: 14 }}>{"↓"}</span> Download Client Rate Card
                 </button>
-                <button onClick={() => downloadRateCard("internal")} style={{ background: "#7c3aed", border: "none", color: "#fff", borderRadius: 8, padding: "9px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                <button onClick={() => downloadRateCard("internal")} style={{ background: "linear-gradient(135deg, #312e81, #4c1d95)", border: "1px solid rgba(124,58,237,0.3)", color: "#c4b5fd", borderRadius: 10, padding: "10px 22px", cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, letterSpacing: "0.02em" }}>
                   <span style={{ fontSize: 14 }}>{"↓"}</span> Download Internal Rate Card
                 </button>
               </div>
 
               {/* ===== SECTION 1: RATE CARD — CLIENT ===== */}
-              <div style={{ ...sectionCard, borderColor: c.accent + "30" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-                  <div style={{ width: 4, height: 24, borderRadius: 2, background: c.accent }} />
-                  <div style={{ fontSize: 14, fontWeight: 800, color: c.accent, textTransform: "uppercase", letterSpacing: "0.04em" }}>Rate Card — Client</div>
+              <div style={{ ...sectionCard, borderColor: "rgba(124,58,237,0.2)", background: c.card, overflow: "hidden" }}>
+                {/* Gateway Fees — branded header */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                  <GatewayLogo size={20} />
+                  <div style={{ flex: 1, height: 1, background: "linear-gradient(90deg, rgba(124,58,237,0.3), transparent)" }} />
+                  <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Platform Fees</span>
                 </div>
 
-                {/* Gateway Fees */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 18 }}>
-                  <div style={{ background: c.surface, borderRadius: 8, border: "1px solid " + c.border, padding: "12px 16px" }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Setup Fee</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: corp.setupFeeWaived ? "#10b981" : c.text, marginTop: 4 }}>
-                      {corp.setupFeeWaived ? "Waived" : (corp.setupFee ? "€" + corp.setupFee : "—")}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 24 }}>
+                  {[
+                    { label: "Setup Fee", value: corp.setupFeeWaived ? "Waived" : (corp.setupFee ? "€" + corp.setupFee : "—"), accent: corp.setupFeeWaived },
+                    { label: "Monthly Fee", value: corp.monthlyFee ? "€" + corp.monthlyFee : "—", sub: corp.monthlyFeeWaivedAfter ? "Waived after €" + corp.monthlyFeeWaivedAfter + " volume" : null },
+                    { label: "Transaction Fee", value: corp.transactionFee ? "€" + corp.transactionFee : "—", sub: corp.transactionFee ? "Per transaction" : null }
+                  ].map((f, fi) => (
+                    <div key={fi} style={{ background: "linear-gradient(135deg, rgba(76,29,149,0.08), rgba(124,58,237,0.04))", borderRadius: 10, border: "1px solid rgba(124,58,237,0.15)", padding: "14px 18px", position: "relative", overflow: "hidden" }}>
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg, #4c1d95, #7c3aed)" }} />
+                      <div style={{ fontSize: 9, fontWeight: 700, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em" }}>{f.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: f.accent ? "#34d399" : c.text, marginTop: 6 }}>{f.value}</div>
+                      {f.sub && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3 }}>{f.sub}</div>}
                     </div>
-                  </div>
-                  <div style={{ background: c.surface, borderRadius: 8, border: "1px solid " + c.border, padding: "12px 16px" }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Monthly Fee</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginTop: 4 }}>{corp.monthlyFee ? "€" + corp.monthlyFee : "—"}</div>
-                    {corp.monthlyFeeWaivedAfter && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>Waived after €{corp.monthlyFeeWaivedAfter} volume</div>}
-                  </div>
-                  <div style={{ background: c.surface, borderRadius: 8, border: "1px solid " + c.border, padding: "12px 16px" }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Transaction Fee</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginTop: 4 }}>{corp.transactionFee ? "€" + corp.transactionFee : "—"}</div>
-                    {corp.transactionFee && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>Per transaction</div>}
-                  </div>
+                  ))}
                 </div>
 
-                {/* Provider Table — Client view */}
+                {/* Provider Rates — Cube Pay branded */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  <CubePayLogo size={18} />
+                  <div style={{ flex: 1, height: 1, background: "linear-gradient(90deg, rgba(124,58,237,0.3), transparent)" }} />
+                  <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Provider Rates</span>
+                </div>
+
                 {clProviders.length === 0 ? (
                   <div style={{ background: c.surface, borderRadius: 10, padding: 30, textAlign: "center", border: "1px dashed " + c.border }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 4 }}>No providers configured</div>
                     <div style={{ fontSize: 12, color: c.textMuted }}>Add providers in the Providers & Deal tab</div>
                   </div>
                 ) : (
-                  <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid " + c.border }}>
+                  <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid rgba(124,58,237,0.15)", overflow: "hidden" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
-                        <tr style={{ background: c.surface }}>
+                        <tr>
                           {["Provider", "Service", "Rate", "Regions", "Rolling Reserve", "Monthly Min", "Settlement"].map(h =>
                             <th key={h} style={thStyle}>{h}</th>
                           )}
@@ -2292,7 +2329,6 @@ function AviroDashboard() {
                       </thead>
                       <tbody>
                         {providerGroups.map((grp, gIdx) => {
-                          const hasSharedRR = grp.services.some(s => s.cp.shareRollingReserve && s.cp.rollingReserveEnabled !== false);
                           return grp.services.map((svc, sIdx) => {
                             const cp = svc.cp; const r = resolveRow(cp);
                             const tiers = cp.payinTiers || [];
@@ -2302,22 +2338,22 @@ function AviroDashboard() {
                             const mm = cp.monthlyMinAmount ? ((cp.monthlyMinCurrency || "EUR") + " " + cp.monthlyMinAmount + " " + (cp.monthlyMinTerm || "Monthly")) : "—";
                             const settle = [cp.settlementTerms, cp.settlementFee ? "Fee: " + cp.settlementFee + "%" : "", cp.settlementMethod, cp.currency].filter(Boolean).join(" · ") || "—";
                             const isFirstInGroup = sIdx === 0;
-                            const rowBg = gIdx % 2 === 0 ? "transparent" : c.surface + "60";
+                            const rowBg = gIdx % 2 === 0 ? "transparent" : "rgba(124,58,237,0.03)";
                             return (
                               <tr key={cp.id || svc.cpIdx} style={{ background: rowBg }}>
-                                {isFirstInGroup && <td rowSpan={grp.services.length} style={{ ...tdStyle, fontWeight: 700, fontSize: 12, borderRight: "1px solid " + c.border + "30" }}>{r.provName}</td>}
+                                {isFirstInGroup && <td rowSpan={grp.services.length} style={{ ...tdStyle, fontWeight: 700, fontSize: 12, borderRight: "1px solid rgba(124,58,237,0.1)" }}>{r.provName}</td>}
                                 <td style={tdStyle}>
                                   <div style={{ fontWeight: 600 }}>{r.svcName || "—"}</div>
                                   {r.typeStr && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 1 }}>{r.typeStr}</div>}
                                 </td>
-                                <td style={{ ...tdStyle, fontWeight: 700, color: c.accent }}>
+                                <td style={{ ...tdStyle, fontWeight: 700, color: "#a78bfa" }}>
                                   {r.clientRate}
-                                  {tiers.length > 0 && <div style={{ marginTop: 3 }}>{tiers.map((t, tIdx) => <div key={t.id || tIdx} style={{ fontSize: 9, color: c.textMuted, fontWeight: 400 }}>{cp.tierType === "targets" ? "At" : "Up to"} {t.upTo || "∞"} → {t.rate || "—"}%</div>)}</div>}
+                                  {tiers.length > 0 && <div style={{ marginTop: 3 }}>{tiers.map((t, tIdx) => <div key={t.id || tIdx} style={{ fontSize: 9, color: c.textMuted, fontWeight: 400 }}>{cp.tierType === "targets" ? "At" : "Up to"} {t.upTo || "∞"} {"→"} {t.rate || "—"}%</div>)}</div>}
                                 </td>
                                 <td style={tdMuted}>{(cp.enabledRegions || []).join(", ") || "—"}</td>
                                 <td style={tdMuted}>
                                   {rrDisplay}
-                                  {isShared && <div style={{ fontSize: 8, color: c.accent, fontWeight: 600, marginTop: 2 }}>SHARED</div>}
+                                  {isShared && <div style={{ fontSize: 8, color: "#a78bfa", fontWeight: 700, marginTop: 2 }}>SHARED</div>}
                                 </td>
                                 <td style={tdMuted}>{mm}</td>
                                 <td style={tdMuted}>{settle}</td>
@@ -2332,10 +2368,11 @@ function AviroDashboard() {
               </div>
 
               {/* ===== SECTION 2: RATE CARD — INTERNAL ===== */}
-              <div style={{ ...sectionCard, borderColor: "rgba(139,92,246,0.3)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
-                  <div style={{ width: 4, height: 24, borderRadius: 2, background: "#7c3aed" }} />
-                  <div style={{ fontSize: 14, fontWeight: 800, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.04em" }}>Rate Card — Internal</div>
+              <div style={{ ...sectionCard, borderColor: "rgba(124,58,237,0.2)", background: c.card, overflow: "hidden" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                  <CubePayLogo size={18} />
+                  <div style={{ flex: 1, height: 1, background: "linear-gradient(90deg, rgba(124,58,237,0.3), transparent)" }} />
+                  <span style={{ fontSize: 10, background: "linear-gradient(135deg, #4c1d95, #7c3aed)", color: "#fff", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", padding: "3px 10px", borderRadius: 4 }}>Internal</span>
                 </div>
 
                 {clProviders.length === 0 ? (
@@ -2344,12 +2381,12 @@ function AviroDashboard() {
                     <div style={{ fontSize: 12, color: c.textMuted }}>Add providers in the Providers & Deal tab</div>
                   </div>
                 ) : (
-                  <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid " + c.border }}>
+                  <div style={{ overflowX: "auto", borderRadius: 10, border: "1px solid rgba(124,58,237,0.15)", overflow: "hidden" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
-                        <tr style={{ background: c.surface }}>
+                        <tr>
                           {["Provider", "Service", "Rate", "Regions", "Rolling Reserve", "Monthly Min", "Settlement", "Deal", "Our Margin"].map(h =>
-                            <th key={h} style={{ ...thStyle, color: h === "Deal" || h === "Our Margin" ? "#7c3aed" : c.textMuted }}>{h}</th>
+                            <th key={h} style={thStyle}>{h}</th>
                           )}
                         </tr>
                       </thead>
@@ -2364,32 +2401,32 @@ function AviroDashboard() {
                             const mm = cp.monthlyMinAmount ? ((cp.monthlyMinCurrency || "EUR") + " " + cp.monthlyMinAmount + " " + (cp.monthlyMinTerm || "Monthly")) : "—";
                             const settle = [cp.settlementTerms, cp.settlementFee ? "Fee: " + cp.settlementFee + "%" : "", cp.settlementMethod, cp.currency].filter(Boolean).join(" · ") || "—";
                             const isFirstInGroup = sIdx === 0;
-                            const rowBg = gIdx % 2 === 0 ? "transparent" : c.surface + "60";
+                            const rowBg = gIdx % 2 === 0 ? "transparent" : "rgba(124,58,237,0.03)";
                             const fmCol = cp.feeModel === "Direct" ? "#34d399" : cp.feeModel === "Profit Share" ? "#a78bfa" : cp.feeModel === "Referral" ? "#fbbf24" : c.textMuted;
                             const margin = netMarginStr(cp, r);
                             return (
                               <tr key={cp.id || svc.cpIdx} style={{ background: rowBg }}>
-                                {isFirstInGroup && <td rowSpan={grp.services.length} style={{ ...tdStyle, fontWeight: 700, fontSize: 12, borderRight: "1px solid " + c.border + "30" }}>{r.provName}</td>}
+                                {isFirstInGroup && <td rowSpan={grp.services.length} style={{ ...tdStyle, fontWeight: 700, fontSize: 12, borderRight: "1px solid rgba(124,58,237,0.1)" }}>{r.provName}</td>}
                                 <td style={tdStyle}>
                                   <div style={{ fontWeight: 600 }}>{r.svcName || "—"}</div>
                                   {r.typeStr && <div style={{ fontSize: 9, color: c.textMuted, marginTop: 1 }}>{r.typeStr}</div>}
-                                  {cp.iccPlusPlus && <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(251,191,36,0.1)", color: "#fbbf24", marginTop: 2, display: "inline-block" }}>ICC++</span>}
+                                  {cp.iccPlusPlus && <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.2)", color: "#fbbf24", marginTop: 2, display: "inline-block" }}>ICC++</span>}
                                 </td>
-                                <td style={{ ...tdStyle, fontWeight: 700, color: c.accent }}>
+                                <td style={{ ...tdStyle, fontWeight: 700, color: "#a78bfa" }}>
                                   {r.clientRate}
-                                  {tiers.length > 0 && <div style={{ marginTop: 3 }}>{tiers.map((t, tIdx) => <div key={t.id || tIdx} style={{ fontSize: 9, color: c.textMuted, fontWeight: 400 }}>{cp.tierType === "targets" ? "At" : "Up to"} {t.upTo || "∞"} → {t.rate || "—"}%</div>)}</div>}
+                                  {tiers.length > 0 && <div style={{ marginTop: 3 }}>{tiers.map((t, tIdx) => <div key={t.id || tIdx} style={{ fontSize: 9, color: c.textMuted, fontWeight: 400 }}>{cp.tierType === "targets" ? "At" : "Up to"} {t.upTo || "∞"} {"→"} {t.rate || "—"}%</div>)}</div>}
                                 </td>
                                 <td style={tdMuted}>{(cp.enabledRegions || []).join(", ") || "—"}</td>
                                 <td style={tdMuted}>
                                   {rrDisplay}
-                                  {isShared && <div style={{ fontSize: 8, color: c.accent, fontWeight: 600, marginTop: 2 }}>SHARED</div>}
+                                  {isShared && <div style={{ fontSize: 8, color: "#a78bfa", fontWeight: 700, marginTop: 2 }}>SHARED</div>}
                                 </td>
                                 <td style={tdMuted}>{mm}</td>
                                 <td style={tdMuted}>{settle}</td>
                                 <td style={tdStyle}>
-                                  <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: fmCol + "15", color: fmCol }}>{cp.feeModel || "—"}</span>
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 5, background: fmCol + "18", color: fmCol, border: "1px solid " + fmCol + "30" }}>{cp.feeModel || "—"}</span>
                                 </td>
-                                <td style={{ ...tdStyle, fontWeight: 800, color: "#10b981", fontSize: 12 }}>
+                                <td style={{ ...tdStyle, fontWeight: 800, color: "#34d399", fontSize: 13 }}>
                                   {margin}
                                 </td>
                               </tr>
