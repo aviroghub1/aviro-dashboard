@@ -2179,7 +2179,17 @@ function AviroDashboard() {
                 if (cp.rollingReservePct) return { pct: cp.rollingReservePct, term: cp.rollingReserveTerm, cap: cp.rollingReserveCap, capCur: cp.rollingReserveCapCurrency || "EUR", shared: false };
                 return null;
               };
-              const fmtRR = (rr) => { if (!rr) return "None"; let s = rr.pct + "% / " + (rr.term || "—") + " days"; if (rr.cap) s += " / Cap: " + rr.capCur + " " + rr.cap; return s; };
+              // Format number with comma separators
+              const fmtNum = (v) => { if (v == null || v === "") return v; const s = String(v); return s.replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
+              const fmtRR = (rr) => { if (!rr) return "None"; let s = rr.pct + "% / " + (rr.term || "—") + " days"; if (rr.cap) s += " / Cap: " + rr.capCur + " " + fmtNum(rr.cap); return s; };
+              // Build region display string — appends specific countries if set
+              const regionStr = (cp) => {
+                const regs = (cp.enabledRegions || []);
+                if (regs.length === 0) return "—";
+                const countries = (cp.specificCountries || "").trim();
+                if (countries) return regs.join(", ") + " — " + countries;
+                return regs.join(", ");
+              };
 
               // Clean table styles
               const thStyle = { textAlign: "left", padding: "10px 12px", fontSize: 10, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap", background: "linear-gradient(135deg, #4c1d95, #7c3aed)" };
@@ -2189,26 +2199,26 @@ function AviroDashboard() {
               // Asset URLs
               const cubeLogoUrl = "https://static.wixstatic.com/media/e27a14_8a04ffb9eb9f4aeaa4dfe1689e2129ff~mv2.png/v1/crop/x_0,y_267,w_1920,h_488/fill/w_400,h_102,fp_0.50_0.50,q_90,enc_avif,quality_auto/Cubepay%20Icon%20and%20Text%20White%20PNG.png";
               const cubesBgUrl = "https://static.wixstatic.com/media/e27a14_2500749a623a429b8d7e558ad74761f0~mv2.jpg/v1/fill/w_1200,h_400,al_c,q_80,enc_avif,quality_auto/e27a14_2500749a623a429b8d7e558ad74761f0~mv2.jpg";
-              // Gateway.io SVG logo — triple diagonal lines + wordmark (dark green for print)
-              const gwLogoSvgPrint = "<svg xmlns='http://www.w3.org/2000/svg' width='220' height='44' viewBox='0 0 220 44'><g stroke='#004d1a' stroke-width='3.5' stroke-linecap='round' fill='none'><line x1='4' y1='10' x2='28' y2='10'/><line x1='8' y1='20' x2='32' y2='20'/><line x1='12' y1='30' x2='36' y2='30'/></g><text x='46' y='30' fill='#004d1a' font-family='-apple-system,BlinkMacSystemFont,Helvetica Neue,sans-serif' font-size='26' font-weight='300' letter-spacing='1'>gateway</text><text x='175' y='30' fill='#004d1a' font-family='-apple-system,BlinkMacSystemFont,Helvetica Neue,sans-serif' font-size='26' font-weight='600' letter-spacing='1'>.io</text></svg>";
 
               // PDF download — branded with real logos
               const downloadRateCard = (type) => {
-                const setupFeeStr = corp.setupFeeWaived ? "Waived" : (corp.setupFee ? "&euro;" + corp.setupFee : "&mdash;");
-                const monthlyFeeStr = corp.monthlyFee ? ("&euro;" + corp.monthlyFee + (corp.monthlyFeeWaivedAfter ? " (waived after &euro;" + corp.monthlyFeeWaivedAfter + " vol)" : "")) : "&mdash;";
-                const txFeeStr = corp.transactionFee ? "&euro;" + corp.transactionFee + " /tx" : "&mdash;";
+                const setupFeeStr = corp.setupFeeWaived ? "Waived" : (corp.setupFee ? "&euro;" + fmtNum(corp.setupFee) : "&mdash;");
+                const monthlyFeeStr = corp.monthlyFee ? ("&euro;" + fmtNum(corp.monthlyFee) + (corp.monthlyFeeWaivedAfter ? " (waived after &euro;" + fmtNum(corp.monthlyFeeWaivedAfter) + " vol)" : "")) : "&mdash;";
+                const txFeeStr = corp.transactionFee ? "&euro;" + fmtNum(corp.transactionFee) + " /tx" : "&mdash;";
                 var tableRows = "";
                 providerGroups.forEach(function(grp) {
                   var firstInGroup = true;
                   grp.services.forEach(function(svc) {
                     var cp2 = svc.cp; var r = resolveRow(cp2);
                     var tiers = (cp2.payinTiers || []);
-                    var tiersHtml = tiers.length > 0 ? "<div style='margin-top:4px'>" + tiers.map(function(t) { return "<div style='font-size:11px;color:#6d28d9;font-weight:500;padding:2px 0'>" + (cp2.tierType === "targets" ? "At " : "Up to ") + (t.upTo || "∞") + " &rarr; " + (t.rate || "—") + "%</div>"; }).join("") + "</div>" : "";
+                    var tiersHtml = tiers.length > 0 ? "<div style='margin-top:4px'>" + tiers.map(function(t) { return "<div style='font-size:11px;color:#6d28d9;font-weight:500;padding:2px 0'>" + (cp2.tierType === "targets" ? "At " : "Up to ") + fmtNum(t.upTo || "∞") + " &rarr; " + (t.rate || "—") + "%</div>"; }).join("") + "</div>" : "";
                     var rr = getSharedRR(cp2); var rrStr = fmtRR(rr); if (rr && rr.shared) rrStr += " (shared)";
                     if (cp2.rollingReserveEnabled === false) rrStr = "N/A";
                     var wallets = []; if (cp2.applePay) wallets.push("Apple Pay"); if (cp2.googlePay) wallets.push("Google Pay");
                     var walletsHtml = wallets.length > 0 ? "<div style='margin-top:4px'>" + wallets.map(function(w) { return "<span style='display:inline-block;font-size:9px;font-weight:600;padding:2px 7px;border-radius:4px;background:rgba(109,40,217,0.08);color:#6d28d9;margin-right:4px'>" + w + "</span>"; }).join("") + "</div>" : "";
-                    var mm = cp2.monthlyMinAmount ? ((cp2.monthlyMinCurrency || "EUR") + " " + cp2.monthlyMinAmount + " " + (cp2.monthlyMinTerm || "Monthly")) : "—";
+                    var regionsDisplay = regionStr(cp2);
+                    var mm = cp2.monthlyMinAmount ? ((cp2.monthlyMinCurrency || "EUR") + " " + fmtNum(cp2.monthlyMinAmount) + " " + (cp2.monthlyMinTerm || "Monthly")) : "—";
+                    var rrCapStr = rr && rr.cap ? fmtNum(rr.cap) : "";
                     var settle = [cp2.settlementTerms, cp2.settlementFee ? "Fee: " + cp2.settlementFee + "%" : "", cp2.settlementMethod, cp2.currency].filter(Boolean).join(" · ") || "—";
                     var provTd = firstInGroup ? "<td class='td' rowspan='" + grp.services.length + "' style='font-weight:700;border-right:1px solid #e5e1f0;font-size:13px;color:#1a1a2e'>" + r.provName + "</td>" : "";
                     firstInGroup = false;
@@ -2220,7 +2230,7 @@ function AviroDashboard() {
                       else if (cp2.feeModel === "Referral" && cp2.referralPct) { marginStr = "<span style='color:#059669;font-weight:700;font-size:13px'>" + (((parseFloat(cp2.referralPayinPct)||0) * (parseFloat(cp2.referralPct)||0) / 100).toFixed(3)) + "%</span>"; }
                       internalCols = "<td class='td'>" + (cp2.feeModel || "—") + "</td><td class='td'>" + marginStr + "</td>";
                     }
-                    tableRows += "<tr>" + provTd + "<td class='td'><div style='font-weight:600;color:#1a1a2e'>" + r.svcName + "</div><div style='font-size:10px;color:#6b7280;margin-top:2px'>" + r.typeStr + "</div>" + walletsHtml + "</td><td class='td' style='font-weight:700;color:#6d28d9;font-size:13px'>" + r.clientRate + tiersHtml + "</td><td class='tdm'>" + ((cp2.enabledRegions||[]).join(", ") || "—") + "</td><td class='tdm'>" + rrStr + "</td><td class='tdm'>" + mm + "</td><td class='tdm'>" + settle + "</td>" + internalCols + "</tr>";
+                    tableRows += "<tr>" + provTd + "<td class='td'><div style='font-weight:600;color:#1a1a2e'>" + r.svcName + "</div><div style='font-size:10px;color:#6b7280;margin-top:2px'>" + r.typeStr + "</div>" + walletsHtml + "</td><td class='td' style='font-weight:700;color:#6d28d9;font-size:13px'>" + r.clientRate + tiersHtml + "</td><td class='tdm'>" + regionsDisplay + "</td><td class='tdm'>" + rrStr + "</td><td class='tdm'>" + mm + "</td><td class='tdm'>" + settle + "</td>" + internalCols + "</tr>";
                   });
                 });
                 var internalHeaders = type === "internal" ? "<th class='th'>Deal</th><th class='th'>Our Margin</th>" : "";
@@ -2229,13 +2239,13 @@ function AviroDashboard() {
                 html += ".hero{position:relative;background:linear-gradient(135deg,#1a0a3e,#2d1b69,#4c1d95);overflow:hidden;padding:52px 0 40px;text-align:center}.hero-bg{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;opacity:0.18;mask-image:linear-gradient(to bottom,rgba(0,0,0,0.5),transparent);-webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,0.5),transparent)}.hero-content{position:relative;z-index:1}";
                 html += ".page{max-width:100%;margin:0 auto;padding:0 36px 40px}";
                 html += ".section{margin-bottom:28px}.section-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}.section-head .bar{width:4px;height:22px;border-radius:2px}.section-head h2{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;margin:0}";
-                html += ".fees{display:flex;gap:16px;margin-bottom:24px}.fee{flex:1;background:#f8f7fc;border:1px solid #e5e1f0;border-radius:10px;padding:18px 22px;position:relative;overflow:hidden}.fee::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#4c1d95,#7c3aed)}.fee .l{font-size:10px;text-transform:uppercase;color:#6d28d9;font-weight:700;letter-spacing:0.06em}.fee .v{font-size:26px;font-weight:800;color:#1a1a2e;margin-top:8px}";
+                html += ".fees{display:flex;gap:12px;margin-bottom:20px}.fee{flex:1;background:#f8f7fc;border:1px solid #e5e1f0;border-radius:8px;padding:12px 16px;position:relative;overflow:hidden}.fee::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#4c1d95,#7c3aed)}.fee .l{font-size:9px;text-transform:uppercase;color:#6d28d9;font-weight:700;letter-spacing:0.06em}.fee .v{font-size:18px;font-weight:800;color:#1a1a2e;margin-top:4px}";
                 html += "table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden}.th{text-align:left;padding:12px 14px;font-size:10px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:0.06em;background:linear-gradient(135deg,#4c1d95,#7c3aed);white-space:nowrap}.td{padding:11px 14px;font-size:12px;color:#1a1a2e;vertical-align:top;border-bottom:1px solid #e5e1f0}.tdm{padding:11px 14px;font-size:11px;color:#6b7280;vertical-align:top;border-bottom:1px solid #e5e1f0}tbody tr:nth-child(even){background:#f8f7fc}";
                 html += ".footer{margin:0 36px;padding:20px 0;border-top:1px solid #e5e1f0;text-align:center}";
                 html += "@media print{body{background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>";
                 html += "<div class='hero'><img class='hero-bg' src='" + cubesBgUrl + "' /><div class='hero-content'><img src='" + cubeLogoUrl + "' style='height:52px;margin-bottom:18px' /><div style='font-size:28px;font-weight:800;color:#fff;letter-spacing:0.02em'>" + (type === "internal" ? "Internal Rate Card" : "Rate Card") + "</div><div style='font-size:15px;color:#c4b5fd;margin-top:8px;font-weight:500'>" + (cl.name || "Client") + "</div><div style='font-size:11px;color:#a78bfa80;margin-top:6px'>Generated " + new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) + "</div></div></div>";
                 html += "<div class='page'>";
-                html += "<div class='section' style='margin-top:28px'><div style='text-align:center;margin-bottom:20px'>" + gwLogoSvgPrint + "</div>";
+                html += "<div class='section' style='margin-top:20px'><div style='font-size:11px;font-weight:700;color:#4c1d95;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px'>Platform Fees</div>";
                 html += "<div class='fees'><div class='fee'><div class='l'>Setup Fee</div><div class='v'>" + setupFeeStr + "</div></div><div class='fee'><div class='l'>Monthly Fee</div><div class='v'>" + monthlyFeeStr + "</div></div><div class='fee'><div class='l'>Transaction Fee</div><div class='v'>" + txFeeStr + "</div></div></div></div>";
                 html += "<div class='section'><div class='section-head'><div class='bar' style='background:linear-gradient(180deg,#7c3aed,#4c1d95)'></div><h2 style='color:#4c1d95'>Provider Rates</h2></div>";
                 html += "<table><thead><tr><th class='th'>Provider</th><th class='th'>Service</th><th class='th'>Rate</th><th class='th'>Regions</th><th class='th'>Rolling Reserve</th><th class='th'>Monthly Min</th><th class='th'>Settlement</th>" + internalHeaders + "</tr></thead><tbody>" + tableRows + "</tbody></table></div>";
@@ -2315,9 +2325,9 @@ function AviroDashboard() {
                               </td>
                               <td style={{ ...tdStyle, fontWeight: 700, color: "#a78bfa" }}>
                                 {r.clientRate}
-                                {tiers.length > 0 && <div style={{ marginTop: 4, borderLeft: "2px solid rgba(167,139,250,0.3)", paddingLeft: 8 }}>{tiers.map((t, tIdx) => <div key={t.id || tIdx} style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 500, padding: "1px 0" }}>{cp.tierType === "targets" ? "At" : "Up to"} {t.upTo || "∞"} {"→"} {t.rate || "—"}%</div>)}</div>}
+                                {tiers.length > 0 && <div style={{ marginTop: 4, borderLeft: "2px solid rgba(167,139,250,0.3)", paddingLeft: 8 }}>{tiers.map((t, tIdx) => <div key={t.id || tIdx} style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 500, padding: "1px 0" }}>{cp.tierType === "targets" ? "At" : "Up to"} {fmtNum(t.upTo) || "∞"} {"→"} {t.rate || "—"}%</div>)}</div>}
                               </td>
-                              <td style={tdMuted}>{(cp.enabledRegions || []).join(", ") || "—"}</td>
+                              <td style={tdMuted}>{regionStr(cp)}</td>
                               <td style={tdMuted}>{rrDisplay}{rr && rr.shared && <div style={{ fontSize: 8, color: "#a78bfa", fontWeight: 600, marginTop: 2 }}>SHARED</div>}</td>
                               <td style={tdMuted}>{mm}</td>
                               <td style={tdMuted}>{settle}</td>
@@ -2362,9 +2372,9 @@ function AviroDashboard() {
                               </td>
                               <td style={{ ...tdStyle, fontWeight: 700, color: "#a78bfa" }}>
                                 {r.clientRate}
-                                {tiers.length > 0 && <div style={{ marginTop: 4, borderLeft: "2px solid rgba(167,139,250,0.3)", paddingLeft: 8 }}>{tiers.map((t, tIdx) => <div key={t.id || tIdx} style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 500, padding: "1px 0" }}>{cp.tierType === "targets" ? "At" : "Up to"} {t.upTo || "∞"} {"→"} {t.rate || "—"}%</div>)}</div>}
+                                {tiers.length > 0 && <div style={{ marginTop: 4, borderLeft: "2px solid rgba(167,139,250,0.3)", paddingLeft: 8 }}>{tiers.map((t, tIdx) => <div key={t.id || tIdx} style={{ fontSize: 10, color: "#c4b5fd", fontWeight: 500, padding: "1px 0" }}>{cp.tierType === "targets" ? "At" : "Up to"} {fmtNum(t.upTo) || "∞"} {"→"} {t.rate || "—"}%</div>)}</div>}
                               </td>
-                              <td style={tdMuted}>{(cp.enabledRegions || []).join(", ") || "—"}</td>
+                              <td style={tdMuted}>{regionStr(cp)}</td>
                               <td style={tdMuted}>{rrDisplay}{rr && rr.shared && <div style={{ fontSize: 8, color: "#a78bfa", fontWeight: 600, marginTop: 2 }}>SHARED</div>}</td>
                               <td style={tdMuted}>{mm}</td>
                               <td style={tdMuted}>{settle}</td>
@@ -2410,7 +2420,7 @@ function AviroDashboard() {
 
               {/* Add Provider Button */}
               <button onClick={() => {
-                const newProv = { id: `clp-${Date.now()}`, providerId: "", serviceId: "", feeModel: "", clientPayinPct: "", clientPayinTxFee: "", clientPayoutPct: "", clientPayoutTxFee: "", referralPct: "", referralPayinPct: "", referralPayinTxFee: "", referralPayoutPct: "", referralPayoutTxFee: "", hardCostPayinPct: "", hardCostPayinTxFee: "", hardCostPayoutPct: "", hardCostPayoutTxFee: "", profitSharePct: "", settlementTerms: "", settlementFee: "", payinTiers: [], payoutTiers: [], currency: "USD", enabledRegions: [], processingCurrencies: [], rollingReservePct: "", rollingReserveTerm: "", rollingReserveCap: "", rollingReserveCapCurrency: "EUR", tierType: "tiers", monthlyMinAmount: "", monthlyMinCurrency: "EUR", monthlyMinTerm: "Monthly", applePay: false, googlePay: false };
+                const newProv = { id: `clp-${Date.now()}`, providerId: "", serviceId: "", feeModel: "", clientPayinPct: "", clientPayinTxFee: "", clientPayoutPct: "", clientPayoutTxFee: "", referralPct: "", referralPayinPct: "", referralPayinTxFee: "", referralPayoutPct: "", referralPayoutTxFee: "", hardCostPayinPct: "", hardCostPayinTxFee: "", hardCostPayoutPct: "", hardCostPayoutTxFee: "", profitSharePct: "", settlementTerms: "", settlementFee: "", payinTiers: [], payoutTiers: [], currency: "USD", enabledRegions: [], processingCurrencies: [], rollingReservePct: "", rollingReserveTerm: "", rollingReserveCap: "", rollingReserveCapCurrency: "EUR", tierType: "tiers", monthlyMinAmount: "", monthlyMinCurrency: "EUR", monthlyMinTerm: "Monthly", applePay: false, googlePay: false, specificCountries: "" };
                 updateClient(cl.id, "clientProviders", [...clProviders, newProv]);
               }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600, marginBottom: 16 }}>+ Add Provider</button>
 
@@ -2541,6 +2551,11 @@ function AviroDashboard() {
                         </div>
                       ) : (
                         <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>{linkedSvc ? "No regions defined for this service" : "Select a service to see available regions"}</div>
+                      )}
+                      {(cp.enabledRegions || []).length > 0 && (
+                        <div style={{ marginTop: 6 }}>
+                          <input value={cp.specificCountries || ""} onChange={e => updateClProv(cpIdx, "specificCountries", e.target.value)} placeholder="Specific countries, e.g. Poland, Czech Republic" style={{ ...inputStyle, width: "100%", fontSize: 11 }} />
+                        </div>
                       )}
                     </div>
 
