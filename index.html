@@ -2342,7 +2342,7 @@ function AviroDashboard() {
 
                 // Available regions & currencies from linked service
                 const svcRegions = linkedSvc ? (linkedSvc.regions || []) : [];
-                const svcProcCurrencies = linkedSvc && (linkedSvc.processingCurrencies || []).length > 0 ? linkedSvc.processingCurrencies : FEE_CURRENCIES;
+                const svcProcCurrencies = linkedSvc && (linkedSvc.processingCurrencies || []).length > 0 ? linkedSvc.processingCurrencies : CLIENT_CURRENCIES;
 
                 return (
                   <div key={cp.id} style={{ ...sectionCard, borderColor: `${c.accent}20`, marginBottom: 14 }}>
@@ -2516,7 +2516,7 @@ function AviroDashboard() {
                         <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Monthly Minimum</div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 4 }}>
                           <div><label style={labelStyle}>Amount</label><input value={cp.monthlyMinAmount || ""} onChange={e => updateClProv(cpIdx, "monthlyMinAmount", e.target.value)} placeholder="e.g. 5000" style={{ ...inputStyle, width: "100%" }} /></div>
-                          <div><label style={labelStyle}>Currency</label><select value={cp.monthlyMinCurrency || "EUR"} onChange={e => updateClProv(cpIdx, "monthlyMinCurrency", e.target.value)} style={{ ...inputStyle, width: "100%" }}>{FEE_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
+                          <div><label style={labelStyle}>Currency</label><select value={cp.monthlyMinCurrency || "EUR"} onChange={e => updateClProv(cpIdx, "monthlyMinCurrency", e.target.value)} style={{ ...inputStyle, width: "100%" }}>{CLIENT_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
                           <div><label style={labelStyle}>Term</label><select value={cp.monthlyMinTerm || "Monthly"} onChange={e => updateClProv(cpIdx, "monthlyMinTerm", e.target.value)} style={{ ...inputStyle, width: "100%" }}><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option></select></div>
                         </div>
                         <div style={{ fontSize: 9, color: c.textMuted, fontStyle: "italic" }}>If volume-generated fees are below this amount, the minimum fee applies</div>
@@ -2544,7 +2544,7 @@ function AviroDashboard() {
                           <div><label style={labelStyle}>Reserve %</label><input value={cp.rollingReservePct || ""} onChange={e => updateClProv(cpIdx, "rollingReservePct", e.target.value)} placeholder="e.g. 10" style={{ ...inputStyle, width: "100%" }} /></div>
                           <div><label style={labelStyle}>Term (days)</label><input value={cp.rollingReserveTerm || ""} onChange={e => updateClProv(cpIdx, "rollingReserveTerm", e.target.value)} placeholder="e.g. 180" style={{ ...inputStyle, width: "100%" }} /></div>
                           <div><label style={labelStyle}>Cap Amount</label><input value={cp.rollingReserveCap || ""} onChange={e => updateClProv(cpIdx, "rollingReserveCap", e.target.value)} placeholder="e.g. 50000" style={{ ...inputStyle, width: "100%" }} /></div>
-                          <div><label style={labelStyle}>Cap Currency</label><select value={cp.rollingReserveCapCurrency || "EUR"} onChange={e => updateClProv(cpIdx, "rollingReserveCapCurrency", e.target.value)} style={{ ...inputStyle, width: "100%" }}>{FEE_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
+                          <div><label style={labelStyle}>Cap Currency</label><select value={cp.rollingReserveCapCurrency || "EUR"} onChange={e => updateClProv(cpIdx, "rollingReserveCapCurrency", e.target.value)} style={{ ...inputStyle, width: "100%" }}>{CLIENT_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
                         </div>
                       </div>
                     )}
