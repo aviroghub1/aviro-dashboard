@@ -235,6 +235,8 @@ function AviroDashboard() {
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [newProviderName, setNewProviderName] = useState("");
   const [showAddProvider, setShowAddProvider] = useState(false);
+  const [providerViewTab, setProviderViewTab] = useState("providers"); // "providers", "overview"
+  const [providerOverviewFilters, setProviderOverviewFilters] = useState({});
   const [selectedClient, setSelectedClient] = useState(null);
   const [clientDetailTab, setClientDetailTab] = useState("corporate"); // "corporate", "providers", "introducer"
   const [editingClientField, setEditingClientField] = useState(null);
@@ -3174,8 +3176,9 @@ function AviroDashboard() {
     const GROUP_PLATFORMS_P = ["Signal", "Telegram", "WhatsApp", "Lark", "Teams", "Other"];
     const SETTLEMENT_TERMS_P = ["T+0", "T+1", "T+2", "T+3", "T+4", "T+5", "T+7", "Weekly", "Bi-Weekly", "Monthly"];
     const FEE_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "AED", "BTC", "USDT"];
-    const inputStyle3 = { fontSize: 12, padding: "7px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" };
-    const labelStyle3 = { display: "block", fontSize: 10, fontWeight: 600, color: c.textMuted, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.05em" };
+    const inputStyle3 = { fontSize: 13, padding: "8px 11px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" };
+    const labelStyle3 = { display: "block", fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.05em" };
+    const sectionHeader3 = { fontSize: 12, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" };
 
     const entityNames = corporateEntities.map(e => e.name);
 
@@ -3186,12 +3189,26 @@ function AviroDashboard() {
     const updateServiceMulti = (provId, svcId, updates) => {
       setProviders(prev => prev.map(p => p.id === provId ? { ...p, services: (p.services || []).map(s => s.id === svcId ? { ...s, ...updates } : s) } : p));
     };
+    const fmtNum = (v) => { if (v == null || v === "") return v; const s = String(v); return s.replace(/\B(?=(\d{3})+(?!\d))/g, ","); };
 
     // ===== PROVIDER DETAIL VIEW =====
     if (selectedProvider) {
       const prov = providers.find(p => p.id === selectedProvider);
       if (!prov) { setSelectedProvider(null); return null; }
       const svcs = prov.services || [];
+
+      // Agreement helpers for provider-level agreements
+      const provAgreements = prov.agreements || [];
+      const addProvAgreement = () => {
+        const newAgr = { id: `agr-${Date.now()}`, entity: "", startDate: "", endDate: "", noEndDate: false, fileName: "", fileData: "" };
+        updateProvider(prov.id, "agreements", [...provAgreements, newAgr]);
+      };
+      const updateProvAgreement = (agrId, field, val) => {
+        updateProvider(prov.id, "agreements", provAgreements.map(a => a.id === agrId ? { ...a, [field]: val } : a));
+      };
+      const deleteProvAgreement = (agrId) => {
+        updateProvider(prov.id, "agreements", provAgreements.filter(a => a.id !== agrId));
+      };
 
       return (
         <div>
@@ -3201,11 +3218,104 @@ function AviroDashboard() {
             <span style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, background: c.accentBg, color: c.accent, fontWeight: 600 }}>{svcs.length} service{svcs.length !== 1 ? "s" : ""}</span>
           </div>
 
+          {/* Provider-level info */}
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
+            <div style={sectionHeader3}>Provider Info</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              {/* Contact */}
+              <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: `1px solid ${c.border}` }}>
+                <div style={sectionHeader3}>Contact</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div><label style={labelStyle3}>Main Contact</label><input value={prov.mainContact || ""} onChange={e => updateProvider(prov.id, "mainContact", e.target.value)} placeholder="Contact name" style={{ ...inputStyle3, width: "100%" }} /></div>
+                  <div><label style={labelStyle3}>Contact Details</label><input value={prov.contactDetails || ""} onChange={e => updateProvider(prov.id, "contactDetails", e.target.value)} placeholder="Email / phone" style={{ ...inputStyle3, width: "100%" }} /></div>
+                </div>
+              </div>
+              {/* Support */}
+              <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: `1px solid ${c.border}` }}>
+                <div style={sectionHeader3}>Support</div>
+                <div style={{ marginBottom: 8 }}><label style={labelStyle3}>Group Name</label><input value={prov.supportGroup || ""} onChange={e => updateProvider(prov.id, "supportGroup", e.target.value)} placeholder="Support group name" style={{ ...inputStyle3, width: "100%" }} /></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <div><label style={labelStyle3}>Platform</label><select value={prov.supportPlatform || ""} onChange={e => updateProvider(prov.id, "supportPlatform", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{GROUP_PLATFORMS_P.map(p2 => <option key={p2} value={p2}>{p2}</option>)}</select></div>
+                  {prov.supportPlatform === "Other" && <div><label style={labelStyle3}>Platform Name</label><input value={prov.supportPlatformOther || ""} onChange={e => updateProvider(prov.id, "supportPlatformOther", e.target.value)} style={{ ...inputStyle3, width: "100%" }} /></div>}
+                  <div><label style={labelStyle3}>Support Email</label><input value={prov.supportEmail || ""} onChange={e => updateProvider(prov.id, "supportEmail", e.target.value)} placeholder="support@provider.com" style={{ ...inputStyle3, width: "100%" }} /></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Agreements */}
+            <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: `1px solid ${c.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={sectionHeader3}>Agreements</div>
+                <button onClick={addProvAgreement} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Agreement</button>
+              </div>
+              {provAgreements.length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No agreements yet</div>}
+              {/* New / editing agreements */}
+              {provAgreements.map(agr => (
+                <div key={agr.id} style={{ background: c.card, borderRadius: 8, padding: 12, marginBottom: 8, border: `1px solid ${c.border}` }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, alignItems: "end" }}>
+                    <div><label style={labelStyle3}>Entity</label><select value={agr.entity || ""} onChange={e => updateProvAgreement(agr.id, "entity", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{entityNames.map(en => <option key={en} value={en}>{en}</option>)}</select></div>
+                    <div>
+                      <label style={labelStyle3}>Start Date</label>
+                      <input type="date" value={agr.startDate || ""} onChange={e => updateProvAgreement(agr.id, "startDate", e.target.value)} style={{ ...inputStyle3, width: "100%" }} />
+                    </div>
+                    <div>
+                      <label style={labelStyle3}>End Date</label>
+                      <input type="date" value={agr.endDate || ""} onChange={e => updateProvAgreement(agr.id, "endDate", e.target.value)} disabled={agr.noEndDate} style={{ ...inputStyle3, width: "100%", opacity: agr.noEndDate ? 0.5 : 1 }} />
+                      <label style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4, fontSize: 11, color: c.textMuted, cursor: "pointer" }}>
+                        <input type="checkbox" checked={!!agr.noEndDate} onChange={e => updateProvAgreement(agr.id, "noEndDate", e.target.checked)} style={{ accentColor: c.accent }} />
+                        No End Date
+                      </label>
+                    </div>
+                    <button onClick={() => deleteProvAgreement(agr.id)} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>Delete</button>
+                  </div>
+                  {/* File upload */}
+                  <div style={{ marginTop: 10 }}>
+                    <label style={labelStyle3}>Agreement File</label>
+                    {agr.fileData ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 12, color: c.text }}>{agr.fileName}</span>
+                        <button onClick={() => { const a = document.createElement("a"); a.href = agr.fileData; a.download = agr.fileName; a.click(); }} style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 5, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Download</button>
+                        <button onClick={() => { updateProvAgreement(agr.id, "fileName", ""); updateProvAgreement(agr.id, "fileData", ""); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>Remove</button>
+                      </div>
+                    ) : (
+                      <div
+                        onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                        onDragLeave={e => { e.currentTarget.style.borderColor = c.border; }}
+                        onDrop={e => {
+                          e.preventDefault();
+                          e.currentTarget.style.borderColor = c.border;
+                          const file = e.dataTransfer.files[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = ev => { updateProvAgreement(agr.id, "fileName", file.name); updateProvAgreement(agr.id, "fileData", ev.target.result); };
+                          reader.readAsDataURL(file);
+                        }}
+                        onClick={() => {
+                          const input = document.createElement("input");
+                          input.type = "file";
+                          input.onchange = ev => {
+                            const file = ev.target.files[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = e2 => { updateProvAgreement(agr.id, "fileName", file.name); updateProvAgreement(agr.id, "fileData", e2.target.result); };
+                            reader.readAsDataURL(file);
+                          };
+                          input.click();
+                        }}
+                        style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: "16px 20px", textAlign: "center", cursor: "pointer", fontSize: 12, color: c.textMuted, transition: "border-color 0.15s" }}
+                      >
+                        Drag & drop file here, or click to browse
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Add Service */}
           <button onClick={() => {
-            // Auto-fill contact/support info from existing services if available
-            const existingSvc = svcs.length > 0 ? svcs[svcs.length - 1] : {};
-            const newSvc = { id: `svc-${Date.now()}`, name: "", mainContact: existingSvc.mainContact || "", contactDetails: existingSvc.contactDetails || "", serviceType1: "", serviceType2: "", regions: [], processingCurrencies: [], supportGroup: existingSvc.supportGroup || "", supportPlatform: existingSvc.supportPlatform || "", supportPlatformOther: existingSvc.supportPlatformOther || "", supportEmail: existingSvc.supportEmail || "", agreementType: "", entities: [], payinPct: "", payinTxFee: "", payinTxCurrency: "USD", payoutPct: "", payoutTxFee: "", payoutTxCurrency: "USD", settlementTerms: "", settlementFee: "" };
+            const newSvc = { id: `svc-${Date.now()}`, name: "", serviceType1: "", serviceType2: "", regions: [], processingCurrencies: [], agreementType: "", entities: [], payinPct: "", payinTxFee: "", payinTxCurrency: "USD", payoutPct: "", payoutTxFee: "", payoutTxCurrency: "USD", settlementTerms: "", settlementFee: "", applePay: false, googlePay: false, rollingReserveEnabled: false, rollingReservePct: "", rollingReserveTerm: "", rollingReserveCap: "", rollingReserveCapCurrency: "EUR", payinTiers: [], payoutTiers: [], payinTierType: "tiers", payoutTierType: "tiers", canResell: false, resellModel: "", resellHardCost: "", referralAgreement: false, referralDeal: "" };
             updateProvider(prov.id, "services", [...svcs, newSvc]);
           }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600, marginBottom: 20 }}>+ Add Service</button>
 
@@ -3219,6 +3329,37 @@ function AviroDashboard() {
           {svcs.map((svc, svcIdx) => {
             const showPayin = svc.serviceType1 === "Payin" || svc.serviceType1 === "Both";
             const showPayout = svc.serviceType1 === "Payout" || svc.serviceType1 === "Both";
+
+            const renderSvcTiers = (tiers, tiersField, tierTypeField) => {
+              const tierTypeVal = svc[tierTypeField] || "tiers";
+              return (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>Volume {tierTypeVal === "tiers" ? "Tiers" : "Targets"}</span>
+                      <button onClick={() => updateService(prov.id, svc.id, tierTypeField, tierTypeVal === "tiers" ? "targets" : "tiers")} style={{ fontSize: 9, background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>
+                        Switch to {tierTypeVal === "tiers" ? "Targets" : "Tiers"}
+                      </button>
+                    </div>
+                    <button onClick={() => {
+                      const newTier = { id: `tier-${Date.now()}`, upTo: "", rate: "" };
+                      updateService(prov.id, svc.id, tiersField, [...(tiers || []), newTier]);
+                    }} style={{ fontSize: 9, background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>+ Add Tier</button>
+                  </div>
+                  {(tiers || []).map(tier => (
+                    <div key={tier.id} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                      <span style={{ fontSize: 10, color: c.textMuted }}>{tierTypeVal === "tiers" ? "Up to" : "At"}</span>
+                      <input value={tier.upTo || ""} onChange={e => updateService(prov.id, svc.id, tiersField, (tiers || []).map(t => t.id === tier.id ? { ...t, upTo: e.target.value } : t))} placeholder="Volume" style={{ ...inputStyle3, width: 100, fontSize: 12 }} />
+                      <span style={{ fontSize: 10, color: c.textMuted }}>{"→"}</span>
+                      <input value={tier.rate || ""} onChange={e => updateService(prov.id, svc.id, tiersField, (tiers || []).map(t => t.id === tier.id ? { ...t, rate: e.target.value } : t))} placeholder="Rate %" style={{ ...inputStyle3, width: 80, fontSize: 12 }} />
+                      <span style={{ fontSize: 10, color: c.textMuted }}>%</span>
+                      <button onClick={() => updateService(prov.id, svc.id, tiersField, (tiers || []).filter(t => t.id !== tier.id))} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>{"✕"}</button>
+                    </div>
+                  ))}
+                </div>
+              );
+            };
+
             return (
               <div key={svc.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -3242,10 +3383,6 @@ function AviroDashboard() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {/* Service basics */}
                     <div><label style={labelStyle3}>Service Name</label><input value={svc.name || ""} onChange={e => updateService(prov.id, svc.id, "name", e.target.value)} placeholder="Service name..." style={{ ...inputStyle3, width: "100%" }} /></div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      <div><label style={labelStyle3}>Main Contact</label><input value={svc.mainContact || ""} onChange={e => updateService(prov.id, svc.id, "mainContact", e.target.value)} placeholder="Contact name" style={{ ...inputStyle3, width: "100%" }} /></div>
-                      <div><label style={labelStyle3}>Contact Details</label><input value={svc.contactDetails || ""} onChange={e => updateService(prov.id, svc.id, "contactDetails", e.target.value)} placeholder="Email / phone" style={{ ...inputStyle3, width: "100%" }} /></div>
-                    </div>
 
                     {/* Service type */}
                     <div style={{ display: "grid", gridTemplateColumns: svc.serviceType2 === "Cards" ? "1fr 1fr 1fr" : "1fr 1fr", gap: 10 }}>
@@ -3255,6 +3392,20 @@ function AviroDashboard() {
                         <div><label style={labelStyle3}>Card Type</label><select value={svc.cardType || ""} onChange={e => updateService(prov.id, svc.id, "cardType", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option><option value="7995">7995</option><option value="6051">6051</option><option value="Other">Other</option></select></div>
                       )}
                     </div>
+
+                    {/* Apple Pay / Google Pay (Cards only) */}
+                    {svc.serviceType2 === "Cards" && (
+                      <div style={{ display: "flex", gap: 20 }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: c.text, cursor: "pointer" }}>
+                          <input type="checkbox" checked={!!svc.applePay} onChange={e => updateService(prov.id, svc.id, "applePay", e.target.checked)} style={{ accentColor: c.accent }} />
+                          Apple Pay
+                        </label>
+                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: c.text, cursor: "pointer" }}>
+                          <input type="checkbox" checked={!!svc.googlePay} onChange={e => updateService(prov.id, svc.id, "googlePay", e.target.checked)} style={{ accentColor: c.accent }} />
+                          Google Pay
+                        </label>
+                      </div>
+                    )}
 
                     {/* Open Banking: C2B Account option */}
                     {svc.serviceType2 === "Open Banking" && (
@@ -3267,7 +3418,6 @@ function AviroDashboard() {
                           })}
                         </div>
                         {svc.providesC2B === false && (() => {
-                          // Show bank account selector from our bank accounts list
                           const bankOptions = bankAccountsList.map(acc => {
                             const rel = bankRelationships.find(b => b.id === acc.bankRelId);
                             return { id: acc.id, label: `${rel ? rel.bankName : "Unknown Bank"} — ${acc.entityName || "No entity"} (${(acc.accountPurpose || []).join(", ") || "General"})` };
@@ -3361,24 +3511,13 @@ function AviroDashboard() {
 
                   {/* Right col */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    {/* Support */}
-                    <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: `1px solid ${c.border}` }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" }}>Support</div>
-                      <div style={{ marginBottom: 8 }}><label style={labelStyle3}>Group Name</label><input value={svc.supportGroup || ""} onChange={e => updateService(prov.id, svc.id, "supportGroup", e.target.value)} placeholder="Support group name" style={{ ...inputStyle3, width: "100%" }} /></div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                        <div><label style={labelStyle3}>Platform</label><select value={svc.supportPlatform || ""} onChange={e => updateService(prov.id, svc.id, "supportPlatform", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{GROUP_PLATFORMS_P.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
-                        {svc.supportPlatform === "Other" && <div><label style={labelStyle3}>Platform Name</label><input value={svc.supportPlatformOther || ""} onChange={e => updateService(prov.id, svc.id, "supportPlatformOther", e.target.value)} style={{ ...inputStyle3, width: "100%" }} /></div>}
-                      </div>
-                      <div><label style={labelStyle3}>Support Email</label><input value={svc.supportEmail || ""} onChange={e => updateService(prov.id, svc.id, "supportEmail", e.target.value)} placeholder="support@provider.com" style={{ ...inputStyle3, width: "100%" }} /></div>
-                    </div>
-
                     {/* Fees */}
                     <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: `1px solid ${c.border}` }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" }}>Fees</div>
-                      {!svc.serviceType1 && <div style={{ fontSize: 11, color: c.textMuted, fontStyle: "italic" }}>Select a service type to configure fees</div>}
+                      <div style={sectionHeader3}>Fees</div>
+                      {!svc.serviceType1 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>Select a service type to configure fees</div>}
                       {showPayin && (
                         <div style={{ marginBottom: showPayout ? 10 : 0 }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: c.text, marginBottom: 6 }}>Payin</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: c.text, marginBottom: 6 }}>Payin</div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                             <div><label style={labelStyle3}>Rate (%)</label><input value={svc.payinPct || ""} onChange={e => updateService(prov.id, svc.id, "payinPct", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
                             <div><label style={labelStyle3}>TX Fee</label><input value={svc.payinTxFee || ""} onChange={e => updateService(prov.id, svc.id, "payinTxFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle3, width: "100%" }} /></div>
@@ -3390,11 +3529,12 @@ function AviroDashboard() {
                               ICC++
                             </label>
                           </div>
+                          {renderSvcTiers(svc.payinTiers, "payinTiers", "payinTierType")}
                         </div>
                       )}
                       {showPayout && (
                         <div>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: c.text, marginBottom: 6 }}>Payout</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: c.text, marginBottom: 6 }}>Payout</div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                             <div><label style={labelStyle3}>Rate (%)</label><input value={svc.payoutPct || ""} onChange={e => updateService(prov.id, svc.id, "payoutPct", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
                             <div><label style={labelStyle3}>TX Fee</label><input value={svc.payoutTxFee || ""} onChange={e => updateService(prov.id, svc.id, "payoutTxFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle3, width: "100%" }} /></div>
@@ -3406,13 +3546,14 @@ function AviroDashboard() {
                               ICC++
                             </label>
                           </div>
+                          {renderSvcTiers(svc.payoutTiers, "payoutTiers", "payoutTierType")}
                         </div>
                       )}
                     </div>
 
                     {/* Settlement */}
                     <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: `1px solid ${c.border}` }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" }}>Settlement</div>
+                      <div style={sectionHeader3}>Settlement</div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
                         <div><label style={labelStyle3}>Settlement Terms</label><select value={svc.settlementTerms || ""} onChange={e => updateService(prov.id, svc.id, "settlementTerms", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{SETTLEMENT_TERMS_P.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                         <div><label style={labelStyle3}>Settlement Fee (%)</label><input value={svc.settlementFee || ""} onChange={e => updateService(prov.id, svc.id, "settlementFee", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
@@ -3437,6 +3578,64 @@ function AviroDashboard() {
                         );
                       })()}
                     </div>
+
+                    {/* Rolling Reserve */}
+                    <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: `1px solid ${c.border}` }}>
+                      <div style={sectionHeader3}>Rolling Reserve</div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: c.text, cursor: "pointer", marginBottom: 8 }}>
+                        <input type="checkbox" checked={!!svc.rollingReserveEnabled} onChange={e => updateService(prov.id, svc.id, "rollingReserveEnabled", e.target.checked)} style={{ accentColor: c.accent }} />
+                        Enabled
+                      </label>
+                      {svc.rollingReserveEnabled && (
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <div><label style={labelStyle3}>Reserve (%)</label><input value={svc.rollingReservePct || ""} onChange={e => updateService(prov.id, svc.id, "rollingReservePct", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
+                          <div><label style={labelStyle3}>Term (days)</label><input value={svc.rollingReserveTerm || ""} onChange={e => updateService(prov.id, svc.id, "rollingReserveTerm", e.target.value)} placeholder="e.g. 180" style={{ ...inputStyle3, width: "100%" }} /></div>
+                          <div><label style={labelStyle3}>Cap Amount</label><input value={svc.rollingReserveCap || ""} onChange={e => updateService(prov.id, svc.id, "rollingReserveCap", e.target.value)} placeholder="Amount" style={{ ...inputStyle3, width: "100%" }} /></div>
+                          <div><label style={labelStyle3}>Cap Currency</label><select value={svc.rollingReserveCapCurrency || "EUR"} onChange={e => updateService(prov.id, svc.id, "rollingReserveCapCurrency", e.target.value)} style={{ ...inputStyle3, width: "100%" }}>{FEE_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reseller / Referral */}
+                    <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: `1px solid ${c.border}` }}>
+                      <div style={sectionHeader3}>Reseller / Referral</div>
+                      <div style={{ marginBottom: 10 }}>
+                        <label style={labelStyle3}>Can Resell?</label>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {[{ val: true, label: "Yes" }, { val: false, label: "No" }].map(opt => {
+                            const sel = svc.canResell === opt.val;
+                            return <button key={String(opt.val)} onClick={() => updateService(prov.id, svc.id, "canResell", opt.val)} style={{ padding: "5px 16px", borderRadius: 6, fontSize: 11, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? (opt.val ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)") : c.surface, color: sel ? (opt.val ? "#34d399" : "#fbbf24") : c.textMuted, border: `2px solid ${sel ? (opt.val ? "#34d399" : "#fbbf24") : c.border}`, transition: "all 0.15s" }}>{opt.label}</button>;
+                          })}
+                        </div>
+                      </div>
+                      {svc.canResell && (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ marginBottom: 8 }}>
+                            <label style={labelStyle3}>Resell Model</label>
+                            <select value={svc.resellModel || ""} onChange={e => updateService(prov.id, svc.id, "resellModel", e.target.value)} style={{ ...inputStyle3, width: "100%" }}>
+                              <option value="">— Select —</option>
+                              <option value="Hard Buy Rate">Hard Buy Rate</option>
+                              <option value="Profit Share">Profit Share</option>
+                            </select>
+                          </div>
+                          {svc.resellModel === "Profit Share" && (
+                            <div><label style={labelStyle3}>Hard Cost (%)</label><input value={svc.resellHardCost || ""} onChange={e => updateService(prov.id, svc.id, "resellHardCost", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
+                          )}
+                        </div>
+                      )}
+                      <div style={{ marginBottom: 8 }}>
+                        <label style={labelStyle3}>Referral Agreement?</label>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {[{ val: true, label: "Yes" }, { val: false, label: "No" }].map(opt => {
+                            const sel = svc.referralAgreement === opt.val;
+                            return <button key={String(opt.val)} onClick={() => updateService(prov.id, svc.id, "referralAgreement", opt.val)} style={{ padding: "5px 16px", borderRadius: 6, fontSize: 11, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? (opt.val ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)") : c.surface, color: sel ? (opt.val ? "#34d399" : "#fbbf24") : c.textMuted, border: `2px solid ${sel ? (opt.val ? "#34d399" : "#fbbf24") : c.border}`, transition: "all 0.15s" }}>{opt.label}</button>;
+                          })}
+                        </div>
+                      </div>
+                      {svc.referralAgreement && (
+                        <div><label style={labelStyle3}>Referral Deal (%)</label><input value={svc.referralDeal || ""} onChange={e => updateService(prov.id, svc.id, "referralDeal", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3451,7 +3650,34 @@ function AviroDashboard() {
       );
     }
 
-    // ===== PROVIDER LIST VIEW =====
+    // ===== PROVIDER LIST VIEW & OVERVIEW =====
+    const thStyleOv = { textAlign: "left", padding: "10px 12px", fontSize: 10, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap", background: "linear-gradient(135deg, #4c1d95, #7c3aed)" };
+    const allServices = providers.flatMap(p => (p.services || []).map(s => ({ ...s, providerName: p.name, providerId: p.id })));
+    const ovFilters = providerOverviewFilters || {};
+
+    const filteredOvServices = allServices.filter(s => {
+      if (ovFilters.serviceType && s.serviceType1 !== ovFilters.serviceType) return false;
+      if (ovFilters.channel && s.serviceType2 !== ovFilters.channel) return false;
+      if (ovFilters.cardType && s.cardType !== ovFilters.cardType) return false;
+      if (ovFilters.applePay === true && !s.applePay) return false;
+      if (ovFilters.applePay === false && s.applePay) return false;
+      if (ovFilters.googlePay === true && !s.googlePay) return false;
+      if (ovFilters.googlePay === false && s.googlePay) return false;
+      if (ovFilters.region && !(s.regions || []).includes(ovFilters.region)) return false;
+      if (ovFilters.currency && !(s.processingCurrencies || []).includes(ovFilters.currency)) return false;
+      if (ovFilters.referral === true && !s.referralAgreement) return false;
+      if (ovFilters.referral === false && s.referralAgreement) return false;
+      if (ovFilters.reseller === true && !s.canResell) return false;
+      if (ovFilters.reseller === false && s.canResell) return false;
+      return true;
+    });
+
+    const setOvFilter = (key, val) => setProviderOverviewFilters(prev => {
+      const next = { ...prev };
+      if (next[key] === val) { delete next[key]; } else { next[key] = val; }
+      return next;
+    });
+
     return (
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -3459,65 +3685,193 @@ function AviroDashboard() {
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Providers</h2>
             <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{providers.length} provider{providers.length !== 1 ? "s" : ""} · {providers.reduce((sum, p) => sum + (p.services || []).length, 0)} services</p>
           </div>
-          <button onClick={() => setShowAddProvider(!showAddProvider)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Provider</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {/* Tab buttons */}
+            <div style={{ display: "flex", gap: 4, background: c.surface, borderRadius: 8, padding: 4, border: `1px solid ${c.border}` }}>
+              {["providers", "overview"].map(tab => (
+                <button key={tab} onClick={() => setProviderViewTab(tab)} style={{ padding: "6px 16px", borderRadius: 6, fontSize: 12, fontWeight: providerViewTab === tab ? 700 : 400, cursor: "pointer", background: providerViewTab === tab ? c.accent : "transparent", color: providerViewTab === tab ? "#fff" : c.textMuted, border: "none", textTransform: "capitalize", transition: "all 0.15s" }}>{tab === "providers" ? "Providers" : "Overview"}</button>
+              ))}
+            </div>
+            {providerViewTab === "providers" && (
+              <button onClick={() => setShowAddProvider(!showAddProvider)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Provider</button>
+            )}
+            {providerViewTab === "overview" && (
+              <button onClick={() => {
+                const cols = ["Provider", "Service", "Type", "Channel", "Card Type", "Apple Pay", "Google Pay", "Regions", "Currencies", "Referral", "Reseller"];
+                const rows = filteredOvServices.map(s => [
+                  s.providerName, s.name || "—", s.serviceType1 || "—", s.serviceType2 || "—", s.cardType || "—",
+                  s.applePay ? "Yes" : "No", s.googlePay ? "Yes" : "No",
+                  (s.regions || []).join(", ") || "—",
+                  (s.processingCurrencies || []).join(", ") || "—",
+                  s.referralAgreement ? "Yes" : "No",
+                  s.canResell ? "Yes" : "No"
+                ]);
+                const tableHtml = `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>${cols.map(h => `<th style="background:linear-gradient(135deg,#4c1d95,#7c3aed);color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.05em">${h}</th>`).join("")}</tr></thead><tbody>${rows.map((row, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f9f7ff"}">${row.map(cell => `<td style="padding:7px 10px;border-bottom:1px solid #e5e7eb">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+                const win = window.open("", "_blank");
+                win.document.write(`<!DOCTYPE html><html><head><title>Provider Overview</title><style>body{font-family:sans-serif;padding:20px;background:#fff;color:#111}@media print{button{display:none}}</style></head><body><h2 style="margin-bottom:16px">Provider Overview</h2>${tableHtml}<br><button onclick="window.print()" style="padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">Print</button></body></html>`);
+                win.document.close();
+              }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textSecondary, borderRadius: 8, padding: "10px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Download / Print</button>
+            )}
+          </div>
         </div>
 
-        {/* Add Provider Form */}
-        {showAddProvider && (
-          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.accent}40`, padding: 16, marginBottom: 16, display: "flex", gap: 10, alignItems: "end" }}>
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle3}>Provider Name</label>
-              <input value={newProviderName} onChange={e => setNewProviderName(e.target.value)} placeholder="Enter provider name..." style={{ ...inputStyle3, width: "100%" }} onKeyDown={e => {
-                if (e.key === "Enter" && newProviderName.trim()) {
-                  const newP = { id: `prov-${Date.now()}`, name: newProviderName.trim(), services: [] };
+        {providerViewTab === "providers" && (
+          <div>
+            {/* Add Provider Form */}
+            {showAddProvider && (
+              <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.accent}40`, padding: 16, marginBottom: 16, display: "flex", gap: 10, alignItems: "end" }}>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle3}>Provider Name</label>
+                  <input value={newProviderName} onChange={e => setNewProviderName(e.target.value)} placeholder="Enter provider name..." style={{ ...inputStyle3, width: "100%" }} onKeyDown={e => {
+                    if (e.key === "Enter" && newProviderName.trim()) {
+                      const newP = { id: `prov-${Date.now()}`, name: newProviderName.trim(), services: [], agreements: [] };
+                      setProviders([...providers, newP]);
+                      setNewProviderName(""); setShowAddProvider(false);
+                      setSelectedProvider(newP.id);
+                    }
+                  }} />
+                </div>
+                <button onClick={() => {
+                  if (!newProviderName.trim()) return;
+                  const newP = { id: `prov-${Date.now()}`, name: newProviderName.trim(), services: [], agreements: [] };
                   setProviders([...providers, newP]);
                   setNewProviderName(""); setShowAddProvider(false);
                   setSelectedProvider(newP.id);
-                }
-              }} />
-            </div>
-            <button onClick={() => {
-              if (!newProviderName.trim()) return;
-              const newP = { id: `prov-${Date.now()}`, name: newProviderName.trim(), services: [] };
-              setProviders([...providers, newP]);
-              setNewProviderName(""); setShowAddProvider(false);
-              setSelectedProvider(newP.id);
-            }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>Create</button>
-          </div>
-        )}
-
-        {/* Provider tiles */}
-        {providers.length === 0 && (
-          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 40, textAlign: "center" }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🏦</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 4 }}>No providers yet</div>
-            <div style={{ fontSize: 13, color: c.textMuted }}>Click "Add Provider" to start building your provider directory</div>
-          </div>
-        )}
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          {providers.map(prov => {
-            const svcs = prov.services || [];
-            const svcTypes = [...new Set(svcs.map(s => s.serviceType1).filter(Boolean))];
-            const regions = [...new Set(svcs.flatMap(s => s.regions || []))];
-            return (
-              <div key={prov.id} onClick={() => setSelectedProvider(prov.id)}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = c.accent; e.currentTarget.style.transform = "translateY(-2px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = c.border; e.currentTarget.style.transform = "translateY(0)"; }}
-                style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, cursor: "pointer", transition: "all 0.15s" }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 8 }}>{prov.name}</div>
-                <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 8 }}>{svcs.length} service{svcs.length !== 1 ? "s" : ""}</div>
-                {svcTypes.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
-                    {svcTypes.map(t => <span key={t} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: c.accentBg, color: c.accent, fontWeight: 600 }}>{t}</span>)}
-                  </div>
-                )}
-                {regions.length > 0 && <div style={{ fontSize: 10, color: c.textMuted }}>{regions.slice(0, 4).join(", ")}{regions.length > 4 ? ` +${regions.length - 4}` : ""}</div>}
-                <div style={{ marginTop: 10, fontSize: 12, color: c.accent, fontWeight: 600 }}>Open →</div>
+                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>Create</button>
               </div>
-            );
-          })}
-        </div>
+            )}
+
+            {/* Provider tiles */}
+            {providers.length === 0 && (
+              <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 40, textAlign: "center" }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🏦</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 4 }}>No providers yet</div>
+                <div style={{ fontSize: 13, color: c.textMuted }}>Click "Add Provider" to start building your provider directory</div>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              {providers.map(prov => {
+                const svcs = prov.services || [];
+                const svcTypes = [...new Set(svcs.map(s => s.serviceType1).filter(Boolean))];
+                const regions = [...new Set(svcs.flatMap(s => s.regions || []))];
+                return (
+                  <div key={prov.id} onClick={() => setSelectedProvider(prov.id)}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = c.accent; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = c.border; e.currentTarget.style.transform = "translateY(0)"; }}
+                    style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, cursor: "pointer", transition: "all 0.15s" }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 8 }}>{prov.name}</div>
+                    <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 8 }}>{svcs.length} service{svcs.length !== 1 ? "s" : ""}</div>
+                    {svcTypes.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+                        {svcTypes.map(t => <span key={t} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: c.accentBg, color: c.accent, fontWeight: 600 }}>{t}</span>)}
+                      </div>
+                    )}
+                    {regions.length > 0 && <div style={{ fontSize: 10, color: c.textMuted }}>{regions.slice(0, 4).join(", ")}{regions.length > 4 ? ` +${regions.length - 4}` : ""}</div>}
+                    <div style={{ marginTop: 10, fontSize: 12, color: c.accent, fontWeight: 600 }}>Open →</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {providerViewTab === "overview" && (
+          <div>
+            {/* Filter bar */}
+            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 10 }}>Filters</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+                <div>
+                  <label style={labelStyle3}>Service Type</label>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {["", ...SERVICE_TYPES_1].map(t => (
+                      <button key={t} onClick={() => setOvFilter("serviceType", t || undefined)} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: (ovFilters.serviceType || "") === t ? c.accentBg : c.surface, color: (ovFilters.serviceType || "") === t ? c.accent : c.textMuted, border: `1px solid ${(ovFilters.serviceType || "") === t ? c.accent + "40" : c.border}`, fontWeight: (ovFilters.serviceType || "") === t ? 600 : 400 }}>{t || "All"}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle3}>Channel</label>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {["", ...SERVICE_TYPES_2].map(t => (
+                      <button key={t} onClick={() => setOvFilter("channel", t || undefined)} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: (ovFilters.channel || "") === t ? c.accentBg : c.surface, color: (ovFilters.channel || "") === t ? c.accent : c.textMuted, border: `1px solid ${(ovFilters.channel || "") === t ? c.accent + "40" : c.border}`, fontWeight: (ovFilters.channel || "") === t ? 600 : 400 }}>{t || "All"}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle3}>Apple Pay</label>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[{ label: "All", val: undefined }, { label: "Yes", val: true }, { label: "No", val: false }].map(opt => (
+                      <button key={String(opt.val)} onClick={() => { const next = { ...ovFilters }; if (next.applePay === opt.val || opt.val === undefined) { delete next.applePay; } else { next.applePay = opt.val; } setProviderOverviewFilters(next); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: ovFilters.applePay === opt.val && opt.val !== undefined ? c.accentBg : c.surface, color: ovFilters.applePay === opt.val && opt.val !== undefined ? c.accent : c.textMuted, border: `1px solid ${ovFilters.applePay === opt.val && opt.val !== undefined ? c.accent + "40" : c.border}`, fontWeight: ovFilters.applePay === opt.val && opt.val !== undefined ? 600 : 400 }}>{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle3}>Google Pay</label>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[{ label: "All", val: undefined }, { label: "Yes", val: true }, { label: "No", val: false }].map(opt => (
+                      <button key={String(opt.val)} onClick={() => { const next = { ...ovFilters }; if (next.googlePay === opt.val || opt.val === undefined) { delete next.googlePay; } else { next.googlePay = opt.val; } setProviderOverviewFilters(next); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: ovFilters.googlePay === opt.val && opt.val !== undefined ? c.accentBg : c.surface, color: ovFilters.googlePay === opt.val && opt.val !== undefined ? c.accent : c.textMuted, border: `1px solid ${ovFilters.googlePay === opt.val && opt.val !== undefined ? c.accent + "40" : c.border}`, fontWeight: ovFilters.googlePay === opt.val && opt.val !== undefined ? 600 : 400 }}>{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle3}>Referral</label>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[{ label: "All", val: undefined }, { label: "Yes", val: true }, { label: "No", val: false }].map(opt => (
+                      <button key={String(opt.val)} onClick={() => { const next = { ...ovFilters }; if (next.referral === opt.val || opt.val === undefined) { delete next.referral; } else { next.referral = opt.val; } setProviderOverviewFilters(next); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: ovFilters.referral === opt.val && opt.val !== undefined ? c.accentBg : c.surface, color: ovFilters.referral === opt.val && opt.val !== undefined ? c.accent : c.textMuted, border: `1px solid ${ovFilters.referral === opt.val && opt.val !== undefined ? c.accent + "40" : c.border}`, fontWeight: ovFilters.referral === opt.val && opt.val !== undefined ? 600 : 400 }}>{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle3}>Reseller</label>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[{ label: "All", val: undefined }, { label: "Yes", val: true }, { label: "No", val: false }].map(opt => (
+                      <button key={String(opt.val)} onClick={() => { const next = { ...ovFilters }; if (next.reseller === opt.val || opt.val === undefined) { delete next.reseller; } else { next.reseller = opt.val; } setProviderOverviewFilters(next); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: ovFilters.reseller === opt.val && opt.val !== undefined ? c.accentBg : c.surface, color: ovFilters.reseller === opt.val && opt.val !== undefined ? c.accent : c.textMuted, border: `1px solid ${ovFilters.reseller === opt.val && opt.val !== undefined ? c.accent + "40" : c.border}`, fontWeight: ovFilters.reseller === opt.val && opt.val !== undefined ? 600 : 400 }}>{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+                {Object.keys(ovFilters).length > 0 && (
+                  <button onClick={() => setProviderOverviewFilters({})} style={{ padding: "4px 10px", borderRadius: 5, fontSize: 10, cursor: "pointer", background: "rgba(248,113,113,0.1)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", fontWeight: 600 }}>Clear Filters</button>
+                )}
+              </div>
+            </div>
+
+            {/* Overview table */}
+            <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {["Provider", "Service", "Type", "Channel", "Card Type", "Apple Pay", "Google Pay", "Regions", "Currencies", "Referral", "Reseller"].map(h => (
+                        <th key={h} style={thStyleOv}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOvServices.length === 0 && (
+                      <tr><td colSpan={11} style={{ padding: 24, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No services match the current filters</td></tr>
+                    )}
+                    {filteredOvServices.map((s, idx) => (
+                      <tr key={s.id + s.providerId} style={{ background: idx % 2 === 0 ? c.card : c.surface }}>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, fontWeight: 600 }}>{s.providerName}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}` }}>{s.name || "—"}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}` }}>{s.serviceType1 || "—"}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}` }}>{s.serviceType2 || "—"}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}` }}>{s.cardType || "—"}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, textAlign: "center" }}>{s.applePay ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, textAlign: "center" }}>{s.googlePay ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, fontSize: 11 }}>{(s.regions || []).slice(0, 4).join(", ") || "—"}{(s.regions || []).length > 4 ? ` +${(s.regions || []).length - 4}` : ""}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, fontSize: 11 }}>{(s.processingCurrencies || []).join(", ") || "—"}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, textAlign: "center" }}>{s.referralAgreement ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
+                        <td style={{ padding: "8px 12px", borderBottom: `1px solid ${c.border}`, textAlign: "center" }}>{s.canResell ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
