@@ -2143,114 +2143,333 @@ function AviroDashboard() {
             {/* ===== RATES OVERVIEW TAB ===== */}
             {clientDetailTab === "rates" && (() => {
               const clProviders = cl.clientProviders || [];
-              return (<>
-              <div style={{ ...sectionCard, borderColor: `${c.accent}30` }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: c.accent, marginBottom: 16, textTransform: "uppercase" }}>Rates Overview</div>
-                {clProviders.length === 0 ? (
-                  <div style={{ background: c.surface, borderRadius: 10, padding: 30, textAlign: "center", border: `1px dashed ${c.border}` }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 4 }}>No providers configured</div>
-                    <div style={{ fontSize: 12, color: c.textMuted }}>Add providers in the "Providers & Deal" tab to see rates here</div>
+              const corp = cl.corporateAgreement || {};
+
+              // Helper: resolve provider row data
+              const resolveProvRow = (cp) => {
+                const linkedProv = providers.find(p => p.id === cp.providerId);
+                const linkedSvc = linkedProv ? (linkedProv.services || []).find(s => s.id === cp.serviceId) : null;
+                const provName = linkedProv ? linkedProv.name : "Unknown";
+                const svcName = linkedSvc ? (linkedSvc.name || "Unnamed") : "";
+                const typeLabels = [];
+                if (linkedSvc) {
+                  if (linkedSvc.serviceType1) typeLabels.push(linkedSvc.serviceType1);
+                  if (linkedSvc.serviceType2) typeLabels.push(linkedSvc.serviceType2);
+                  if (linkedSvc.cardType) typeLabels.push(linkedSvc.cardType);
+                }
+                const typeStr = typeLabels.length > 0 ? typeLabels.join(" · ") : "—";
+                // Client-facing rate
+                let clientRate = "—";
+                if (cp.feeModel === "Referral") {
+                  const parts = [];
+                  if (cp.referralPayinPct) parts.push(cp.referralPayinPct + "%");
+                  if (cp.referralPayinTxFee) parts.push("€" + cp.referralPayinTxFee + " tx");
+                  clientRate = parts.length > 0 ? parts.join(" + ") : "—";
+                } else {
+                  const parts = [];
+                  if (cp.clientPayinPct) parts.push(cp.clientPayinPct + "%");
+                  if (cp.clientPayinTxFee) parts.push("€" + cp.clientPayinTxFee + " tx");
+                  clientRate = parts.length > 0 ? parts.join(" + ") : "—";
+                }
+                return { linkedProv, linkedSvc, provName, svcName, typeStr, clientRate };
+              };
+
+              const fmColor = (fm) => fm === "Direct" ? "#34d399" : fm === "Profit Share" ? "#a78bfa" : fm === "Referral" ? "#fbbf24" : "#94a3b8";
+              const pill = (text, bg, fg) => ({ display: "inline-block", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: bg, color: fg, marginRight: 4, marginBottom: 2 });
+
+              // Download rate card as printable HTML
+              const downloadRateCard = (type) => {
+                const rows = clProviders.map(cp => {
+                  const r = resolveProvRow(cp);
+                  const tiers = (cp.payinTiers || []).map(t => "Up to " + (t.upTo || "∞") + " → " + (t.rate || "—") + "%").join("; ");
+                  const tierLabel = cp.tierType === "targets" ? "Target tiers" : "Incremental tiers";
+                  const regions = (cp.enabledRegions || []).join(", ") || "—";
+                  const currencies = (cp.processingCurrencies || []).join(", ") || "—";
+                  const rr = cp.rollingReservePct ? (cp.rollingReservePct + "% / " + (cp.rollingReserveTerm || "—") + " days" + (cp.rollingReserveCap ? " / Cap: " + (cp.rollingReserveCapCurrency || "EUR") + " " + cp.rollingReserveCap : "")) : "—";
+                  const mm = cp.monthlyMinAmount ? ((cp.monthlyMinCurrency || "EUR") + " " + cp.monthlyMinAmount + " " + (cp.monthlyMinTerm || "Monthly")) : "—";
+                  const settle = [cp.settlementTerms, cp.settlementFee ? "Fee: " + cp.settlementFee : "", cp.settlementMethod, cp.currency].filter(Boolean).join(" · ") || "—";
+                  let internalHtml = "";
+                  if (type === "internal") {
+                    const fm = cp.feeModel || "—";
+                    internalHtml += "<tr><td style='padding:6px 10px;color:#6b7280;font-size:11px'>Fee Model</td><td style='padding:6px 10px;font-size:11px;font-weight:600'>" + fm + "</td></tr>";
+                    if (cp.feeModel === "Direct" && r.linkedSvc) {
+                      const provCostParts = [];
+                      if (r.linkedSvc.payinPct) provCostParts.push(r.linkedSvc.payinPct + "%");
+                      if (r.linkedSvc.payinTxFee) provCostParts.push("€" + r.linkedSvc.payinTxFee + " tx");
+                      const provCost = provCostParts.length > 0 ? provCostParts.join(" + ") : "—";
+                      const marginPct = ((parseFloat(cp.clientPayinPct) || 0) - (parseFloat(r.linkedSvc.payinPct) || 0)).toFixed(2);
+                      const marginTx = ((parseFloat(cp.clientPayinTxFee) || 0) - (parseFloat(r.linkedSvc.payinTxFee) || 0)).toFixed(2);
+                      internalHtml += "<tr><td style='padding:6px 10px;color:#6b7280;font-size:11px'>Provider Cost</td><td style='padding:6px 10px;font-size:11px'>" + provCost + "</td></tr>";
+                      internalHtml += "<tr><td style='padding:6px 10px;color:#6b7280;font-size:11px'>Our Markup</td><td style='padding:6px 10px;font-size:11px;font-weight:700;color:#10b981'>+" + marginPct + "% + €" + marginTx + " tx</td></tr>";
+                    } else if (cp.feeModel === "Profit Share") {
+                      const clientPct = parseFloat(cp.clientPayinPct) || 0;
+                      const hardCost = parseFloat(cp.hardCostPayinPct) || 0;
+                      const profitPool = clientPct - hardCost;
+                      const sharePct = parseFloat(cp.profitSharePct) || 0;
+                      const provGets = (profitPool * sharePct / 100).toFixed(2);
+                      const weKeep = (profitPool - parseFloat(provGets)).toFixed(2);
+                      internalHtml += "<tr><td style='padding:6px 10px;color:#6b7280;font-size:11px'>Hard Cost</td><td style='padding:6px 10px;font-size:11px'>" + (cp.hardCostPayinPct || "—") + "%</td></tr>";
+                      internalHtml += "<tr><td style='padding:6px 10px;color:#6b7280;font-size:11px'>Provider Share</td><td style='padding:6px 10px;font-size:11px'>" + (cp.profitSharePct || "—") + "%</td></tr>";
+                      internalHtml += "<tr><td style='padding:6px 10px;color:#6b7280;font-size:11px'>Breakdown</td><td style='padding:6px 10px;font-size:11px'>" + clientPct + "% - " + hardCost + "% = " + profitPool.toFixed(2) + "% profit → Provider gets " + provGets + "% (" + sharePct + "%) → <b style=\"color:#10b981\">We keep " + weKeep + "%</b></td></tr>";
+                    } else if (cp.feeModel === "Referral") {
+                      internalHtml += "<tr><td style='padding:6px 10px;color:#6b7280;font-size:11px'>Our Referral %</td><td style='padding:6px 10px;font-size:11px;font-weight:700;color:#10b981'>" + (cp.referralPct || "—") + "%</td></tr>";
+                    }
+                    if (cp.iccPlusPlus) internalHtml += "<tr><td style='padding:6px 10px;color:#6b7280;font-size:11px'>ICC++</td><td style='padding:6px 10px;font-size:11px;color:#f59e0b;font-weight:600'>Enabled</td></tr>";
+                  }
+                  return "<div style='border:1px solid #e5e7eb;border-radius:8px;margin-bottom:16px;overflow:hidden'>" +
+                    "<div style='background:#f9fafb;padding:12px 16px;border-bottom:1px solid #e5e7eb'><strong>" + r.provName + "</strong>" + (r.svcName ? " <span style='color:#6b7280;font-size:12px'>— " + r.svcName + "</span>" : "") + "<div style='font-size:11px;color:#9ca3af;margin-top:2px'>" + r.typeStr + "</div></div>" +
+                    "<table style='width:100%;border-collapse:collapse;font-size:12px'>" +
+                    "<tr><td style='padding:6px 10px;color:#6b7280;width:140px'>Regions</td><td style='padding:6px 10px'>" + regions + "</td></tr>" +
+                    "<tr style='background:#fafafa'><td style='padding:6px 10px;color:#6b7280'>Currencies</td><td style='padding:6px 10px'>" + currencies + "</td></tr>" +
+                    "<tr><td style='padding:6px 10px;color:#6b7280'>Rate</td><td style='padding:6px 10px;font-weight:600'>" + r.clientRate + "</td></tr>" +
+                    (tiers ? "<tr style='background:#fafafa'><td style='padding:6px 10px;color:#6b7280'>Tiers (" + tierLabel + ")</td><td style='padding:6px 10px'>" + tiers + "</td></tr>" : "") +
+                    "<tr><td style='padding:6px 10px;color:#6b7280'>Rolling Reserve</td><td style='padding:6px 10px'>" + rr + "</td></tr>" +
+                    "<tr style='background:#fafafa'><td style='padding:6px 10px;color:#6b7280'>Monthly Minimum</td><td style='padding:6px 10px'>" + mm + "</td></tr>" +
+                    "<tr><td style='padding:6px 10px;color:#6b7280'>Settlement</td><td style='padding:6px 10px'>" + settle + "</td></tr>" +
+                    internalHtml +
+                    "</table></div>";
+                }).join("");
+
+                const setupFeeStr = corp.setupFeeWaived ? "Waived" : (corp.setupFee ? "€" + corp.setupFee : "—");
+                const monthlyFeeStr = corp.monthlyFee ? ("€" + corp.monthlyFee + (corp.monthlyFeeWaivedAfter ? " (waived after €" + corp.monthlyFeeWaivedAfter + " volume)" : "")) : "—";
+                const txFeeStr = corp.transactionFee ? "€" + corp.transactionFee + " per transaction" : "—";
+
+                const html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Rate Card — " + (cl.name || "Client") + "</title>" +
+                  "<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:40px;color:#1f2937;font-size:13px;line-height:1.5}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;color:#4f46e5;margin:28px 0 12px;text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid #e5e7eb;padding-bottom:6px}.meta{color:#6b7280;font-size:12px;margin-bottom:24px}.gateway-fees{display:flex;gap:24px;margin-bottom:24px}.gw-fee{flex:1;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px}.gw-fee .label{font-size:10px;text-transform:uppercase;color:#9ca3af;font-weight:600;letter-spacing:.04em}.gw-fee .value{font-size:18px;font-weight:700;color:#1f2937;margin-top:4px}@media print{body{margin:20px}}</style></head><body>" +
+                  "<h1>Rate Card" + (type === "internal" ? " — Internal" : "") + "</h1>" +
+                  "<div class='meta'>" + (cl.name || "Client") + " · Generated " + new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) + "</div>" +
+                  "<h2>Gateway Fees</h2>" +
+                  "<div class='gateway-fees'><div class='gw-fee'><div class='label'>Setup Fee</div><div class='value'>" + setupFeeStr + "</div></div>" +
+                  "<div class='gw-fee'><div class='label'>Monthly Fee</div><div class='value'>" + monthlyFeeStr + "</div></div>" +
+                  "<div class='gw-fee'><div class='label'>Transaction Fee</div><div class='value'>" + txFeeStr + "</div></div></div>" +
+                  "<h2>Provider Rates</h2>" + rows +
+                  "</body></html>";
+                const w = window.open("", "_blank");
+                if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400); }
+              };
+
+              // Shared provider row renderer
+              const ProviderCard = ({ cp, cpIdx, internal }) => {
+                const r = resolveProvRow(cp);
+                const tiers = cp.payinTiers || [];
+                const regions = cp.enabledRegions || [];
+                const currencies = cp.processingCurrencies || [];
+                const deal = cp.feeModel || "—";
+                const fc = fmColor(deal);
+
+                // Settlement line
+                const settleParts = [];
+                if (cp.settlementTerms) settleParts.push(cp.settlementTerms);
+                if (cp.settlementFee) settleParts.push("Fee: " + cp.settlementFee);
+                if (cp.settlementMethod) settleParts.push(cp.settlementMethod);
+                if (cp.currency) settleParts.push(cp.currency);
+                const settleStr = settleParts.length > 0 ? settleParts.join(" · ") : "—";
+
+                // Rolling reserve
+                const rrParts = [];
+                if (cp.rollingReservePct) {
+                  rrParts.push(cp.rollingReservePct + "%");
+                  if (cp.rollingReserveTerm) rrParts.push(cp.rollingReserveTerm + " days");
+                  if (cp.rollingReserveCap) rrParts.push("Cap: " + (cp.rollingReserveCapCurrency || "EUR") + " " + cp.rollingReserveCap);
+                }
+                const rrStr = rrParts.length > 0 ? rrParts.join(" / ") : null;
+
+                // Monthly minimum
+                const mmStr = cp.monthlyMinAmount ? ((cp.monthlyMinCurrency || "EUR") + " " + cp.monthlyMinAmount + " " + (cp.monthlyMinTerm || "Monthly")) : null;
+
+                // Internal calcs
+                const provPayinPct = r.linkedSvc ? parseFloat(r.linkedSvc.payinPct) || 0 : 0;
+                const provPayinTx = r.linkedSvc ? parseFloat(r.linkedSvc.payinTxFee) || 0 : 0;
+                const clientPctNum = parseFloat(cp.clientPayinPct) || 0;
+                const clientTxNum = parseFloat(cp.clientPayinTxFee) || 0;
+
+                const infoRow = (label, value, accent) => (
+                  <div style={{ display: "flex", gap: 8, alignItems: "baseline", marginBottom: 3 }}>
+                    <span style={{ fontSize: 10, color: c.textMuted, minWidth: 110, flexShrink: 0 }}>{label}</span>
+                    <span style={{ fontSize: 11, color: accent || c.text, fontWeight: accent ? 600 : 400 }}>{value}</span>
                   </div>
-                ) : (
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead>
-                        <tr style={{ borderBottom: `2px solid ${c.border}` }}>
-                          {["Provider", "Type", "Deal", "Rate", "Settlement"].map(h => (
-                            <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                );
+
+                return (
+                  <div key={cp.id || cpIdx} style={{ background: c.surface, borderRadius: 10, border: "1px solid " + c.border, marginBottom: 10, overflow: "hidden" }}>
+                    {/* Header */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: "1px solid " + c.border, background: c.card }}>
+                      <div>
+                        <span style={{ fontWeight: 700, fontSize: 13, color: c.text }}>{r.provName}</span>
+                        {r.svcName && <span style={{ fontSize: 11, color: c.textMuted, marginLeft: 8 }}>{r.svcName}</span>}
+                        <div style={{ fontSize: 10, color: c.textSecondary, marginTop: 2 }}>{r.typeStr}</div>
+                      </div>
+                      {internal && <span style={pill(deal, fc + "18", fc)}>{deal}</span>}
+                    </div>
+                    {/* Body */}
+                    <div style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
+                        {infoRow("Rate", r.clientRate, c.accent)}
+                        {infoRow("Settlement", settleStr)}
+                        {regions.length > 0 && infoRow("Regions", regions.join(", "))}
+                        {currencies.length > 0 && infoRow("Currencies", currencies.join(", "))}
+                        {rrStr && infoRow("Rolling Reserve", rrStr)}
+                        {mmStr && infoRow("Monthly Min", mmStr)}
+                      </div>
+
+                      {/* Tiers */}
+                      {tiers.length > 0 && (
+                        <div style={{ marginTop: 8, padding: "8px 12px", background: c.bg, borderRadius: 6, border: "1px solid " + c.border }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 4 }}>
+                            {cp.tierType === "targets" ? "Target Tiers (entire volume)" : "Incremental Tiers"}
+                          </div>
+                          {tiers.map((tier, tIdx) => (
+                            <div key={tier.id || tIdx} style={{ display: "flex", gap: 6, fontSize: 10, color: c.textSecondary, marginTop: 2 }}>
+                              <span style={{ color: c.accent }}>→</span>
+                              <span>Up to {tier.upTo || "∞"}</span>
+                              <span style={{ color: c.text, fontWeight: 600 }}>{tier.rate || "—"}%</span>
+                            </div>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {clProviders.map((cp, cpIdx) => {
-                          const linkedProv = providers.find(p => p.id === cp.providerId);
-                          const linkedSvc = linkedProv ? (linkedProv.services || []).find(s => s.id === cp.serviceId) : null;
-                          const provName = linkedProv ? linkedProv.name : "—";
-                          const svcName = linkedSvc ? (linkedSvc.name || "Unnamed") : "";
+                        </div>
+                      )}
 
-                          // Type info
-                          const typeLabels = [];
-                          if (linkedSvc) {
-                            if (linkedSvc.serviceType1) typeLabels.push(linkedSvc.serviceType1);
-                            if (linkedSvc.serviceType2) typeLabels.push(linkedSvc.serviceType2);
-                            if (linkedSvc.cardType) typeLabels.push(linkedSvc.cardType);
-                          }
-                          const typeStr = typeLabels.length > 0 ? typeLabels.join(" · ") : "—";
-                          const hasICC = !!cp.iccPlusPlus;
+                      {/* Internal-only details */}
+                      {internal && (
+                        <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(139,92,246,0.04)", borderRadius: 6, border: "1px solid rgba(139,92,246,0.12)" }}>
+                          {cp.feeModel === "Direct" && r.linkedSvc && (() => {
+                            const provCostParts = [];
+                            if (r.linkedSvc.payinPct) provCostParts.push(r.linkedSvc.payinPct + "%");
+                            if (r.linkedSvc.payinTxFee) provCostParts.push("€" + r.linkedSvc.payinTxFee + " tx");
+                            const provCost = provCostParts.length > 0 ? provCostParts.join(" + ") : "—";
+                            const marginPct = (clientPctNum - provPayinPct).toFixed(2);
+                            const marginTx = (clientTxNum - provPayinTx).toFixed(2);
+                            return (<>
+                              {infoRow("Provider Cost", provCost)}
+                              {infoRow("Our Markup", "+" + marginPct + "% + €" + marginTx + " tx", "#10b981")}
+                            </>);
+                          })()}
+                          {cp.feeModel === "Profit Share" && (() => {
+                            const hardCost = parseFloat(cp.hardCostPayinPct) || 0;
+                            const profitPool = clientPctNum - hardCost;
+                            const sharePct = parseFloat(cp.profitSharePct) || 0;
+                            const provGets = (profitPool * sharePct / 100).toFixed(2);
+                            const weKeep = (profitPool - parseFloat(provGets)).toFixed(2);
+                            return (<>
+                              {infoRow("Hard Cost", (cp.hardCostPayinPct || "—") + "%")}
+                              {infoRow("Provider Share", (cp.profitSharePct || "—") + "%")}
+                              <div style={{ fontSize: 10, color: c.textSecondary, marginTop: 6, padding: "6px 8px", background: c.bg, borderRadius: 4 }}>
+                                Client {clientPctNum}% − Hard Cost {hardCost}% = <b style={{ color: c.text }}>{profitPool.toFixed(2)}%</b> profit
+                                {" → "}Provider gets {provGets}% ({sharePct}%)
+                                {" → "}<b style={{ color: "#10b981" }}>We keep {weKeep}%</b>
+                              </div>
+                            </>);
+                          })()}
+                          {cp.feeModel === "Referral" && (<>
+                            {infoRow("Our Referral %", (cp.referralPct || "—") + "%", "#10b981")}
+                            {cp.referralPct && cp.referralPayinPct && (
+                              <div style={{ fontSize: 10, color: c.textSecondary, marginTop: 4 }}>
+                                Earning: {cp.referralPct}% of client rate ({cp.referralPayinPct}%)
+                                {" = "}<b style={{ color: "#10b981" }}>{((parseFloat(cp.referralPayinPct) || 0) * (parseFloat(cp.referralPct) || 0) / 100).toFixed(3)}%</b> effective
+                              </div>
+                            )}
+                          </>)}
+                          {cp.iccPlusPlus && (
+                            <div style={{ marginTop: 6 }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>ICC++</span>
+                            </div>
+                          )}
 
-                          // Deal / fee model
-                          const deal = cp.feeModel || "—";
-
-                          // Rate display
-                          let rateDisplay = "—";
-                          const tiers = cp.payinTiers || [];
-                          const basePct = cp.clientPayinPct || "";
-                          const baseTx = cp.clientPayinTxFee || "";
-                          if (basePct || baseTx) {
-                            const parts = [];
-                            if (basePct) parts.push(`${basePct}%`);
-                            if (baseTx) parts.push(`${baseTx} tx`);
-                            rateDisplay = parts.join(" + ");
-                          }
-
-                          // Settlement display
-                          const settleParts = [];
-                          if (cp.settlementTerms) settleParts.push(cp.settlementTerms);
-                          if (cp.settlementFee) settleParts.push(`Fee: ${cp.settlementFee}`);
-                          if (cp.settlementMethod) settleParts.push(cp.settlementMethod);
-                          if (cp.settlementCurrency) settleParts.push(cp.settlementCurrency);
-                          const settleStr = settleParts.length > 0 ? settleParts.join(" · ") : "—";
-
-                          // Deal-specific extras
-                          let dealExtra = "";
-                          if (cp.feeModel === "Profit Share") {
-                            const parts = [];
-                            if (cp.hardCostPayinPct) parts.push(`Hard Cost: ${cp.hardCostPayinPct}%`);
-                            if (cp.profitSharePct) parts.push(`Share: ${cp.profitSharePct}%`);
-                            dealExtra = parts.join(" · ");
-                          } else if (cp.feeModel === "Referral") {
-                            if (cp.referralPct) dealExtra = `Referral: ${cp.referralPct}%`;
-                          }
-
-                          const feeModelColor = deal === "Direct" ? "#34d399" : deal === "Profit Share" ? "#a78bfa" : deal === "Referral" ? "#fbbf24" : c.textMuted;
-
-                          return (
-                            <React.Fragment key={cp.id || cpIdx}>
-                              <tr style={{ borderBottom: `1px solid ${c.border}20` }}>
-                                <td style={{ padding: "12px 12px", verticalAlign: "top" }}>
-                                  <div style={{ fontWeight: 600, color: c.text }}>{provName}</div>
-                                  {svcName && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{svcName}</div>}
-                                </td>
-                                <td style={{ padding: "12px 12px", verticalAlign: "top", color: c.textSecondary }}>
-                                  <div>{typeStr}</div>
-                                  {hasICC && <div style={{ marginTop: 3 }}><span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>ICC++</span></div>}
-                                </td>
-                                <td style={{ padding: "12px 12px", verticalAlign: "top" }}>
-                                  <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: `${feeModelColor}15`, color: feeModelColor }}>{deal}</span>
-                                  {dealExtra && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 4 }}>{dealExtra}</div>}
-                                </td>
-                                <td style={{ padding: "12px 12px", verticalAlign: "top" }}>
-                                  <div style={{ fontWeight: 600, color: c.text }}>{rateDisplay}</div>
-                                  {tiers.length > 0 && (
-                                    <div style={{ marginTop: 4 }}>
-                                      {tiers.map((tier, tIdx) => (
-                                        <div key={tier.id || tIdx} style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>
-                                          <span style={{ color: c.accent }}>↳</span> Up to {tier.upTo || "∞"} → {tier.rate || "—"}%
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </td>
-                                <td style={{ padding: "12px 12px", verticalAlign: "top", fontSize: 11, color: c.textSecondary }}>{settleStr}</td>
-                              </tr>
-                            </React.Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                          {/* Profit summary */}
+                          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(139,92,246,0.12)", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted }}>NET MARGIN:</span>
+                            {cp.feeModel === "Direct" && (
+                              <span style={{ fontSize: 12, fontWeight: 800, color: "#10b981" }}>
+                                {(clientPctNum - provPayinPct).toFixed(2)}% + €{(clientTxNum - provPayinTx).toFixed(2)} tx
+                              </span>
+                            )}
+                            {cp.feeModel === "Profit Share" && (() => {
+                              const hardCost = parseFloat(cp.hardCostPayinPct) || 0;
+                              const profitPool = clientPctNum - hardCost;
+                              const sharePct = parseFloat(cp.profitSharePct) || 0;
+                              const weKeep = (profitPool - (profitPool * sharePct / 100)).toFixed(2);
+                              return <span style={{ fontSize: 12, fontWeight: 800, color: "#10b981" }}>{weKeep}%</span>;
+                            })()}
+                            {cp.feeModel === "Referral" && (
+                              <span style={{ fontSize: 12, fontWeight: 800, color: "#10b981" }}>
+                                {cp.referralPct ? (((parseFloat(cp.referralPayinPct) || 0) * (parseFloat(cp.referralPct) || 0) / 100).toFixed(3) + "%") : "—"}
+                              </span>
+                            )}
+                            {!cp.feeModel && <span style={{ fontSize: 12, color: c.textMuted }}>—</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
+                );
+              };
+
+              return (<>
+
+              {/* Download Buttons */}
+              <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                <button onClick={() => downloadRateCard("client")} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "9px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 14 }}>{"↓"}</span> Download Client Rate Card
+                </button>
+                <button onClick={() => downloadRateCard("internal")} style={{ background: "#7c3aed", border: "none", color: "#fff", borderRadius: 8, padding: "9px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 14 }}>{"↓"}</span> Download Internal Rate Card
+                </button>
               </div>
+
+              {/* ===== SECTION 1: RATE CARD — CLIENT ===== */}
+              <div style={{ ...sectionCard, borderColor: c.accent + "30" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+                  <div style={{ width: 4, height: 24, borderRadius: 2, background: c.accent }} />
+                  <div style={{ fontSize: 14, fontWeight: 800, color: c.accent, textTransform: "uppercase", letterSpacing: "0.04em" }}>Rate Card — Client</div>
+                </div>
+
+                {/* Gateway Fees */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 18 }}>
+                  <div style={{ background: c.surface, borderRadius: 8, border: "1px solid " + c.border, padding: "12px 16px" }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Setup Fee</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: corp.setupFeeWaived ? "#10b981" : c.text, marginTop: 4 }}>
+                      {corp.setupFeeWaived ? "Waived" : (corp.setupFee ? "€" + corp.setupFee : "—")}
+                    </div>
+                  </div>
+                  <div style={{ background: c.surface, borderRadius: 8, border: "1px solid " + c.border, padding: "12px 16px" }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Monthly Fee</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginTop: 4 }}>
+                      {corp.monthlyFee ? "€" + corp.monthlyFee : "—"}
+                    </div>
+                    {corp.monthlyFeeWaivedAfter && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>Waived after €{corp.monthlyFeeWaivedAfter} volume</div>}
+                  </div>
+                  <div style={{ background: c.surface, borderRadius: 8, border: "1px solid " + c.border, padding: "12px 16px" }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Transaction Fee</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: c.text, marginTop: 4 }}>
+                      {corp.transactionFee ? "€" + corp.transactionFee : "—"}
+                    </div>
+                    {corp.transactionFee && <div style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>Per transaction</div>}
+                  </div>
+                </div>
+
+                {/* Provider Cards — Client view */}
+                {clProviders.length === 0 ? (
+                  <div style={{ background: c.surface, borderRadius: 10, padding: 30, textAlign: "center", border: "1px dashed " + c.border }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 4 }}>No providers configured</div>
+                    <div style={{ fontSize: 12, color: c.textMuted }}>Add providers in the Providers & Deal tab to see rates here</div>
+                  </div>
+                ) : clProviders.map((cp, cpIdx) => <ProviderCard key={cp.id || cpIdx} cp={cp} cpIdx={cpIdx} internal={false} />)}
+              </div>
+
+              {/* ===== SECTION 2: RATE CARD — INTERNAL ===== */}
+              <div style={{ ...sectionCard, borderColor: "rgba(139,92,246,0.3)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+                  <div style={{ width: 4, height: 24, borderRadius: 2, background: "#7c3aed" }} />
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "#7c3aed", textTransform: "uppercase", letterSpacing: "0.04em" }}>Rate Card — Internal</div>
+                </div>
+
+                {clProviders.length === 0 ? (
+                  <div style={{ background: c.surface, borderRadius: 10, padding: 30, textAlign: "center", border: "1px dashed " + c.border }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: c.text, marginBottom: 4 }}>No providers configured</div>
+                    <div style={{ fontSize: 12, color: c.textMuted }}>Add providers in the Providers & Deal tab</div>
+                  </div>
+                ) : clProviders.map((cp, cpIdx) => <ProviderCard key={cp.id || cpIdx} cp={cp} cpIdx={cpIdx} internal={true} />)}
+              </div>
+
               </>);
             })()}
 
