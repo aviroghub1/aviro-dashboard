@@ -1548,10 +1548,10 @@ function AviroDashboard() {
   const updateClient = (id, field, val) => setGatewayClients(gatewayClients.map(cl => cl.id === id ? { ...cl, [field]: val } : cl));
 
   const renderClients = () => {
-    const inputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
-    const labelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
-    const sectionCard = { background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 22, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" };
-    const sectionTitle = { fontSize: 13, fontWeight: 700, color: c.accent, margin: "0 0 12px 0", textTransform: "uppercase" };
+    const inputStyle = { fontSize: 13, padding: "9px 14px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" };
+    const labelStyle = { fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 5, letterSpacing: "0.03em" };
+    const sectionCard = { background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 26, marginBottom: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" };
+    const sectionTitle = { fontSize: 14, fontWeight: 700, color: c.accent, margin: "0 0 14px 0", textTransform: "uppercase", letterSpacing: "0.03em" };
 
     // ===== CLIENT DETAIL VIEW =====
     if (selectedClient) {
@@ -1566,22 +1566,23 @@ function AviroDashboard() {
 
       return (
         <div>
-          <div style={{ position: "sticky", top: 0, zIndex: 20, background: c.bg, paddingTop: 8, paddingBottom: 8, marginBottom: 8, borderBottom: `1px solid ${c.border}` }}>
-            <button onClick={() => { setSelectedClient(null); setEditingClientField(null); }} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 8, padding: 0 }}>&larr; Back to Client Portal</button>
+          <div style={{ position: "sticky", top: 0, zIndex: 20, background: c.bg, paddingTop: 12, paddingBottom: 12, marginBottom: 12, borderBottom: `1px solid ${c.border}` }}>
+            <button onClick={() => { setSelectedClient(null); setEditingClientField(null); }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 10, padding: "6px 16px", borderRadius: 8, fontWeight: 600 }}>&larr; Back to Client Portal</button>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h2 style={{ fontSize: 20, fontWeight: 700, color: c.text, margin: 0 }}>{cl.name}</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 800, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>{cl.name}</h2>
               <button onClick={() => {
                 if (confirm("Delete this client?")) {
                   setGatewayClients(gatewayClients.filter(x => x.id !== cl.id));
                   setSelectedClient(null);
                 }
-              }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete Client</button>
+              }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Delete Client</button>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
               {(() => {
-                const statuses = ["active", "onboarding", "inactive"];
-                const statusColors = { active: "#34d399", onboarding: "#fbbf24", inactive: "#6b7280" };
+                const statuses = ["active", "onboarding", "discussion", "inactive"];
+                const statusColors = { active: "#34d399", onboarding: "#fbbf24", discussion: "#60a5fa", inactive: "#6b7280" };
+                const statusLabels = { active: "Active", onboarding: "Onboarding", discussion: "In Discussion", inactive: "Inactive" };
                 const current = cl.status || "onboarding";
                 return (
                   <div style={{ display: "flex", gap: 4 }}>
@@ -1590,8 +1591,8 @@ function AviroDashboard() {
                         background: current === s ? `${statusColors[s]}20` : "transparent",
                         border: `1px solid ${current === s ? statusColors[s] : c.border}`,
                         color: current === s ? statusColors[s] : c.textMuted,
-                        borderRadius: 6, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600, textTransform: "capitalize",
-                      }}>{s}</button>
+                        borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                      }}>{statusLabels[s] || s}</button>
                     ))}
                   </div>
                 );
@@ -1599,37 +1600,46 @@ function AviroDashboard() {
           </div>
 
           {/* Sub-tab navigation */}
-          <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${c.border}`, paddingBottom: 0 }}>
-            {[{ key: "corporate", label: "Corporate Details" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }].map(tab => {
+          <div style={{ display: "flex", gap: 6, marginBottom: 24, borderBottom: `1px solid ${c.border}`, paddingBottom: 0 }}>
+            {[{ key: "corporate", label: "Entity Information & KYB" }, { key: "contracts", label: "Contracts" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }].map(tab => {
               const sel = clientDetailTab === tab.key;
-              return <button key={tab.key} onClick={() => setClientDetailTab(tab.key)} style={{ padding: "10px 20px", fontSize: 12, fontWeight: sel ? 700 : 500, color: sel ? c.accent : c.textMuted, background: sel ? `${c.accent}12` : "transparent", border: "none", borderBottom: sel ? `2px solid ${c.accent}` : "2px solid transparent", cursor: "pointer", marginBottom: -1, transition: "all 0.15s" }}>{tab.label}</button>;
+              return <button key={tab.key} onClick={() => setClientDetailTab(tab.key)} style={{ padding: "12px 22px", fontSize: 13, fontWeight: sel ? 700 : 500, color: sel ? c.accent : c.textMuted, background: sel ? `${c.accent}12` : "transparent", border: "none", borderBottom: sel ? `2px solid ${c.accent}` : "2px solid transparent", cursor: "pointer", marginBottom: -1, transition: "all 0.15s" }}>{tab.label}</button>;
             })}
           </div>
 
           {/* Collapsible section helper */}
           {(() => {
-            const collapsed = cl.collapsedSections || { entity: true };
+            const collapsed = cl.collapsedSections || {};
             const toggleSection = (key) => updateClient(cl.id, "collapsedSections", { ...collapsed, [key]: !collapsed[key] });
             const SectionHeader = ({ sectionKey, title, extra, badge }) => (
-              <div onClick={() => toggleSection(sectionKey)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: collapsed[sectionKey] ? 0 : 12, userSelect: "none" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 11, color: c.textMuted, transition: "transform 0.15s", display: "inline-block", transform: collapsed[sectionKey] ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+              <div onClick={() => toggleSection(sectionKey)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: collapsed[sectionKey] ? 0 : 16, userSelect: "none", padding: "4px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 13, color: c.textMuted, transition: "transform 0.15s", display: "inline-block", transform: collapsed[sectionKey] ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
                   <h3 style={sectionTitle}>{title}</h3>
-                  {badge && <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 400, textTransform: "none" }}>{badge}</span>}
+                  {badge && <span style={{ fontSize: 12, color: c.textMuted, fontWeight: 500, textTransform: "none" }}>{badge}</span>}
                 </div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={e => e.stopPropagation()}>{extra}</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }} onClick={e => e.stopPropagation()}>{extra}</div>
               </div>
             );
 
             return (<>
 
-            {/* ===== CORPORATE DETAILS TAB ===== */}
+            {/* ===== ENTITY INFORMATION & KYB TAB ===== */}
             {clientDetailTab === "corporate" && (<>
+
+            {/* Client Type */}
+            <div style={sectionCard}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: c.accent, margin: "0 0 14px 0", textTransform: "uppercase", letterSpacing: "0.03em" }}>Client Type</div>
+              <select value={cl.clientType || ""} onChange={e => updateClient(cl.id, "clientType", e.target.value)} style={{ ...inputStyle, width: "100%", fontSize: 14, padding: "10px 14px", borderRadius: 8 }}>
+                <option value="">— Select Type —</option>
+                {CLIENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
 
             {/* Entity Details (combined: details + licensed + UBO + director + KYB per entity) */}
             <div style={sectionCard}>
               <SectionHeader sectionKey="entity" title="Entity Details" badge={`${(cl.entities || [{ id: "primary" }]).length} ${(cl.entities || [{ id: "primary" }]).length === 1 ? "entity" : "entities"}`} extra={
-                !collapsed.entity && <button onClick={() => updateClient(cl.id, "entities", [...(cl.entities || [{ id: "primary", jurisdiction: cl.jurisdiction || "", companyNumber: cl.companyNumber || "", registeredAddress: cl.registeredAddress || "", isLicensed: cl.isLicensed || false, licenseJurisdiction: cl.licenseJurisdiction || "", licenseNumber: cl.licenseNumber || "", licenseExpiry: cl.licenseExpiry || "", uboIsEntity: cl.uboIsEntity || false, uboEntityName: cl.uboEntityName || "", ubo: cl.ubo || "", director: cl.director || "", kybDocuments: cl.kybDocuments || [] }]), { id: `ent-${Date.now()}`, entityName: "", jurisdiction: "", companyNumber: "", registeredAddress: "", isLicensed: false, licenseJurisdiction: "", licenseNumber: "", licenseExpiry: "", uboIsEntity: false, uboEntityName: "", uboEntity: null, ubo: "", director: "", kybDocuments: [] }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Entity</button>
+                !collapsed.entity && <button onClick={() => updateClient(cl.id, "entities", [...(cl.entities || [{ id: "primary", jurisdiction: cl.jurisdiction || "", companyNumber: cl.companyNumber || "", registeredAddress: cl.registeredAddress || "", isLicensed: cl.isLicensed || false, licenseJurisdiction: cl.licenseJurisdiction || "", licenseNumber: cl.licenseNumber || "", licenseExpiry: cl.licenseExpiry || "", uboIsEntity: cl.uboIsEntity || false, uboEntityName: cl.uboEntityName || "", ubo: cl.ubo || "", director: cl.director || "", kybDocuments: cl.kybDocuments || [] }]), { id: `ent-${Date.now()}`, entityName: "", jurisdiction: "", companyNumber: "", registeredAddress: "", isLicensed: false, licenseJurisdiction: "", licenseNumber: "", licenseExpiry: "", uboIsEntity: false, uboEntityName: "", uboEntity: null, ubo: "", director: "", kybDocuments: [] }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Entity</button>
               } />
               {!collapsed.entity && (() => {
                 const ents = cl.entities || [{ id: "primary", entityName: "", jurisdiction: cl.jurisdiction || "", companyNumber: cl.companyNumber || "", registeredAddress: cl.registeredAddress || "", isLicensed: cl.isLicensed || false, licenseJurisdiction: cl.licenseJurisdiction || "", licenseNumber: cl.licenseNumber || "", licenseExpiry: cl.licenseExpiry || "", uboIsEntity: cl.uboIsEntity || false, uboEntityName: cl.uboEntityName || "", uboEntity: null, ubo: cl.ubo || "", director: cl.director || "", kybDocuments: cl.kybDocuments || [] }];
@@ -1689,7 +1699,7 @@ function AviroDashboard() {
                                 background: (ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No") ? `${c.accent}20` : "transparent",
                                 border: `1px solid ${(ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No") ? c.accent : c.border}`,
                                 color: (ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No") ? c.accent : c.textMuted,
-                                borderRadius: 5, padding: "2px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600,
+                                borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600,
                               }}>{opt}</button>
                             ))}
                           </div>
@@ -1769,9 +1779,9 @@ function AviroDashboard() {
                     )}
 
                     {/* KYB Documents for this entity */}
-                    <div style={{ marginTop: 12, borderTop: `1px solid ${c.border}`, paddingTop: 12 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>KYB Documents <span style={{ fontWeight: 400, color: c.textMuted, textTransform: "none" }}>{docs.filter(d => d.fileUrl).length}/{docs.length} uploaded</span></div>
+                    <div style={{ marginTop: 16, borderTop: `1px solid ${c.border}`, paddingTop: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.03em" }}>KYB Documents <span style={{ fontWeight: 500, color: c.textMuted, textTransform: "none", fontSize: 12 }}>{docs.filter(d => d.fileUrl).length}/{docs.length} uploaded</span></div>
                         <button onClick={async () => {
                           if (!window.JSZip) { alert("JSZip not loaded"); return; }
                           const zip = new window.JSZip();
@@ -1780,13 +1790,13 @@ function AviroDashboard() {
                           for (const doc of withFiles) { try { const r = await fetch(doc.fileUrl); if (r.ok) zip.file(doc.fileName || doc.name + ".pdf", await r.blob()); } catch(e){} }
                           const blob = await zip.generateAsync({ type: "blob" });
                           window.saveAs(blob, cl.name.replace(/[^a-zA-Z0-9]/g, "_") + "_Entity" + (isSubEntity ? "_UBO" : "") + "_KYB.zip");
-                        }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 10, fontWeight: 600 }}>↓ Download KYB Pack</button>
+                        }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>↓ Download KYB Pack</button>
                       </div>
                       {/* Missing docs quick-add */}
                       {missingDocs.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
                           {missingDocs.map(d => (
-                            <button key={d} onClick={() => updateEnt(entId, "kybDocuments", [...docs, { id: `kd-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, name: d, startDate: "", renewalMonths: "", fileName: "", fileSize: 0, fileUrl: "", uploadStatus: null }])} style={{ background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer", fontSize: 9 }}>+ {d.length > 35 ? d.slice(0,33) + "..." : d}</button>
+                            <button key={d} onClick={() => updateEnt(entId, "kybDocuments", [...docs, { id: `kd-${Date.now()}-${Math.random().toString(36).slice(2,5)}`, name: d, startDate: "", renewalMonths: "", fileName: "", fileSize: 0, fileUrl: "", uploadStatus: null }])} style={{ background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 500 }}>+ {d.length > 35 ? d.slice(0,33) + "..." : d}</button>
                           ))}
                         </div>
                       )}
@@ -1800,19 +1810,19 @@ function AviroDashboard() {
                             onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = `2px solid ${c.accent}`; }}
                             onDragLeave={e => { e.currentTarget.style.outline = "none"; }}
                             onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = "none"; if (e.dataTransfer.files[0]) handleEntKybUpload(entId, doc.id, e.dataTransfer.files[0]); }}
-                            style={{ borderLeft: `3px solid ${sc}`, padding: "8px 12px", marginBottom: 6, background: `${sc}08`, borderRadius: "0 6px 6px 0", border: `1px solid ${sc}25` }}>
+                            style={{ borderLeft: `3px solid ${sc}`, padding: "12px 16px", marginBottom: 8, background: `${sc}08`, borderRadius: "0 8px 8px 0", border: `1px solid ${sc}25` }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                               <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: c.text }}>{doc.name || "Untitled"}</div>
-                                {!isEd && <div style={{ fontSize: 10, color: c.textMuted }}>
+                                <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{doc.name || "Untitled"}</div>
+                                {!isEd && <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2 }}>
                                   {doc.startDate && <span>{doc.startDate}</span>}{renewal && <span> · Renews {renewal}</span>}
                                   {doc.fileName && <span> · <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ color: c.accent, textDecoration: "none" }}>↓ {doc.fileName}</a> {formatFileSize(doc.fileSize)}</span>}
                                 </div>}
                               </div>
-                              <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                                {doc.fileUrl && <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 9, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "2px 6px", border: `1px solid ${c.accent}`, borderRadius: 4 }}>↓</a>}
-                                <button onClick={() => setEditingClientField(isEd ? null : `kd-${doc.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 9, borderRadius: 4, padding: "2px 6px" }}>{isEd ? "Done" : "Edit"}</button>
-                                <button onClick={() => updateEnt(entId, "kybDocuments", docs.filter(d => d.id !== doc.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "2px 5px", cursor: "pointer", fontSize: 9 }}>✕</button>
+                              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                {doc.fileUrl && <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "5px 10px", border: `1px solid ${c.accent}`, borderRadius: 6 }}>↓</a>}
+                                <button onClick={() => setEditingClientField(isEd ? null : `kd-${doc.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 11, borderRadius: 6, padding: "5px 10px", fontWeight: 600 }}>{isEd ? "Done" : "Edit"}</button>
+                                <button onClick={() => updateEnt(entId, "kybDocuments", docs.filter(d => d.id !== doc.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕</button>
                               </div>
                             </div>
                             {isEd && (
@@ -1840,16 +1850,19 @@ function AviroDashboard() {
                         const newDoc = { id: `kd-${Date.now()}`, name: "", startDate: "", renewalMonths: "", fileName: "", fileSize: 0, fileUrl: "", uploadStatus: null };
                         updateEnt(entId, "kybDocuments", [...docs, newDoc]);
                         setEditingClientField(`kd-${newDoc.id}`);
-                      }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 10, fontWeight: 600, marginTop: 4 }}>+ Add Document</button>
+                      }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600, marginTop: 8 }}>+ Add Document</button>
                     </div>
                   </>);
                 };
 
                 return ents.map((ent, idx) => (
-                  <div key={ent.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${c.border}`, padding: 14, marginBottom: idx < ents.length - 1 ? 10 : 0 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>Entity {idx + 1}{ent.entityName ? ` — ${ent.entityName}` : ""}</span>
-                      {ents.length > 1 && <button onClick={() => updateClient(cl.id, "entities", ents.filter(e => e.id !== ent.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 10 }}>Remove</button>}
+                  <div key={ent.id} style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: idx < ents.length - 1 ? 14 : 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 4, height: 24, borderRadius: 2, background: c.accent }} />
+                        <span style={{ fontSize: 15, fontWeight: 700, color: c.text }}>Entity {idx + 1}{ent.entityName ? ` — ${ent.entityName}` : ""}</span>
+                      </div>
+                      {ents.length > 1 && <button onClick={() => updateClient(cl.id, "entities", ents.filter(e => e.id !== ent.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Remove</button>}
                     </div>
                     {renderEntityFields(ent, ent.id, false)}
                   </div>
@@ -1857,135 +1870,130 @@ function AviroDashboard() {
               })()}
             </div>
 
-            {/* Client Type */}
-            <div style={sectionCard}>
-              <SectionHeader sectionKey="type" title="Client Type" badge={cl.clientType || ""} />
-              {!collapsed.type && (
-                <select value={cl.clientType || ""} onChange={e => updateClient(cl.id, "clientType", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
-                  <option value="">— Select Type —</option>
-                  {CLIENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              )}
-            </div>
+            </>)}
 
-            {/* Agreements */}
-            <div style={sectionCard}>
-              <SectionHeader sectionKey="agreements" title="Agreements" badge={`${(cl.agreements || []).length}`} extra={
-                !collapsed.agreements && <button onClick={() => {
-                  const newAg = { id: `clag-${Date.now()}`, name: "", startDate: "", expiryDate: "", fileName: "", fileUrl: "" };
-                  updateClient(cl.id, "agreements", [...(cl.agreements || []), newAg]);
-                  setEditingClientField(`ag-${newAg.id}`);
-                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add</button>
-              } />
-              {!collapsed.agreements && (<>
-                {(cl.agreements || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted }}>No agreements</div>}
-                {(cl.agreements || []).map(ag => {
-                  const isEd = editingClientField === `ag-${ag.id}`;
-                  const isExpired = ag.expiryDate && new Date(ag.expiryDate) < new Date();
-                  const expiringSoon = ag.expiryDate && !isExpired && (new Date(ag.expiryDate) - new Date()) < 30 * 86400000;
-                  return (
-                    <div key={ag.id} style={{ background: c.surface, borderRadius: 8, border: `1px solid ${isExpired ? "rgba(248,113,113,0.2)" : expiringSoon ? "rgba(245,158,11,0.3)" : c.border}`, padding: 12, marginBottom: 8 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Agreement"}</div>
-                            {isExpired && <span style={{ fontSize: 9, fontWeight: 700, color: "#f87171", background: "rgba(248,113,113,0.08)", padding: "2px 6px", borderRadius: 4 }}>EXPIRED</span>}
-                            {expiringSoon && <span style={{ fontSize: 9, fontWeight: 700, color: "#fbbf24", background: "rgba(245,158,11,0.1)", padding: "2px 6px", borderRadius: 4 }}>EXPIRING SOON</span>}
-                          </div>
-                          <div style={{ fontSize: 11, color: c.textMuted, marginTop: 2, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                            {ag.startDate && <span>Start: {ag.startDate}</span>}
-                            {ag.expiryDate && <span>· Expires: {ag.expiryDate}</span>}
-                            {ag.startDate && !ag.expiryDate && <span>· No expiry</span>}
-                            {ag.fileUrl && <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {ag.fileName || "Download"}</a>}
-                          </div>
+            {/* ===== CONTRACTS TAB (grouped by entity) ===== */}
+            {clientDetailTab === "contracts" && (() => {
+              const ents = cl.entities || [{ id: "primary", entityName: cl.name }];
+              const allAgreements = cl.agreements || [];
+              const fmtSize = (bytes) => { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
+              const handleContractUpload = (agId, file) => {
+                if (!file || !supabaseUrl || !supabaseKey) { if (!supabaseUrl || !supabaseKey) alert("Connect to Supabase database first"); return; }
+                const safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
+                const filePath = "clients/" + safeName + "/agreements/" + agId + "_" + Date.now() + "_" + file.name;
+                updateClient(cl.id, "agreements", allAgreements.map(a => a.id === agId ? { ...a, uploadStatus: "uploading" } : a));
+                fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+                  method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file,
+                }).then(r => {
+                  if (r.ok) {
+                    const url = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+                    updateClient(cl.id, "agreements", allAgreements.map(a => a.id === agId ? { ...a, fileName: file.name, fileSize: file.size, fileUrl: url, uploadStatus: null } : a));
+                  } else {
+                    updateClient(cl.id, "agreements", allAgreements.map(a => a.id === agId ? { ...a, uploadStatus: null } : a));
+                    alert("Upload failed — check Supabase storage is configured");
+                  }
+                }).catch(() => {
+                  updateClient(cl.id, "agreements", allAgreements.map(a => a.id === agId ? { ...a, uploadStatus: null } : a));
+                });
+              };
+
+              const renderContract = (ag) => {
+                const isEd = editingClientField === `ag-${ag.id}`;
+                const isExpired = ag.expiryDate && new Date(ag.expiryDate) < new Date();
+                const expiringSoon = ag.expiryDate && !isExpired && (new Date(ag.expiryDate) - new Date()) < 30 * 86400000;
+                return (
+                  <div key={ag.id} style={{ background: c.surface, borderRadius: 10, border: `1px solid ${isExpired ? "rgba(248,113,113,0.25)" : expiringSoon ? "rgba(245,158,11,0.3)" : c.border}`, padding: 16, marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{ag.name || "Untitled Contract"}</div>
+                          {isExpired && <span style={{ fontSize: 10, fontWeight: 700, color: "#f87171", background: "rgba(248,113,113,0.08)", padding: "3px 8px", borderRadius: 6 }}>EXPIRED</span>}
+                          {expiringSoon && <span style={{ fontSize: 10, fontWeight: 700, color: "#fbbf24", background: "rgba(245,158,11,0.1)", padding: "3px 8px", borderRadius: 6 }}>EXPIRING SOON</span>}
                         </div>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          <button onClick={() => setEditingClientField(isEd ? null : `ag-${ag.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 8px" }}>{isEd ? "Done" : "Edit"}</button>
-                          <button onClick={() => updateClient(cl.id, "agreements", (cl.agreements || []).filter(a => a.id !== ag.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 6px", cursor: "pointer", fontSize: 10 }}>✕</button>
+                        <div style={{ fontSize: 12, color: c.textMuted, marginTop: 4, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                          {ag.startDate && <span>Start: {ag.startDate}</span>}
+                          {ag.expiryDate && <span>· Expires: {ag.expiryDate}</span>}
+                          {ag.startDate && !ag.expiryDate && <span>· No expiry</span>}
+                          {ag.fileUrl && <a href={ag.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {ag.fileName || "Download"}</a>}
                         </div>
                       </div>
-                      {isEd && (
-                        <div style={{ marginTop: 10 }}>
-                          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-                            <div><label style={labelStyle}>Agreement Name</label><input value={ag.name || ""} onChange={e => {
-                              const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, name: e.target.value } : a);
-                              updateClient(cl.id, "agreements", upd);
-                            }} style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div><label style={labelStyle}>Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => {
-                              const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, startDate: e.target.value } : a);
-                              updateClient(cl.id, "agreements", upd);
-                            }} style={{ ...inputStyle, width: "100%" }} /></div>
-                            <div><label style={labelStyle}>Expiry Date</label><input type="date" value={ag.expiryDate || ""} onChange={e => {
-                              const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, expiryDate: e.target.value } : a);
-                              updateClient(cl.id, "agreements", upd);
-                            }} style={{ ...inputStyle, width: "100%" }} placeholder="Leave blank if none" /></div>
-                          </div>
-                          {/* Drag-and-drop file upload zone */}
-                          {(() => {
-                            const handleAgUpload = (file) => {
-                              if (!file || !supabaseUrl || !supabaseKey) { if (!supabaseUrl || !supabaseKey) alert("Connect to Supabase database first"); return; }
-                              const safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
-                              const filePath = "clients/" + safeName + "/agreements/" + ag.id + "_" + Date.now() + "_" + file.name;
-                              const upd1 = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, uploadStatus: "uploading" } : a);
-                              updateClient(cl.id, "agreements", upd1);
-                              fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
-                                method: "POST",
-                                headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" },
-                                body: file,
-                              }).then(r => {
-                                if (r.ok) {
-                                  const url = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
-                                  const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: file.name, fileSize: file.size, fileUrl: url, uploadStatus: null } : a);
-                                  updateClient(cl.id, "agreements", upd);
-                                } else {
-                                  const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, uploadStatus: null } : a);
-                                  updateClient(cl.id, "agreements", upd);
-                                  alert("Upload failed — check Supabase storage is configured");
-                                }
-                              }).catch(() => {
-                                const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, uploadStatus: null } : a);
-                                updateClient(cl.id, "agreements", upd);
-                              });
-                            };
-                            const fmtSize = (bytes) => { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
-                            return (
-                              <div>
-                                <label style={labelStyle}>Document</label>
-                                <div
-                                  onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; e.currentTarget.style.background = `${c.accent}15`; }}
-                                  onDragLeave={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; e.currentTarget.style.background = c.surface; }}
-                                  onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; e.currentTarget.style.background = c.surface; if (e.dataTransfer.files[0]) handleAgUpload(e.dataTransfer.files[0]); }}
-                                  onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = ev => { if (ev.target.files[0]) handleAgUpload(ev.target.files[0]); }; inp.click(); }}
-                                  style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: ag.fileName ? "8px 12px" : "16px 12px", textAlign: "center", background: c.surface, cursor: "pointer", transition: "all 0.2s", marginTop: 4 }}
-                                >
-                                  {ag.uploadStatus === "uploading" ? (
-                                    <span style={{ fontSize: 11, color: c.accent }}>Uploading...</span>
-                                  ) : ag.fileName ? (
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                                      <a href={ag.fileUrl} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {ag.fileName}</a>
-                                      {ag.fileSize > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{fmtSize(ag.fileSize)}</span>}
-                                      <span style={{ fontSize: 10, color: c.textMuted }}>— click or drag to replace</span>
-                                      <button onClick={e => { e.stopPropagation(); const upd = (cl.agreements || []).map(a => a.id === ag.id ? { ...a, fileName: "", fileUrl: "", fileSize: 0 } : a); updateClient(cl.id, "agreements", upd); }} style={{ fontSize: 9, color: "#f87171", background: "rgba(248,113,113,0.06)", border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>Remove</button>
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 2 }}>Drop file here or click to browse</div>
-                                      <div style={{ fontSize: 10, color: c.textMuted }}>PDF, image, or any document file</div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })()}
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => setEditingClientField(isEd ? null : `ag-${ag.id}`)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 11, borderRadius: 6, padding: "5px 12px", fontWeight: 600 }}>{isEd ? "Done" : "Edit"}</button>
+                        <button onClick={() => updateClient(cl.id, "agreements", allAgreements.filter(a => a.id !== ag.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>✕</button>
+                      </div>
+                    </div>
+                    {isEd && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                          <div><label style={labelStyle}>Contract Name</label><input value={ag.name || ""} onChange={e => {
+                            updateClient(cl.id, "agreements", allAgreements.map(a => a.id === ag.id ? { ...a, name: e.target.value } : a));
+                          }} style={{ ...inputStyle, width: "100%", fontSize: 13, padding: "8px 12px" }} /></div>
+                          <div><label style={labelStyle}>Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => {
+                            updateClient(cl.id, "agreements", allAgreements.map(a => a.id === ag.id ? { ...a, startDate: e.target.value } : a));
+                          }} style={{ ...inputStyle, width: "100%", fontSize: 13, padding: "8px 12px" }} /></div>
+                          <div><label style={labelStyle}>Expiry Date</label><input type="date" value={ag.expiryDate || ""} onChange={e => {
+                            updateClient(cl.id, "agreements", allAgreements.map(a => a.id === ag.id ? { ...a, expiryDate: e.target.value } : a));
+                          }} style={{ ...inputStyle, width: "100%", fontSize: 13, padding: "8px 12px" }} placeholder="Leave blank if none" /></div>
                         </div>
-                      )}
+                        <label style={labelStyle}>Document</label>
+                        <div
+                          onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; e.currentTarget.style.background = `${c.accent}15`; }}
+                          onDragLeave={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; e.currentTarget.style.background = c.surface; }}
+                          onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = c.border; e.currentTarget.style.background = c.surface; if (e.dataTransfer.files[0]) handleContractUpload(ag.id, e.dataTransfer.files[0]); }}
+                          onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = ev => { if (ev.target.files[0]) handleContractUpload(ag.id, ev.target.files[0]); }; inp.click(); }}
+                          style={{ border: `2px dashed ${c.border}`, borderRadius: 10, padding: ag.fileName ? "10px 14px" : "20px 14px", textAlign: "center", background: c.surface, cursor: "pointer", transition: "all 0.2s", marginTop: 4 }}
+                        >
+                          {ag.uploadStatus === "uploading" ? (
+                            <span style={{ fontSize: 12, color: c.accent }}>Uploading...</span>
+                          ) : ag.fileName ? (
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                              <a href={ag.fileUrl} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ fontSize: 12, color: c.accent, fontWeight: 600, textDecoration: "none" }}>↓ {ag.fileName}</a>
+                              {ag.fileSize > 0 && <span style={{ fontSize: 11, color: c.textMuted }}>{fmtSize(ag.fileSize)}</span>}
+                              <span style={{ fontSize: 11, color: c.textMuted }}>— click or drag to replace</span>
+                              <button onClick={e => { e.stopPropagation(); updateClient(cl.id, "agreements", allAgreements.map(a => a.id === ag.id ? { ...a, fileName: "", fileUrl: "", fileSize: 0 } : a)); }} style={{ fontSize: 10, color: "#f87171", background: "rgba(248,113,113,0.06)", border: "none", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Remove</button>
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ fontSize: 13, color: c.textSecondary, marginBottom: 3 }}>Drop file here or click to browse</div>
+                              <div style={{ fontSize: 11, color: c.textMuted }}>PDF, image, or any document file</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              return (<>
+                {ents.map((ent, entIdx) => {
+                  const entName = ent.entityName || `Entity ${entIdx + 1}`;
+                  const entContracts = allAgreements.filter(a => a.entityId === ent.id);
+                  const unassigned = entIdx === 0 ? allAgreements.filter(a => !a.entityId || !ents.some(e => e.id === a.entityId)) : [];
+                  const allForEnt = [...entContracts, ...unassigned];
+                  return (
+                    <div key={ent.id} style={sectionCard}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ width: 4, height: 28, borderRadius: 2, background: c.accent }} />
+                          <div>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: c.text }}>{entName}</div>
+                            <div style={{ fontSize: 11, color: c.textMuted }}>{allForEnt.length} contract{allForEnt.length !== 1 ? "s" : ""}</div>
+                          </div>
+                        </div>
+                        <button onClick={() => {
+                          const newAg = { id: `clag-${Date.now()}`, entityId: ent.id, name: "", startDate: "", expiryDate: "", fileName: "", fileUrl: "" };
+                          updateClient(cl.id, "agreements", [...allAgreements, newAg]);
+                          setEditingClientField(`ag-${newAg.id}`);
+                        }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Contract</button>
+                      </div>
+                      {allForEnt.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, padding: "12px 0" }}>No contracts for this entity</div>}
+                      {allForEnt.map(ag => renderContract(ag))}
                     </div>
                   );
                 })}
-              </>)}
-            </div>
-
-            </>)}
+              </>);
+            })()}
 
             {/* ===== INTRODUCER TAB ===== */}
             {clientDetailTab === "introducer" && (<>
@@ -2431,7 +2439,7 @@ function AviroDashboard() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Gateway.io Client Portal</h2>
-            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gatewayClients.filter(x => x.status === "active").length} active · {gatewayClients.filter(x => x.status === "onboarding" || !x.status).length} onboarding · {gatewayClients.filter(x => x.status === "inactive").length} inactive</p>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gatewayClients.filter(x => x.status === "active").length} active · {gatewayClients.filter(x => x.status === "onboarding" || !x.status).length} onboarding · {gatewayClients.filter(x => x.status === "discussion").length} in discussion · {gatewayClients.filter(x => x.status === "inactive").length} inactive</p>
           </div>
           <button onClick={() => setShowAddClient(!showAddClient)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Client</button>
         </div>
@@ -2463,20 +2471,20 @@ function AviroDashboard() {
         {gatewayClients.length === 0 && !showAddClient && (
           <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 40, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No clients yet. Click "+ Add Client" to get started.</div>
         )}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
           {gatewayClients.map(cl => {
             const typeColor = cl.clientType === "Full Cashier Management" ? "#818cf8" : cl.clientType === "VIP Gateway" ? "#ec4899" : cl.clientType === "Gateway" ? "#34d399" : cl.clientType === "Tech Only" ? "#06b6d4" : cl.clientType === "Another PSP" ? "#fbbf24" : c.accent;
             return (
               <div key={cl.id} onClick={() => { setSelectedClient(cl.id); setEditingClientField(null); }}
-                style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: 20, cursor: "pointer", borderLeft: `3px solid ${typeColor}`, transition: "background 0.15s" }}
-                onMouseEnter={e => e.currentTarget.style.background = c.cardHover} onMouseLeave={e => e.currentTarget.style.background = c.card}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: c.text }}>{cl.name}</div>
-                  {(() => { const sc = { active: "#34d399", onboarding: "#fbbf24", inactive: "#6b7280" }; const st = cl.status || "onboarding"; return <span style={{ fontSize: 9, color: sc[st], background: `${sc[st]}15`, border: `1px solid ${sc[st]}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 700, textTransform: "uppercase" }}>{st}</span>; })()}
+                style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 14, padding: 22, cursor: "pointer", borderLeft: `4px solid ${typeColor}`, transition: "all 0.15s", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}
+                onMouseEnter={e => { e.currentTarget.style.background = c.cardHover; e.currentTarget.style.transform = "translateY(-1px)"; }} onMouseLeave={e => { e.currentTarget.style.background = c.card; e.currentTarget.style.transform = "none"; }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: c.text }}>{cl.name}</div>
+                  {(() => { const sc = { active: "#34d399", onboarding: "#fbbf24", discussion: "#60a5fa", inactive: "#6b7280" }; const sl = { active: "Active", onboarding: "Onboarding", discussion: "In Discussion", inactive: "Inactive" }; const st = cl.status || "onboarding"; return <span style={{ fontSize: 9, color: sc[st] || c.textMuted, background: `${sc[st] || c.textMuted}15`, border: `1px solid ${sc[st] || c.textMuted}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 700, textTransform: "uppercase" }}>{sl[st] || st}</span>; })()}
                 </div>
-                {cl.clientType && <span style={{ fontSize: 10, color: typeColor, background: `${typeColor}15`, border: `1px solid ${typeColor}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{cl.clientType}</span>}
-                <div style={{ marginTop: 8, fontSize: 11, color: c.textMuted }}>
-                  {(cl.agreements || []).length > 0 && <span>{(cl.agreements || []).length} agreement{(cl.agreements || []).length !== 1 ? "s" : ""}</span>}
+                {cl.clientType && <span style={{ fontSize: 11, color: typeColor, background: `${typeColor}15`, border: `1px solid ${typeColor}40`, padding: "4px 10px", borderRadius: 6, fontWeight: 600 }}>{cl.clientType}</span>}
+                <div style={{ marginTop: 10, fontSize: 12, color: c.textMuted }}>
+                  {(cl.agreements || []).length > 0 && <span>{(cl.agreements || []).length} contract{(cl.agreements || []).length !== 1 ? "s" : ""}</span>}
                   {cl.monthlyFee && <span>{(cl.agreements || []).length > 0 ? " · " : ""}{cl.monthlyFeeCurrency || "USD"} {cl.monthlyFee}/mo</span>}
                   {cl.revenueSharePct && <span> · {cl.revenueSharePct}% rev share</span>}
                 </div>
