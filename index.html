@@ -3333,7 +3333,7 @@ function AviroDashboard() {
 
           {/* Add Service */}
           <button onClick={() => {
-            const newSvc = { id: `svc-${Date.now()}`, name: "", serviceType1: "", serviceType2: "", regions: [], specificCountries: [], processingCurrencies: [], agreementTypes: [], entityMap: {}, payinPct: "", payinTxFee: "", payinTxCurrency: "USD", payoutPct: "", payoutTxFee: "", payoutTxCurrency: "USD", settlementTerms: "", settlementFee: "", applePay: false, googlePay: false, rollingReserveEnabled: false, rollingReservePct: "", rollingReserveTerm: "", rollingReserveCap: "", rollingReserveCapCurrency: "EUR", payinTiers: [], payoutTiers: [], payinTierType: "tiers", payoutTierType: "tiers", canResell: false, resellModel: "", resellHardCost: "", referralAgreement: false, referralDeal: "" };
+            const newSvc = { id: `svc-${Date.now()}`, name: "", serviceType1: "", serviceType2: "", regions: [], specificCountries: [], excludedCountries: [], countriesCollapsed: true, excludedCollapsed: true, processingCurrencies: [], agreementTypes: [], entityMap: {}, payinPct: "", payinTxFee: "", payinTxCurrency: "USD", payoutPct: "", payoutTxFee: "", payoutTxCurrency: "USD", settlementTerms: "", settlementFee: "", applePay: false, googlePay: false, rollingReserveEnabled: false, rollingReservePct: "", rollingReserveTerm: "", rollingReserveCap: "", rollingReserveCapCurrency: "EUR", payinTiers: [], payoutTiers: [], payinTierType: "tiers", payoutTierType: "tiers", canResell: false, resellModel: "", resellHardCost: "", referralAgreement: false, referralDeal: "" };
             updateProvider(prov.id, "services", [...svcs, newSvc]);
           }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600, marginBottom: 20 }}>+ Add Service</button>
 
@@ -3466,7 +3466,8 @@ function AviroDashboard() {
                             if (sel) {
                               const removedCountries = REGION_COUNTRIES[r] || [];
                               const newSpecific = (svc.specificCountries || []).filter(sc => !removedCountries.includes(sc));
-                              updateServiceMulti(prov.id, svc.id, { regions: newRegs, specificCountries: newSpecific });
+                              const newExcluded = (svc.excludedCountries || []).filter(ec => !removedCountries.includes(ec));
+                              updateServiceMulti(prov.id, svc.id, { regions: newRegs, specificCountries: newSpecific, excludedCountries: newExcluded });
                             } else {
                               updateService(prov.id, svc.id, "regions", newRegs);
                             }
@@ -3475,18 +3476,48 @@ function AviroDashboard() {
                       </div>
                     </div>
 
-                    {/* Specific Countries */}
+                    {/* Specific Countries (collapsible) */}
                     {(svc.regions || []).length > 0 && (() => {
                       const availableCountries = (svc.regions || []).flatMap(r => REGION_COUNTRIES[r] || []);
+                      const selectedCount = (svc.specificCountries || []).filter(sc => availableCountries.includes(sc)).length;
+                      const isCollapsed = svc.countriesCollapsed !== false;
                       return availableCountries.length > 0 ? (
                         <div>
-                          <label style={labelStyle3}>Specific Countries</label>
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                            {availableCountries.map(ct => {
-                              const sel = (svc.specificCountries || []).includes(ct);
-                              return <button key={ct} onClick={() => { const cur = svc.specificCountries || []; updateService(prov.id, svc.id, "specificCountries", sel ? cur.filter(x => x !== ct) : [...cur, ct]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? "rgba(245,158,11,0.12)" : c.surface, color: sel ? "#f59e0b" : c.textMuted, border: `1px solid ${sel ? "rgba(245,158,11,0.4)" : c.border}` }}>{ct}</button>;
-                            })}
+                          <div onClick={() => updateService(prov.id, svc.id, "countriesCollapsed", !isCollapsed)} style={{ ...labelStyle3, cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span>{isCollapsed ? "▸" : "▾"}</span>
+                            <span>Specific Countries ({selectedCount} selected)</span>
                           </div>
+                          {!isCollapsed && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                              {availableCountries.map(ct => {
+                                const sel = (svc.specificCountries || []).includes(ct);
+                                return <button key={ct} onClick={() => { const cur = svc.specificCountries || []; updateService(prov.id, svc.id, "specificCountries", sel ? cur.filter(x => x !== ct) : [...cur, ct]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? "rgba(245,158,11,0.12)" : c.surface, color: sel ? "#f59e0b" : c.textMuted, border: `1px solid ${sel ? "rgba(245,158,11,0.4)" : c.border}` }}>{ct}</button>;
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* Excluded Countries (collapsible) */}
+                    {(svc.regions || []).length > 0 && (() => {
+                      const availableCountries = (svc.regions || []).flatMap(r => REGION_COUNTRIES[r] || []);
+                      const excludedCount = (svc.excludedCountries || []).filter(ec => availableCountries.includes(ec)).length;
+                      const isExclCollapsed = svc.excludedCollapsed !== false;
+                      return availableCountries.length > 0 ? (
+                        <div>
+                          <div onClick={() => updateService(prov.id, svc.id, "excludedCollapsed", !isExclCollapsed)} style={{ ...labelStyle3, cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span>{isExclCollapsed ? "▸" : "▾"}</span>
+                            <span>Excluded Countries ({excludedCount} selected)</span>
+                          </div>
+                          {!isExclCollapsed && (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                              {availableCountries.map(ct => {
+                                const sel = (svc.excludedCountries || []).includes(ct);
+                                return <button key={ct} onClick={() => { const cur = svc.excludedCountries || []; updateService(prov.id, svc.id, "excludedCountries", sel ? cur.filter(x => x !== ct) : [...cur, ct]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? "rgba(248,113,113,0.12)" : c.surface, color: sel ? "#f87171" : c.textMuted, border: `1px solid ${sel ? "rgba(248,113,113,0.4)" : c.border}` }}>{ct}</button>;
+                              })}
+                            </div>
+                          )}
                         </div>
                       ) : null;
                     })()}
@@ -3587,7 +3618,7 @@ function AviroDashboard() {
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                             <div><label style={labelStyle3}>Rate (%)</label><input value={svc.payinPct || ""} onChange={e => updateService(prov.id, svc.id, "payinPct", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
                             <div><label style={labelStyle3}>TX Fee</label><input value={svc.payinTxFee || ""} onChange={e => updateService(prov.id, svc.id, "payinTxFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle3, width: "100%" }} /></div>
-                            <div><label style={labelStyle3}>Currency</label><select value={svc.payinTxCurrency || "USD"} onChange={e => updateService(prov.id, svc.id, "payinTxCurrency", e.target.value)} style={{ ...inputStyle3, width: "100%" }}>{FEE_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
+                            <div><label style={labelStyle3}>Currency</label><select value={svc.payinTxCurrency || "USD"} onChange={e => updateService(prov.id, svc.id, "payinTxCurrency", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="Processing">Processing Currency</option>{FEE_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
                             <label style={{ ...labelStyle3, margin: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
@@ -3604,7 +3635,7 @@ function AviroDashboard() {
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                             <div><label style={labelStyle3}>Rate (%)</label><input value={svc.payoutPct || ""} onChange={e => updateService(prov.id, svc.id, "payoutPct", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
                             <div><label style={labelStyle3}>TX Fee</label><input value={svc.payoutTxFee || ""} onChange={e => updateService(prov.id, svc.id, "payoutTxFee", e.target.value)} placeholder="Amount" style={{ ...inputStyle3, width: "100%" }} /></div>
-                            <div><label style={labelStyle3}>Currency</label><select value={svc.payoutTxCurrency || "USD"} onChange={e => updateService(prov.id, svc.id, "payoutTxCurrency", e.target.value)} style={{ ...inputStyle3, width: "100%" }}>{FEE_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
+                            <div><label style={labelStyle3}>Currency</label><select value={svc.payoutTxCurrency || "USD"} onChange={e => updateService(prov.id, svc.id, "payoutTxCurrency", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="Processing">Processing Currency</option>{FEE_CURRENCIES.map(cur => <option key={cur} value={cur}>{cur}</option>)}</select></div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
                             <label style={{ ...labelStyle3, margin: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
@@ -3623,7 +3654,7 @@ function AviroDashboard() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
                         <div><label style={labelStyle3}>Settlement Terms</label><select value={svc.settlementTerms || ""} onChange={e => updateService(prov.id, svc.id, "settlementTerms", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option>{SETTLEMENT_TERMS_P.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                         <div><label style={labelStyle3}>Settlement Fee (%)</label><input value={svc.settlementFee || ""} onChange={e => updateService(prov.id, svc.id, "settlementFee", e.target.value)} placeholder="%" style={{ ...inputStyle3, width: "100%" }} /></div>
-                        <div><label style={labelStyle3}>Settlement Method</label><select value={svc.settlementMethod || ""} onChange={e => updateService(prov.id, svc.id, "settlementMethod", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option><option value="Fiat">Fiat</option><option value="Crypto">Crypto</option></select></div>
+                        <div><label style={labelStyle3}>Settlement Method</label><select value={svc.settlementMethod || ""} onChange={e => updateService(prov.id, svc.id, "settlementMethod", e.target.value)} style={{ ...inputStyle3, width: "100%" }}><option value="">— Select —</option><option value="Fiat">Fiat</option><option value="Crypto">Crypto</option>{svc.serviceType2 === "APM" && <option value="APM Account">APM Account</option>}</select></div>
                       </div>
                       {svc.settlementMethod === "Fiat" && (() => {
                         const selEntities = svc.entityMap ? [].concat(...Object.values(svc.entityMap)) : (svc.entities || []);
@@ -3764,14 +3795,22 @@ function AviroDashboard() {
             )}
             {providerViewTab === "overview" && (
               <button onClick={() => {
-                const cols = ["Provider", "Service", "Type", "Channel", "Regions", "Currencies", "Agreements", "Referral", "Reseller"];
+                const cols = ["Provider", "Service", "Type", "Channel", "Regions", "Currencies", "Agreements", "Rates", "Rolling Reserve", "Settlement", "Referral", "Reseller"];
                 const rows = filteredOvServices.map(s => {
                   var channelStr = s.serviceType2 || "—";
-                  if (s.serviceType2 === "Cards") { var parts = ["Cards"]; if (s.cardType) parts.push(s.cardType); if (s.applePay) parts.push("Apple Pay"); if (s.googlePay) parts.push("Google Pay"); channelStr = parts.join(" · "); }
-                  var regionParts = (s.regions || []).map(function(r) { var countries = (s.specificCountries || []).filter(function(sc) { return (REGION_COUNTRIES[r] || []).includes(sc); }); return countries.length > 0 ? r + " — " + countries.join(", ") : r; }); var regionStr = regionParts.join("; ") || "—";
+                  if (s.serviceType2 === "Cards") { var parts = ["Cards"]; if (s.cardType) parts.push(s.cardType); if (s.applePay) parts.push('<span style="background:#1a1a1a;color:#fff;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700">Apple Pay</span>'); if (s.googlePay) parts.push('<span style="background:#4285f4;color:#fff;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700">Google Pay</span>'); channelStr = parts.join(" · "); }
+                  if (s.serviceType2 === "Open Banking") { channelStr = "Open Banking"; if (s.providesC2B === true) channelStr += " · C2B: Yes"; else if (s.providesC2B === false) channelStr += " · C2B: No"; }
+                  var regionParts = (s.regions || []).map(function(r) { var countries = (s.specificCountries || []).filter(function(sc) { return (REGION_COUNTRIES[r] || []).includes(sc); }); var excluded = (s.excludedCountries || []).filter(function(ec) { return (REGION_COUNTRIES[r] || []).includes(ec); }); var str = r; if (countries.length > 0) str += " — " + countries.join(", "); if (excluded.length > 0) str += " (excl: " + excluded.join(", ") + ")"; return str; }); var regionStr = regionParts.join("; ") || "—";
                   var agrTypes = s.agreementTypes || (s.agreementType ? [s.agreementType] : []);
-                  var agrStr = agrTypes.join(", ") || "—";
-                  return [s.providerName, s.name || "—", s.serviceType1 || "—", channelStr, regionStr, (s.processingCurrencies || []).join(", ") || "—", agrStr, s.referralAgreement ? "Yes" : "No", s.canResell ? "Yes" : "No"];
+                  var svcEntityMap = s.entityMap || (s.agreementType && s.entities ? { [s.agreementType]: s.entities } : {});
+                  var agrStr = agrTypes.length > 0 ? agrTypes.map(function(t) { var ents = svcEntityMap[t] || []; return ents.length > 0 ? "<b>" + t + "</b>: " + ents.join(", ") : "<b>" + t + "</b>"; }).join("; ") : "—";
+                  var ratesParts = [];
+                  if (s.serviceType1 === "Payin" || s.serviceType1 === "Both") { var payinStr = "Payin: "; var payinCur = s.payinTxCurrency === "Processing" ? ((s.processingCurrencies || [])[0] || "Proc.") : (s.payinTxCurrency || "USD"); if (s.payinPct) payinStr += s.payinPct + "%"; if (s.payinTxFee) payinStr += (s.payinPct ? " + " : "") + payinCur + " " + fmtNum(s.payinTxFee); if (s.payinICC) payinStr += " (ICC++)"; if (s.payinPct || s.payinTxFee) ratesParts.push(payinStr); }
+                  if (s.serviceType1 === "Payout" || s.serviceType1 === "Both") { var payoutStr = "Payout: "; var payoutCur = s.payoutTxCurrency === "Processing" ? ((s.processingCurrencies || [])[0] || "Proc.") : (s.payoutTxCurrency || "USD"); if (s.payoutPct) payoutStr += s.payoutPct + "%"; if (s.payoutTxFee) payoutStr += (s.payoutPct ? " + " : "") + payoutCur + " " + fmtNum(s.payoutTxFee); if (s.payoutICC) payoutStr += " (ICC++)"; if (s.payoutPct || s.payoutTxFee) ratesParts.push(payoutStr); }
+                  var ratesStr = ratesParts.length > 0 ? ratesParts.join(" / ") : "—";
+                  var rrStr = s.rollingReserveEnabled ? (s.rollingReservePct || "?") + "% / " + (s.rollingReserveTerm || "?") + " days" + (s.rollingReserveCap ? " (cap: " + fmtNum(s.rollingReserveCap) + " " + (s.rollingReserveCapCurrency || "EUR") + ")" : "") : "—";
+                  var settleStr = [s.settlementTerms, s.settlementMethod, s.settlementFee ? s.settlementFee + "%" : ""].filter(Boolean).join(" · ") || "—";
+                  return [s.providerName, s.name || "—", s.serviceType1 || "—", channelStr, regionStr, (s.processingCurrencies || []).join(", ") || "—", agrStr, ratesStr, rrStr, settleStr, s.referralAgreement ? "Yes" : "No", s.canResell ? "Yes" : "No"];
                 });
                 const tableHtml = `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>${cols.map(h => `<th style="background:linear-gradient(135deg,#4c1d95,#7c3aed);color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.05em">${h}</th>`).join("")}</tr></thead><tbody>${rows.map((row, i) => `<tr style="background:${i % 2 === 0 ? "#fff" : "#f9f7ff"}">${row.map(cell => `<td style="padding:7px 10px;border-bottom:1px solid #e5e7eb">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
                 const win = window.open("", "_blank");
@@ -3918,28 +3957,41 @@ function AviroDashboard() {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                   <thead>
                     <tr>
-                      {["Provider", "Service", "Type", "Channel", "Regions", "Currencies", "Agreements", "Referral", "Reseller"].map(h => (
+                      {["Provider", "Service", "Type", "Channel", "Regions", "Currencies", "Agreements", "Rates", "Rolling Reserve", "Settlement", "Referral", "Reseller"].map(h => (
                         <th key={h} style={thStyleOv}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {filteredOvServices.length === 0 && (
-                      <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No services match the current filters</td></tr>
+                      <tr><td colSpan={12} style={{ padding: 24, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No services match the current filters</td></tr>
                     )}
                     {filteredOvServices.map((s, idx) => {
                       var channelDisplay = s.serviceType2 || "—";
                       if (s.serviceType2 === "Cards") {
-                        var cParts = [React.createElement("span", { key: "ch" }, "Cards")];
-                        if (s.cardType) cParts.push(React.createElement("span", { key: "ct", style: { color: c.textMuted } }, " · " + s.cardType));
-                        if (s.applePay) cParts.push(React.createElement("span", { key: "ap", style: { display: "inline-block", marginLeft: 4, padding: "1px 5px", borderRadius: 4, fontSize: 9, fontWeight: 600, background: "rgba(0,0,0,0.06)", color: "#111" } }, "Apple Pay"));
-                        if (s.googlePay) cParts.push(React.createElement("span", { key: "gp", style: { display: "inline-block", marginLeft: 4, padding: "1px 5px", borderRadius: 4, fontSize: 9, fontWeight: 600, background: "rgba(66,133,244,0.1)", color: "#4285f4" } }, "Google Pay"));
+                        var cParts = [<span key="ch">Cards</span>];
+                        if (s.cardType) cParts.push(<span key="ct" style={{ color: c.textMuted }}>{" · " + s.cardType}</span>);
+                        if (s.applePay) cParts.push(<span key="ap" style={{ display: "inline-block", marginLeft: 4, padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, background: "#1a1a1a", color: "#fff" }}>Apple Pay</span>);
+                        if (s.googlePay) cParts.push(<span key="gp" style={{ display: "inline-block", marginLeft: 4, padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700, background: "#4285f4", color: "#fff" }}>Google Pay</span>);
                         channelDisplay = cParts;
                       }
-                      var regionParts = (s.regions || []).map(function(r) { var countries = (s.specificCountries || []).filter(function(sc) { return (REGION_COUNTRIES[r] || []).includes(sc); }); return countries.length > 0 ? r + " — " + countries.join(", ") : r; });
+                      if (s.serviceType2 === "Open Banking") {
+                        var obParts = ["Open Banking"];
+                        if (s.providesC2B === true) obParts.push("C2B: Yes");
+                        else if (s.providesC2B === false) obParts.push("C2B: No");
+                        channelDisplay = obParts.join(" · ");
+                      }
+                      var regionParts = (s.regions || []).map(function(r) { var countries = (s.specificCountries || []).filter(function(sc) { return (REGION_COUNTRIES[r] || []).includes(sc); }); var excluded = (s.excludedCountries || []).filter(function(ec) { return (REGION_COUNTRIES[r] || []).includes(ec); }); var str = r; if (countries.length > 0) str += " — " + countries.join(", "); if (excluded.length > 0) str += " (excl: " + excluded.join(", ") + ")"; return str; });
                       var regionDisplay = regionParts.length > 0 ? regionParts.join("; ") : "—";
                       var agrTypes = s.agreementTypes || (s.agreementType ? [s.agreementType] : []);
-                      var agrDisplay = agrTypes.length > 0 ? agrTypes.join(", ") : "—";
+                      var svcEntityMap = s.entityMap || (s.agreementType && s.entities ? { [s.agreementType]: s.entities } : {});
+                      var agrDisplay = agrTypes.length > 0 ? agrTypes.map(function(t) { var ents = svcEntityMap[t] || []; return <span key={t}><strong>{t}</strong>{ents.length > 0 ? ": " + ents.join(", ") : ""}</span>; }).reduce(function(prev, curr, i) { return i === 0 ? [curr] : [].concat(prev, <span key={"sep" + i}>; </span>, curr); }, []) : "—";
+                      var ratesParts = [];
+                      if (s.serviceType1 === "Payin" || s.serviceType1 === "Both") { var payinCur = s.payinTxCurrency === "Processing" ? ((s.processingCurrencies || [])[0] || "Proc.") : (s.payinTxCurrency || "USD"); var payinStr = "Payin: "; if (s.payinPct) payinStr += s.payinPct + "%"; if (s.payinTxFee) payinStr += (s.payinPct ? " + " : "") + payinCur + " " + fmtNum(s.payinTxFee); if (s.payinICC) payinStr += " (ICC++)"; if (s.payinPct || s.payinTxFee) ratesParts.push(payinStr); }
+                      if (s.serviceType1 === "Payout" || s.serviceType1 === "Both") { var payoutCur = s.payoutTxCurrency === "Processing" ? ((s.processingCurrencies || [])[0] || "Proc.") : (s.payoutTxCurrency || "USD"); var payoutStr = "Payout: "; if (s.payoutPct) payoutStr += s.payoutPct + "%"; if (s.payoutTxFee) payoutStr += (s.payoutPct ? " + " : "") + payoutCur + " " + fmtNum(s.payoutTxFee); if (s.payoutICC) payoutStr += " (ICC++)"; if (s.payoutPct || s.payoutTxFee) ratesParts.push(payoutStr); }
+                      var ratesDisplay = ratesParts.length > 0 ? ratesParts.join(" / ") : "—";
+                      var rrDisplay = s.rollingReserveEnabled ? (s.rollingReservePct || "?") + "% / " + (s.rollingReserveTerm || "?") + " days" + (s.rollingReserveCap ? " (cap: " + fmtNum(s.rollingReserveCap) + " " + (s.rollingReserveCapCurrency || "EUR") + ")" : "") : "—";
+                      var settleDisplay = [s.settlementTerms, s.settlementMethod, s.settlementFee ? s.settlementFee + "%" : ""].filter(Boolean).join(" · ") || "—";
                       var tdS = { padding: "8px 12px", borderBottom: "1px solid " + c.border };
                       return (
                         <tr key={s.id + s.providerId} style={{ background: idx % 2 === 0 ? c.card : c.surface }}>
@@ -3950,6 +4002,9 @@ function AviroDashboard() {
                           <td style={{ ...tdS, fontSize: 11, maxWidth: 200 }}>{regionDisplay}</td>
                           <td style={{ ...tdS, fontSize: 11 }}>{(s.processingCurrencies || []).join(", ") || "—"}</td>
                           <td style={{ ...tdS, fontSize: 11 }}>{agrDisplay}</td>
+                          <td style={{ ...tdS, fontSize: 11 }}>{ratesDisplay}</td>
+                          <td style={{ ...tdS, fontSize: 11 }}>{rrDisplay}</td>
+                          <td style={{ ...tdS, fontSize: 11 }}>{settleDisplay}</td>
                           <td style={{ ...tdS, textAlign: "center" }}>{s.referralAgreement ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
                           <td style={{ ...tdS, textAlign: "center" }}>{s.canResell ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
                         </tr>
