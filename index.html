@@ -2096,12 +2096,6 @@ function AviroDashboard() {
                     <option value="">— Select Introducer —</option>
                     <option value="Rob Yong">Rob Yong</option>
                   </select>
-                  {cl.introduction && (
-                    <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: c.success }} />
-                      <span style={{ fontSize: 13, color: c.text, fontWeight: 600 }}>{cl.introduction}</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Revenue Share % */}
@@ -2121,15 +2115,14 @@ function AviroDashboard() {
                 {/* From */}
                 <div style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
                   <label style={{ ...labelStyle, fontSize: 12, marginBottom: 8 }}>From</label>
-                  <input
+                  <select
                     value={cl.revenueShareFrom || ""}
                     onChange={e => updateClient(cl.id, "revenueShareFrom", e.target.value)}
-                    placeholder="e.g. Net Profit"
                     style={{ ...inputStyle, width: "100%", fontSize: 15, fontWeight: 600, padding: "12px 14px" }}
-                  />
-                  {cl.revenueShareFrom && (
-                    <div style={{ marginTop: 10, fontSize: 12, color: c.textMuted }}>Revenue share calculated from <strong style={{ color: c.text }}>{cl.revenueShareFrom}</strong></div>
-                  )}
+                  >
+                    <option value="">— Select —</option>
+                    <option value="Net Profit">Net Profit</option>
+                  </select>
                 </div>
               </div>
 
