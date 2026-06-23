@@ -2526,7 +2526,7 @@ function AviroDashboard() {
                     {/* 11. Settlement (Merchant) */}
                     {cp.feeModel && (
                       <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Settlement (Merchant)</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Terms</div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
                           <div><label style={labelStyle}>Settlement Terms</label><select value={cp.settlementTerms || ""} onChange={e => updateClProv(cpIdx, "settlementTerms", e.target.value)} style={{ ...inputStyle, width: "100%" }}><option value="">{"—"} Select {"—"}</option>{SETTLEMENT_TERMS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                           <div><label style={labelStyle}>Settlement Fee (%)</label><input value={cp.settlementFee || ""} onChange={e => updateClProv(cpIdx, "settlementFee", e.target.value)} placeholder="e.g. 0.5" style={{ ...inputStyle, width: "100%" }} /></div>
