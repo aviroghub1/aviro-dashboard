@@ -1872,11 +1872,13 @@ function AviroDashboard() {
 
             </>)}
 
-            {/* ===== CONTRACTS TAB (grouped by entity) ===== */}
+            {/* ===== CONTRACTS TAB ===== */}
             {clientDetailTab === "contracts" && (() => {
-              const ents = cl.entities || [{ id: "primary", entityName: cl.name }];
+              const corp = cl.corporateAgreement || {};
+              const updateCorp = (field, val) => updateClient(cl.id, "corporateAgreement", { ...corp, [field]: val });
               const allAgreements = cl.agreements || [];
               const fmtSize = (bytes) => { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
+
               const handleContractUpload = (agId, file) => {
                 if (!file || !supabaseUrl || !supabaseKey) { if (!supabaseUrl || !supabaseKey) alert("Connect to Supabase database first"); return; }
                 const safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
@@ -1927,13 +1929,13 @@ function AviroDashboard() {
                         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
                           <div><label style={labelStyle}>Contract Name</label><input value={ag.name || ""} onChange={e => {
                             updateClient(cl.id, "agreements", allAgreements.map(a => a.id === ag.id ? { ...a, name: e.target.value } : a));
-                          }} style={{ ...inputStyle, width: "100%", fontSize: 13, padding: "8px 12px" }} /></div>
+                          }} style={{ ...inputStyle, width: "100%" }} /></div>
                           <div><label style={labelStyle}>Start Date</label><input type="date" value={ag.startDate || ""} onChange={e => {
                             updateClient(cl.id, "agreements", allAgreements.map(a => a.id === ag.id ? { ...a, startDate: e.target.value } : a));
-                          }} style={{ ...inputStyle, width: "100%", fontSize: 13, padding: "8px 12px" }} /></div>
+                          }} style={{ ...inputStyle, width: "100%" }} /></div>
                           <div><label style={labelStyle}>Expiry Date</label><input type="date" value={ag.expiryDate || ""} onChange={e => {
                             updateClient(cl.id, "agreements", allAgreements.map(a => a.id === ag.id ? { ...a, expiryDate: e.target.value } : a));
-                          }} style={{ ...inputStyle, width: "100%", fontSize: 13, padding: "8px 12px" }} placeholder="Leave blank if none" /></div>
+                          }} style={{ ...inputStyle, width: "100%" }} placeholder="Leave blank if none" /></div>
                         </div>
                         <label style={labelStyle}>Document</label>
                         <div
@@ -1965,33 +1967,108 @@ function AviroDashboard() {
                 );
               };
 
+              const productTiles = [
+                { key: "gateway", label: "Gateway.io Contract", color: "#818cf8", icon: "⚡" },
+                { key: "cubepay", label: "Cube Pay Contract", color: "#34d399", icon: "💳" },
+              ];
+
               return (<>
-                {ents.map((ent, entIdx) => {
-                  const entName = ent.entityName || `Entity ${entIdx + 1}`;
-                  const entContracts = allAgreements.filter(a => a.entityId === ent.id);
-                  const unassigned = entIdx === 0 ? allAgreements.filter(a => !a.entityId || !ents.some(e => e.id === a.entityId)) : [];
-                  const allForEnt = [...entContracts, ...unassigned];
-                  return (
-                    <div key={ent.id} style={sectionCard}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ width: 4, height: 28, borderRadius: 2, background: c.accent }} />
-                          <div>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: c.text }}>{entName}</div>
-                            <div style={{ fontSize: 11, color: c.textMuted }}>{allForEnt.length} contract{allForEnt.length !== 1 ? "s" : ""}</div>
-                          </div>
-                        </div>
-                        <button onClick={() => {
-                          const newAg = { id: `clag-${Date.now()}`, entityId: ent.id, name: "", startDate: "", expiryDate: "", fileName: "", fileUrl: "" };
-                          updateClient(cl.id, "agreements", [...allAgreements, newAg]);
-                          setEditingClientField(`ag-${newAg.id}`);
-                        }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Contract</button>
+                {/* ===== CORPORATE AGREEMENT ===== */}
+                <div style={sectionCard}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                    <div style={{ width: 4, height: 28, borderRadius: 2, background: c.accent }} />
+                    <div style={{ fontSize: 16, fontWeight: 800, color: c.text, letterSpacing: "-0.01em" }}>Corporate Agreement</div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20 }}>
+                    {/* Setup Fee */}
+                    <div style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+                      <label style={{ ...labelStyle, fontSize: 12, marginBottom: 8 }}>Setup Fee</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: c.textMuted }}>€</span>
+                        <input
+                          value={corp.setupFee || ""}
+                          onChange={e => updateCorp("setupFee", e.target.value)}
+                          placeholder="0.00"
+                          disabled={!!corp.setupFeeWaived}
+                          style={{ ...inputStyle, flex: 1, fontSize: 16, fontWeight: 600, padding: "10px 14px", opacity: corp.setupFeeWaived ? 0.4 : 1, textDecoration: corp.setupFeeWaived ? "line-through" : "none" }}
+                        />
                       </div>
-                      {allForEnt.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, padding: "12px 0" }}>No contracts for this entity</div>}
-                      {allForEnt.map(ag => renderContract(ag))}
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, cursor: "pointer" }}>
+                        <input type="checkbox" checked={!!corp.setupFeeWaived} onChange={e => updateCorp("setupFeeWaived", e.target.checked)} style={{ accentColor: c.accent, width: 16, height: 16 }} />
+                        <span style={{ fontSize: 13, color: corp.setupFeeWaived ? c.success : c.textMuted, fontWeight: 600 }}>{corp.setupFeeWaived ? "Waived" : "Waived"}</span>
+                      </label>
                     </div>
-                  );
-                })}
+
+                    {/* Gateway.io Monthly Fee */}
+                    <div style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+                      <label style={{ ...labelStyle, fontSize: 12, marginBottom: 8 }}>Gateway.io Monthly Fee</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: c.textMuted }}>€</span>
+                        <input
+                          value={corp.monthlyFee || ""}
+                          onChange={e => updateCorp("monthlyFee", e.target.value)}
+                          placeholder="0.00"
+                          style={{ ...inputStyle, flex: 1, fontSize: 16, fontWeight: 600, padding: "10px 14px" }}
+                        />
+                      </div>
+                      <div style={{ marginTop: 10 }}>
+                        <label style={{ ...labelStyle, fontSize: 10, marginBottom: 4, color: c.textMuted }}>Waived After Volume</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: c.textMuted }}>€</span>
+                          <input
+                            value={corp.monthlyFeeWaivedAfter || ""}
+                            onChange={e => updateCorp("monthlyFeeWaivedAfter", e.target.value)}
+                            placeholder="e.g. 50,000"
+                            style={{ ...inputStyle, flex: 1, fontSize: 13, padding: "8px 12px" }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Gateway.io Transaction Fee */}
+                    <div style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20 }}>
+                      <label style={{ ...labelStyle, fontSize: 12, marginBottom: 8 }}>Gateway.io Transaction Fee</label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: c.textMuted }}>€</span>
+                        <input
+                          value={corp.transactionFee || ""}
+                          onChange={e => updateCorp("transactionFee", e.target.value)}
+                          placeholder="0.00"
+                          style={{ ...inputStyle, flex: 1, fontSize: 16, fontWeight: 600, padding: "10px 14px" }}
+                        />
+                      </div>
+                      {corp.transactionFee && <div style={{ fontSize: 12, color: c.textMuted, marginTop: 8 }}>Per transaction</div>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ===== PRODUCT CONTRACT TILES ===== */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+                  {productTiles.map(tile => {
+                    const tileContracts = allAgreements.filter(a => a.productKey === tile.key);
+                    return (
+                      <div key={tile.key} style={{ ...sectionCard, borderTop: `3px solid ${tile.color}`, marginBottom: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <span style={{ fontSize: 22 }}>{tile.icon}</span>
+                            <div>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: c.text, letterSpacing: "-0.01em" }}>{tile.label}</div>
+                              <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2 }}>{tileContracts.length} document{tileContracts.length !== 1 ? "s" : ""}</div>
+                            </div>
+                          </div>
+                          <button onClick={() => {
+                            const newAg = { id: `clag-${Date.now()}`, productKey: tile.key, name: "", startDate: "", expiryDate: "", fileName: "", fileUrl: "" };
+                            updateClient(cl.id, "agreements", [...allAgreements, newAg]);
+                            setEditingClientField(`ag-${newAg.id}`);
+                          }} style={{ background: tile.color, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Contract</button>
+                        </div>
+                        {tileContracts.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, padding: "16px 0", textAlign: "center", background: c.surface, borderRadius: 10, border: `1px dashed ${c.border}` }}>No contracts yet</div>}
+                        {tileContracts.map(ag => renderContract(ag))}
+                      </div>
+                    );
+                  })}
+                </div>
               </>);
             })()}
 
