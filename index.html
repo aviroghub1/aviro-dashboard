@@ -260,6 +260,8 @@ function AviroDashboard() {
   const [mbShowSetup, setMbShowSetup] = useState(false);
   const [mbCards, setMbCards] = useState([]);
   const [mbFetchStatus, setMbFetchStatus] = useState("");
+  const [bankNoteDrafts, setBankNoteDrafts] = useState({});
+  const [editingNoteId, setEditingNoteId] = useState(null);
   const [pvBreakdownOpen, setPvBreakdownOpen] = useState(false);
   const [cubePayProvOpen, setCubePayProvOpen] = useState(false);
   const [mbCurrentData, setMbCurrentData] = useState({}); // { clientId: { deposits, withdrawals, depositFees, withdrawalFees } }
@@ -5584,11 +5586,12 @@ function AviroDashboard() {
         return { ...r, onboardedEntities: ents.includes(entityName) ? ents.filter(e => e !== entityName) : [...ents, entityName] };
       }));
     };
-    const addNote = (id) => {
+    const addNote = (id, text) => {
+      if (!text || !text.trim()) return;
       setBankRelationships(bankRelationships.map(r => {
         if (r.id !== id) return r;
         var notes = r.notes || [];
-        return { ...r, notes: [...notes, { id: "note-" + Date.now(), text: "", createdAt: new Date().toISOString().slice(0, 10) }] };
+        return { ...r, notes: [...notes, { id: "note-" + Date.now(), text: text.trim(), createdAt: new Date().toISOString().slice(0, 10) }] };
       }));
     };
     const updateNote = (id, noteId, text) => {
@@ -5603,6 +5606,7 @@ function AviroDashboard() {
         return { ...r, notes: (r.notes || []).filter(n => n.id !== noteId) };
       }));
     };
+    // bankNoteDrafts and editingBankNoteId are declared at component level
 
     const inputStyle = { fontSize: 13, padding: "9px 14px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
     const labelStyle = { display: "block", fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" };
@@ -5777,22 +5781,33 @@ function AviroDashboard() {
 
                 {/* Notes */}
                 <div style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <div style={sectionHeader}>Notes</div>
-                    <button onClick={() => addNote(rel.id)} style={{ fontSize: 11, color: c.accent, background: c.accentBg, border: `1px solid ${c.accent}40`, borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>+ Add Note</button>
+                  <div style={sectionHeader}>Notes</div>
+                  {/* Compose new note */}
+                  <div style={{ background: c.card, borderRadius: 8, padding: 12, marginBottom: 12, border: `1px solid ${c.accent}30` }}>
+                    <textarea value={bankNoteDrafts[rel.id] || ""} onChange={e => setBankNoteDrafts({ ...bankNoteDrafts, [rel.id]: e.target.value })} placeholder="Write a note..." rows={2} style={{ ...inputStyle, width: "100%", resize: "vertical", fontFamily: "inherit", marginBottom: 8 }} />
+                    <button onClick={() => { addNote(rel.id, bankNoteDrafts[rel.id]); setBankNoteDrafts({ ...bankNoteDrafts, [rel.id]: "" }); }} disabled={!(bankNoteDrafts[rel.id] || "").trim()} style={{ fontSize: 11, color: !(bankNoteDrafts[rel.id] || "").trim() ? c.textMuted : "#fff", background: !(bankNoteDrafts[rel.id] || "").trim() ? c.surface : c.accent, border: `1px solid ${!(bankNoteDrafts[rel.id] || "").trim() ? c.border : c.accent}`, borderRadius: 6, padding: "6px 16px", cursor: !(bankNoteDrafts[rel.id] || "").trim() ? "default" : "pointer", fontWeight: 600 }}>Save Note</button>
                   </div>
-                  {(rel.notes || []).map(function(note) {
+                  {/* Saved notes */}
+                  {(rel.notes || []).slice().reverse().map(function(note) {
+                    var isEditing = editingNoteId === note.id;
                     return (
-                      <div key={note.id} style={{ background: c.card, borderRadius: 8, padding: 12, marginBottom: 8, border: `1px solid ${c.border}` }}>
+                      <div key={note.id} style={{ background: c.card, borderRadius: 8, padding: 12, marginBottom: 6, border: `1px solid ${c.border}`, borderLeft: `3px solid ${c.accent}40` }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                           <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600 }}>{note.createdAt}</span>
-                          <button onClick={() => removeNote(rel.id, note.id)} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", cursor: "pointer", fontSize: 10, padding: "3px 8px", borderRadius: 4, fontWeight: 600 }}>Delete</button>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={() => setEditingNoteId(isEditing ? null : note.id)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: isEditing ? c.accent : c.textMuted, cursor: "pointer", fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{isEditing ? "Done" : "Edit"}</button>
+                            <button onClick={() => { if (confirm("Delete this note?")) removeNote(rel.id, note.id); }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", cursor: "pointer", fontSize: 10, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Delete</button>
+                          </div>
                         </div>
-                        <textarea value={note.text || ""} onChange={e => updateNote(rel.id, note.id, e.target.value)} placeholder="Write a note..." rows={3} style={{ ...inputStyle, width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+                        {isEditing ? (
+                          <textarea value={note.text || ""} onChange={e => updateNote(rel.id, note.id, e.target.value)} rows={3} style={{ ...inputStyle, width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+                        ) : (
+                          <div style={{ fontSize: 13, color: c.text, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{note.text}</div>
+                        )}
                       </div>
                     );
                   })}
-                  {(rel.notes || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No notes yet</div>}
+                  {(rel.notes || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No notes yet — write one above</div>}
                 </div>
               </div>
             </div>
