@@ -5577,112 +5577,229 @@ function AviroDashboard() {
         return { ...r, supportChannels: (r.supportChannels || []).filter((_, i) => i !== idx) };
       }));
     };
+    const toggleRelEntity = (id, entityName) => {
+      setBankRelationships(bankRelationships.map(r => {
+        if (r.id !== id) return r;
+        const ents = r.onboardedEntities || [];
+        return { ...r, onboardedEntities: ents.includes(entityName) ? ents.filter(e => e !== entityName) : [...ents, entityName] };
+      }));
+    };
+    const addNote = (id) => {
+      setBankRelationships(bankRelationships.map(r => {
+        if (r.id !== id) return r;
+        var notes = r.notes || [];
+        return { ...r, notes: [...notes, { id: "note-" + Date.now(), text: "", createdAt: new Date().toISOString().slice(0, 10) }] };
+      }));
+    };
+    const updateNote = (id, noteId, text) => {
+      setBankRelationships(bankRelationships.map(r => {
+        if (r.id !== id) return r;
+        return { ...r, notes: (r.notes || []).map(n => n.id === noteId ? { ...n, text: text } : n) };
+      }));
+    };
+    const removeNote = (id, noteId) => {
+      setBankRelationships(bankRelationships.map(r => {
+        if (r.id !== id) return r;
+        return { ...r, notes: (r.notes || []).filter(n => n.id !== noteId) };
+      }));
+    };
 
-    const inputStyle = { fontSize: 12, padding: "6px 10px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
-    const labelStyle = { fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 };
+    const inputStyle = { fontSize: 13, padding: "9px 14px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const labelStyle = { display: "block", fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" };
+    const sectionHeader = { fontSize: 12, fontWeight: 700, color: c.accent, marginBottom: 10, textTransform: "uppercase" };
+    var uniqueEntities = new Set();
+    bankRelationships.forEach(function(r) { (r.onboardedEntities || []).forEach(function(e) { uniqueEntities.add(e); }); });
+    var entityCount = uniqueEntities.size;
+
+    var levelColor = function(lvl) {
+      if (lvl >= 8) return "#34d399";
+      if (lvl >= 5) return "#fbbf24";
+      return "#f87171";
+    };
 
     return (
     <div>
-      <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 6px 0" }}>Bank Relationships</h2>
-      <p style={{ color: c.textSecondary, fontSize: 13, margin: "0 0 24px 0" }}>{bankRelationships.length} bank relationship{bankRelationships.length !== 1 ? "s" : ""}</p>
-
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: c.text, margin: 0 }}>Bank Relationships</h3>
-          <button onClick={() => {
-            setBankRelationships([...bankRelationships, {
-              id: `br-${Date.now()}`, bankName: "", mainContact: "", relationshipLevel: 5, contactEmail: "", contactPhone: "",
-              offeredServices: [], supportEmail: "", supportChannels: [],
-              fees: { B2B: { pct: "", tx: "" }, B2C: { pct: "", tx: "" }, C2B: { pct: "", tx: "" }, FX: { pct: "", tx: "" } },
-              collapsed: false,
-            }]);
-          }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "7px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Bank Relationship</button>
+      {/* Page Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 6px 0" }}>Bank Relationships</h2>
+          <p style={{ color: c.textSecondary, fontSize: 13, margin: 0 }}>{bankRelationships.length} bank relationship{bankRelationships.length !== 1 ? "s" : ""} &middot; {entityCount} entit{entityCount !== 1 ? "ies" : "y"} onboarded</p>
         </div>
+        <button onClick={() => {
+          setBankRelationships([...bankRelationships, {
+            id: "br-" + Date.now(), bankName: "", mainContact: "", relationshipLevel: 5, contactEmail: "", contactPhone: "",
+            offeredServices: [], supportEmail: "", supportChannels: [],
+            fees: { B2B: { pct: "", tx: "" }, B2C: { pct: "", tx: "" }, C2B: { pct: "", tx: "" }, FX: { pct: "", tx: "" } },
+            onboardedEntities: [], notes: [],
+            collapsed: false,
+          }]);
+        }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Bank Relationship</button>
+      </div>
 
-        {bankRelationships.length === 0 && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No bank relationships added yet.</div>}
+      {bankRelationships.length === 0 && (
+        <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 40, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 4 }}>No bank relationships yet</div>
+          <div style={{ fontSize: 13, color: c.textMuted }}>Click "+ Add Bank Relationship" to get started</div>
+        </div>
+      )}
 
-        {bankRelationships.map(rel => (
-          <div key={rel.id} style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 18, marginBottom: 10 }}>
-            {/* Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: c.text }}>{rel.bankName || "New Bank"}</span>
-                {rel.relationshipLevel && <span style={{ fontSize: 10, color: c.accent, background: `${c.accent}15`, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Level {rel.relationshipLevel}/10</span>}
-                {(rel.offeredServices || []).length > 0 && <span style={{ fontSize: 10, color: c.textMuted }}>{rel.offeredServices.join(", ")}</span>}
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => updateRel(rel.id, "collapsed", !rel.collapsed)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, cursor: "pointer", fontSize: 10, borderRadius: 4, padding: "3px 10px" }}>{rel.collapsed ? "Edit ▾" : "Collapse ▴"}</button>
-                <button onClick={() => setBankRelationships(bankRelationships.filter(r => r.id !== rel.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 10 }}>✕</button>
-              </div>
+      {bankRelationships.map(rel => {
+        var lvl = rel.relationshipLevel || 5;
+        var lc = levelColor(lvl);
+        var services = rel.offeredServices || [];
+        var entOnboarded = (rel.onboardedEntities || []).length;
+
+        return (
+        <div key={rel.id} style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 0, marginBottom: 14, boxShadow: "0 2px 12px rgba(0,0,0,0.15)", overflow: "hidden" }}>
+          {/* Collapsed Header */}
+          <div style={{ padding: "16px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: `4px solid ${c.accent}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rel.bankName || "New Bank"}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: lc, background: lc + "18", padding: "3px 10px", borderRadius: 6, whiteSpace: "nowrap", border: `1px solid ${lc}30` }}>{lvl}/10</span>
+              {services.length > 0 && (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {services.map(function(svc) { return <span key={svc} style={{ fontSize: 10, fontWeight: 600, color: c.accent, background: c.accentBg, padding: "2px 8px", borderRadius: 4 }}>{svc}</span>; })}
+                </div>
+              )}
+              {entOnboarded > 0 && (
+                <span style={{ fontSize: 10, fontWeight: 600, color: c.textSecondary, background: c.surface, padding: "3px 8px", borderRadius: 4, border: `1px solid ${c.border}` }}>{entOnboarded} entit{entOnboarded !== 1 ? "ies" : "y"}</span>
+              )}
             </div>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <button onClick={() => updateRel(rel.id, "collapsed", !rel.collapsed)} style={{ background: rel.collapsed ? c.accentBg : c.surface, border: `1px solid ${rel.collapsed ? c.accent + "40" : c.border}`, color: rel.collapsed ? c.accent : c.textMuted, cursor: "pointer", fontSize: 11, fontWeight: 600, borderRadius: 6, padding: "6px 14px" }}>{rel.collapsed ? "Edit" : "Collapse"}</button>
+              <button onClick={() => { if (confirm("Delete this bank relationship?")) setBankRelationships(bankRelationships.filter(r => r.id !== rel.id)); }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Delete</button>
+            </div>
+          </div>
 
-            {/* Expanded */}
-            {!rel.collapsed && (
-              <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-                {/* Row 1: Name + Contact + Level */}
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr", gap: 10 }}>
-                  <div><label style={labelStyle}>Bank Name</label><input value={rel.bankName || ""} onChange={e => updateRel(rel.id, "bankName", e.target.value)} placeholder="e.g. Privalgo" style={{ ...inputStyle, width: "100%" }} /></div>
-                  <div><label style={labelStyle}>Main Contact</label><input value={rel.mainContact || ""} onChange={e => updateRel(rel.id, "mainContact", e.target.value)} placeholder="Contact name" style={{ ...inputStyle, width: "100%" }} /></div>
-                  <div><label style={labelStyle}>Relationship Level</label>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <input type="range" min="1" max="10" value={rel.relationshipLevel || 5} onChange={e => updateRel(rel.id, "relationshipLevel", parseInt(e.target.value))} style={{ flex: 1 }} />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: c.accent, minWidth: 28, textAlign: "center" }}>{rel.relationshipLevel || 5}</span>
+          {/* Expanded Content */}
+          {!rel.collapsed && (
+            <div style={{ padding: "0 22px 22px 22px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+
+              {/* === LEFT COLUMN === */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+                {/* Bank Details */}
+                <div style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
+                  <div style={sectionHeader}>Bank Details</div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>Bank Name</label>
+                    <input value={rel.bankName || ""} onChange={e => updateRel(rel.id, "bankName", e.target.value)} placeholder="e.g. Privalgo" style={{ ...inputStyle, width: "100%" }} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Relationship Level</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input type="range" min="1" max="10" value={lvl} onChange={e => updateRel(rel.id, "relationshipLevel", parseInt(e.target.value))} style={{ flex: 1, accentColor: c.accent }} />
+                      <span style={{ fontSize: 16, fontWeight: 700, color: lc, minWidth: 32, textAlign: "center", background: lc + "15", padding: "2px 8px", borderRadius: 6 }}>{lvl}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Row 2: Contact details */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                  <div><label style={labelStyle}>Contact Email</label><input type="email" value={rel.contactEmail || ""} onChange={e => updateRel(rel.id, "contactEmail", e.target.value)} placeholder="contact@bank.com" style={{ ...inputStyle, width: "100%" }} /></div>
-                  <div><label style={labelStyle}>Contact Phone</label><input value={rel.contactPhone || ""} onChange={e => updateRel(rel.id, "contactPhone", e.target.value)} placeholder="+44..." style={{ ...inputStyle, width: "100%" }} /></div>
-                  <div><label style={labelStyle}>Support Email</label><input type="email" value={rel.supportEmail || ""} onChange={e => updateRel(rel.id, "supportEmail", e.target.value)} placeholder="support@bank.com" style={{ ...inputStyle, width: "100%" }} /></div>
-                </div>
-
-                {/* Offered Services */}
-                <div>
-                  <label style={labelStyle}>Offered Services</label>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {SERVICE_OPTIONS.map(svc => {
-                      const active = (rel.offeredServices || []).includes(svc);
-                      return <button key={svc} onClick={() => toggleRelService(rel.id, svc)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: active ? `1px solid ${c.accent}` : `1px solid ${c.border}`, background: active ? `${c.accent}20` : "transparent", color: active ? c.accent : c.textMuted, transition: "all 0.15s" }}>{svc}</button>;
-                    })}
+                {/* Contact Information */}
+                <div style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
+                  <div style={sectionHeader}>Contact Information</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                    <div><label style={labelStyle}>Main Contact</label><input value={rel.mainContact || ""} onChange={e => updateRel(rel.id, "mainContact", e.target.value)} placeholder="Contact name" style={{ ...inputStyle, width: "100%" }} /></div>
+                    <div><label style={labelStyle}>Contact Email</label><input type="email" value={rel.contactEmail || ""} onChange={e => updateRel(rel.id, "contactEmail", e.target.value)} placeholder="contact@bank.com" style={{ ...inputStyle, width: "100%" }} /></div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div><label style={labelStyle}>Contact Phone</label><input value={rel.contactPhone || ""} onChange={e => updateRel(rel.id, "contactPhone", e.target.value)} placeholder="+44..." style={{ ...inputStyle, width: "100%" }} /></div>
+                    <div><label style={labelStyle}>Support Email</label><input type="email" value={rel.supportEmail || ""} onChange={e => updateRel(rel.id, "supportEmail", e.target.value)} placeholder="support@bank.com" style={{ ...inputStyle, width: "100%" }} /></div>
                   </div>
                 </div>
 
                 {/* Support Channels */}
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                    <label style={{ ...labelStyle, marginBottom: 0 }}>Support Channels</label>
-                    <button onClick={() => addSupportChannel(rel.id)} style={{ fontSize: 10, color: c.accent, background: `${c.accent}15`, border: `1px solid ${c.accent}40`, borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontWeight: 600 }}>+ Add</button>
+                <div style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div style={sectionHeader}>Support Channels</div>
+                    <button onClick={() => addSupportChannel(rel.id)} style={{ fontSize: 11, color: c.accent, background: c.accentBg, border: `1px solid ${c.accent}40`, borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>+ Add</button>
                   </div>
                   {(rel.supportChannels || []).map((ch, ci) => (
-                    <div key={ci} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                    <div key={ci} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "center" }}>
                       <input value={ch} onChange={e => updateSupportChannel(rel.id, ci, e.target.value)} placeholder="e.g. Slack #bank-support, WhatsApp group..." style={{ ...inputStyle, flex: 1 }} />
-                      <button onClick={() => removeSupportChannel(rel.id, ci)} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 12, padding: "2px 6px" }}>✕</button>
+                      <button onClick={() => removeSupportChannel(rel.id, ci)} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", cursor: "pointer", fontSize: 12, padding: "6px 10px", borderRadius: 6 }}>&#10005;</button>
                     </div>
                   ))}
-                  {(rel.supportChannels || []).length === 0 && <div style={{ fontSize: 11, color: c.textMuted }}>No channels added</div>}
+                  {(rel.supportChannels || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No channels added</div>}
                 </div>
 
-                {/* Fees Grid */}
-                <div>
-                  <label style={labelStyle}>Fees</label>
-                  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr", gap: 6, alignItems: "center" }}>
-                    <span></span><span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textAlign: "center" }}>% Rate</span><span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textAlign: "center" }}>TX Fee</span>
+                {/* Entities Onboarded */}
+                <div style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
+                  <div style={sectionHeader}>Entities Onboarded</div>
+                  {Object.entries(CORPORATE_ENTITIES).map(function(entry) {
+                    var cat = entry[0];
+                    var ents = entry[1];
+                    return (
+                      <div key={cat} style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", marginBottom: 4, letterSpacing: "0.05em" }}>{cat}</div>
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                          {ents.map(function(ent) {
+                            var active = (rel.onboardedEntities || []).includes(ent.name);
+                            return <button key={ent.name} onClick={() => toggleRelEntity(rel.id, ent.name)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: active ? "1px solid " + c.accent : "1px solid " + c.border, background: active ? c.accent + "20" : "transparent", color: active ? c.accent : c.textMuted, transition: "all 0.15s" }}>{ent.name}</button>;
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Object.keys(CORPORATE_ENTITIES).length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No entities configured</div>}
+                </div>
+              </div>
+
+              {/* === RIGHT COLUMN === */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+                {/* Offered Services */}
+                <div style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
+                  <div style={sectionHeader}>Offered Services</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {SERVICE_OPTIONS.map(svc => {
+                      var active = (rel.offeredServices || []).includes(svc);
+                      return <button key={svc} onClick={() => toggleRelService(rel.id, svc)} style={{ fontSize: 12, padding: "7px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 600, border: active ? "1px solid " + c.accent : "1px solid " + c.border, background: active ? c.accent + "20" : "transparent", color: active ? c.accent : c.textMuted, transition: "all 0.15s" }}>{svc}</button>;
+                    })}
+                  </div>
+                </div>
+
+                {/* Fees */}
+                <div style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
+                  <div style={sectionHeader}>Fees</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr", gap: 8, alignItems: "center" }}>
+                    <span></span>
+                    <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textAlign: "center", textTransform: "uppercase" }}>% Rate</span>
+                    <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textAlign: "center", textTransform: "uppercase" }}>TX Fee</span>
                     {FEE_TYPES.map(ft => (
                       <React.Fragment key={ft}>
-                        <span style={{ fontSize: 11, color: c.textSecondary, fontWeight: 600 }}>{ft}</span>
+                        <span style={{ fontSize: 12, color: c.textSecondary, fontWeight: 700 }}>{ft}</span>
                         <input value={(rel.fees?.[ft]?.pct) || ""} onChange={e => updateRelFee(rel.id, ft, "pct", e.target.value)} placeholder="0.00%" style={{ ...inputStyle, textAlign: "center" }} />
                         <input value={(rel.fees?.[ft]?.tx) || ""} onChange={e => updateRelFee(rel.id, ft, "tx", e.target.value)} placeholder="$0.00" style={{ ...inputStyle, textAlign: "center" }} />
                       </React.Fragment>
                     ))}
                   </div>
                 </div>
+
+                {/* Notes */}
+                <div style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div style={sectionHeader}>Notes</div>
+                    <button onClick={() => addNote(rel.id)} style={{ fontSize: 11, color: c.accent, background: c.accentBg, border: `1px solid ${c.accent}40`, borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>+ Add Note</button>
+                  </div>
+                  {(rel.notes || []).map(function(note) {
+                    return (
+                      <div key={note.id} style={{ background: c.card, borderRadius: 8, padding: 12, marginBottom: 8, border: `1px solid ${c.border}` }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ fontSize: 10, color: c.textMuted, fontWeight: 600 }}>{note.createdAt}</span>
+                          <button onClick={() => removeNote(rel.id, note.id)} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", cursor: "pointer", fontSize: 10, padding: "3px 8px", borderRadius: 4, fontWeight: 600 }}>Delete</button>
+                        </div>
+                        <textarea value={note.text || ""} onChange={e => updateNote(rel.id, note.id, e.target.value)} placeholder="Write a note..." rows={3} style={{ ...inputStyle, width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+                      </div>
+                    );
+                  })}
+                  {(rel.notes || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No notes yet</div>}
+                </div>
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+            </div>
+          )}
+        </div>
+        );
+      })}
     </div>
     );
   };
