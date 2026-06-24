@@ -238,7 +238,7 @@ function AviroDashboard() {
   const [providerViewTab, setProviderViewTab] = useState("providers"); // "providers", "overview"
   const [providerOverviewFilters, setProviderOverviewFilters] = useState({});
   const [selectedClient, setSelectedClient] = useState(null);
-  const [clientDetailTab, setClientDetailTab] = useState("corporate"); // "corporate", "providers", "introducer"
+  const [clientDetailTab, setClientDetailTab] = useState("home"); // "home", "corporate", "providers", "introducer"
   const [editingClientField, setEditingClientField] = useState(null);
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -1603,7 +1603,7 @@ function AviroDashboard() {
 
           {/* Sub-tab navigation */}
           <div style={{ display: "flex", gap: 6, marginBottom: 24, borderBottom: `1px solid ${c.border}`, paddingBottom: 0 }}>
-            {[{ key: "corporate", label: "Entity Information & KYB" }, { key: "contracts", label: "Contracts" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }].map(tab => {
+            {[{ key: "home", label: "Client Home" }, { key: "corporate", label: "Entity Information & KYB" }, { key: "contracts", label: "Contracts" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }].map(tab => {
               const sel = clientDetailTab === tab.key;
               return <button key={tab.key} onClick={() => setClientDetailTab(tab.key)} style={{ padding: "12px 22px", fontSize: 13, fontWeight: sel ? 700 : 500, color: sel ? c.accent : c.textMuted, background: sel ? `${c.accent}12` : "transparent", border: "none", borderBottom: sel ? `2px solid ${c.accent}` : "2px solid transparent", cursor: "pointer", marginBottom: -1, transition: "all 0.15s" }}>{tab.label}</button>;
             })}
@@ -1625,6 +1625,289 @@ function AviroDashboard() {
             );
 
             return (<>
+
+            {/* ===== CLIENT HOME TAB ===== */}
+            {clientDetailTab === "home" && (() => {
+              const HOME_REGIONS = ["Global", "UK", "West Europe", "East Europe", "Scandinavia", "Turkey", "MENA", "GCC", "CIS", "Africa", "LATAM", "North America", "Oceania", "India", "Asia", "South East Asia", "Japan"];
+              const HOME_REGION_COUNTRIES = {
+                "UK": ["England", "Scotland", "Wales", "Northern Ireland"],
+                "West Europe": ["Germany", "France", "Netherlands", "Belgium", "Austria", "Switzerland", "Luxembourg", "Ireland", "Spain", "Portugal", "Italy"],
+                "East Europe": ["Poland", "Czech Republic", "Hungary", "Romania", "Bulgaria", "Slovakia", "Slovenia", "Croatia", "Serbia", "Bosnia", "Lithuania", "Latvia", "Estonia"],
+                "Scandinavia": ["Sweden", "Norway", "Denmark", "Finland", "Iceland"],
+                "Turkey": ["Turkey"],
+                "MENA": ["Egypt", "Morocco", "Tunisia", "Algeria", "Lebanon", "Jordan", "Iraq"],
+                "GCC": ["UAE", "Saudi Arabia", "Qatar", "Bahrain", "Kuwait", "Oman"],
+                "CIS": ["Russia", "Ukraine", "Kazakhstan", "Belarus", "Georgia", "Armenia", "Azerbaijan", "Uzbekistan"],
+                "Africa": ["South Africa", "Nigeria", "Kenya", "Ghana", "Tanzania", "Uganda"],
+                "LATAM": ["Brazil", "Mexico", "Argentina", "Colombia", "Chile", "Peru", "Uruguay"],
+                "North America": ["USA", "Canada"],
+                "Oceania": ["Australia", "New Zealand"],
+                "India": ["India"],
+                "Asia": ["China", "South Korea", "Hong Kong", "Taiwan", "Mongolia"],
+                "South East Asia": ["Thailand", "Vietnam", "Indonesia", "Malaysia", "Philippines", "Singapore", "Cambodia", "Myanmar"],
+                "Japan": ["Japan"]
+              };
+              const CLIENT_PROFILES = ["VIP Client", "Strategic Client", "Small Client", "Gateway/Reseller"];
+              const ACTION_PEOPLE = ["David", "Sophie", "Aleksandra", "Tommo"];
+              const ACTION_STATUSES = ["Done", "Ongoing", "Waiting on Client", "Not Started"];
+              const ACTION_STATUS_COLORS = { "Done": "#34d399", "Ongoing": "#fbbf24", "Waiting on Client": "#f97316", "Not Started": "#6b7280" };
+              const CONTACT_VIA_OPTIONS = ["Introducer", "David", "Direct", "Groups"];
+              const GROUP_TYPE_OPTIONS = ["Top Level", "Commercial", "Technical", "Support"];
+              const GROUP_PLATFORM_OPTIONS = ["WhatsApp", "Signal", "Telegram"];
+              const actionPoints = cl.actionPoints || [];
+              const sortedActions = [...actionPoints.filter(a => a.status !== "Done"), ...actionPoints.filter(a => a.status === "Done")];
+              const pendingActions = actionPoints.filter(a => a.status !== "Done").length;
+              const proposedProviders = cl.proposedProviders || [];
+              const showOnboarding = cl.status === "onboarding" || cl.status === "discussion";
+
+              return (<>
+              {/* Summary Tile */}
+              <div style={{ ...sectionCard, borderLeft: `4px solid ${c.accent}`, background: `linear-gradient(135deg, ${c.card} 0%, ${c.surface} 100%)` }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: c.accent, margin: "0 0 14px 0", textTransform: "uppercase", letterSpacing: "0.03em" }}>Client Summary</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {cl.clientProfile && <div><span style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Profile</span><div style={{ fontSize: 14, color: c.text, fontWeight: 600, marginTop: 2 }}>{cl.clientProfile}</div></div>}
+                  {cl.targetVolume && <div><span style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Target Volume</span><div style={{ fontSize: 14, color: c.text, fontWeight: 600, marginTop: 2 }}>{cl.targetVolume}/mo</div></div>}
+                </div>
+                {(cl.targetRegions || []).length > 0 && <div style={{ marginTop: 12 }}><span style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Target Regions</span><div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>{(cl.targetRegions || []).map(r => <span key={r} style={{ fontSize: 11, color: c.accent, background: `${c.accent}15`, border: `1px solid ${c.accent}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 500 }}>{r}</span>)}</div></div>}
+                {proposedProviders.length > 0 && <div style={{ marginTop: 12 }}><span style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Proposed Providers & Services</span><div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>{proposedProviders.map(pp => { const prov = providers.find(p => p.id === pp.providerId); const svc = prov ? (prov.services || []).find(s => s.id === pp.serviceId) : null; return <span key={pp.id} style={{ fontSize: 11, color: "#818cf8", background: "rgba(129,140,248,0.1)", border: "1px solid rgba(129,140,248,0.3)", padding: "2px 8px", borderRadius: 4, fontWeight: 500 }}>{prov ? prov.name : "?"}{svc ? ` / ${svc.name}` : ""}{pp.region ? ` (${pp.region})` : ""}</span>; })}</div></div>}
+                {showOnboarding && <div style={{ marginTop: 14, display: "flex", gap: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: cl.proposalSent ? "#34d399" : "#6b7280", display: "inline-block" }}></span><span style={{ fontSize: 12, color: c.textMuted }}>Proposal Sent</span></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: cl.contractsSigned ? "#34d399" : "#6b7280", display: "inline-block" }}></span><span style={{ fontSize: 12, color: c.textMuted }}>Contracts Signed</span></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: cl.midsCreated ? "#34d399" : "#6b7280", display: "inline-block" }}></span><span style={{ fontSize: 12, color: c.textMuted }}>MIDs Created</span></div>
+                </div>}
+              </div>
+
+              {/* Key Action Points */}
+              <div style={{ ...sectionCard, borderLeft: pendingActions > 0 ? "3px solid #f87171" : `1px solid ${c.border}` }}>
+                <SectionHeader sectionKey="homeActions" title="Key Action Points" badge={pendingActions > 0 ? `${pendingActions} pending` : `${actionPoints.length} total`} extra={
+                  !collapsed.homeActions && <button onClick={() => updateClient(cl.id, "actionPoints", [...actionPoints, { id: `ap-${Date.now()}`, person: "", action: "", status: "Not Started" }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Action Point</button>
+                } />
+                {!collapsed.homeActions && (<>
+                  {sortedActions.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "8px 0" }}>No action points yet.</div>}
+                  {sortedActions.map(ap => {
+                    const sc = ACTION_STATUS_COLORS[ap.status] || "#6b7280";
+                    return (
+                      <div key={ap.id} style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 10, padding: 14, marginBottom: 8, borderLeft: `3px solid ${sc}`, opacity: ap.status === "Done" ? 0.6 : 1 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr auto", gap: 10, alignItems: "center" }}>
+                          <select value={ap.person || ""} onChange={e => updateClient(cl.id, "actionPoints", actionPoints.map(a => a.id === ap.id ? { ...a, person: e.target.value } : a))} style={{ ...inputStyle, fontSize: 12 }}>
+                            <option value="">-- Person --</option>
+                            {ACTION_PEOPLE.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                          <input value={ap.action || ""} onChange={e => updateClient(cl.id, "actionPoints", actionPoints.map(a => a.id === ap.id ? { ...a, action: e.target.value } : a))} placeholder="Action description..." style={{ ...inputStyle, fontSize: 12 }} />
+                          <select value={ap.status || "Not Started"} onChange={e => updateClient(cl.id, "actionPoints", actionPoints.map(a => a.id === ap.id ? { ...a, status: e.target.value } : a))} style={{ ...inputStyle, fontSize: 12, color: sc, fontWeight: 600 }}>
+                            {ACTION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                          <button onClick={() => updateClient(cl.id, "actionPoints", actionPoints.filter(a => a.id !== ap.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}>Delete</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>)}
+              </div>
+
+              {/* Contact Information */}
+              <div style={sectionCard}>
+                <SectionHeader sectionKey="homeContacts" title="Contact Information" badge={`${(cl.contacts || []).length} contacts · ${(cl.groups || []).length} groups`} />
+                {!collapsed.homeContacts && (<>
+                  {/* Contacts */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: c.textSecondary, textTransform: "uppercase" }}>Contacts</span>
+                      <button onClick={() => updateClient(cl.id, "contacts", [...(cl.contacts || []), { id: `ct-${Date.now()}`, name: "", role: "", contactVia: "", platform: "", handle: "" }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Contact</button>
+                    </div>
+                    {(cl.contacts || []).length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "4px 0" }}>No contacts added.</div>}
+                    {(cl.contacts || []).map(ct => (
+                      <div key={ct.id} style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 10, padding: 12, marginBottom: 6 }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <input value={ct.name || ""} onChange={e => updateClient(cl.id, "contacts", (cl.contacts || []).map(x => x.id === ct.id ? { ...x, name: e.target.value } : x))} placeholder="Name" style={{ ...inputStyle, fontSize: 12, flex: 1, minWidth: 120 }} />
+                          <input value={ct.role || ""} onChange={e => updateClient(cl.id, "contacts", (cl.contacts || []).map(x => x.id === ct.id ? { ...x, role: e.target.value } : x))} placeholder="Role" style={{ ...inputStyle, fontSize: 12, flex: 1, minWidth: 120 }} />
+                          <select value={ct.contactVia || ""} onChange={e => updateClient(cl.id, "contacts", (cl.contacts || []).map(x => x.id === ct.id ? { ...x, contactVia: e.target.value } : x))} style={{ ...inputStyle, fontSize: 12 }}>
+                            <option value="">-- Contact Via --</option>
+                            {CONTACT_VIA_OPTIONS.map(v => <option key={v} value={v}>{v}</option>)}
+                          </select>
+                          {ct.contactVia === "Groups" && (<>
+                            <select value={ct.platform || ""} onChange={e => updateClient(cl.id, "contacts", (cl.contacts || []).map(x => x.id === ct.id ? { ...x, platform: e.target.value } : x))} style={{ ...inputStyle, fontSize: 12 }}>
+                              <option value="">-- Platform --</option>
+                              {GROUP_PLATFORM_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                            <input value={ct.handle || ""} onChange={e => updateClient(cl.id, "contacts", (cl.contacts || []).map(x => x.id === ct.id ? { ...x, handle: e.target.value } : x))} placeholder="Handle / username" style={{ ...inputStyle, fontSize: 12, minWidth: 120 }} />
+                          </>)}
+                          <button onClick={() => updateClient(cl.id, "contacts", (cl.contacts || []).filter(x => x.id !== ct.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Groups */}
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: c.textSecondary, textTransform: "uppercase" }}>Groups</span>
+                      <button onClick={() => updateClient(cl.id, "groups", [...(cl.groups || []), { id: `gr-${Date.now()}`, groupType: "", platform: "", groupName: "" }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Group</button>
+                    </div>
+                    {(cl.groups || []).length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "4px 0" }}>No groups added.</div>}
+                    {(cl.groups || []).map(gr => (
+                      <div key={gr.id} style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 10, padding: 12, marginBottom: 6 }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <select value={gr.groupType || ""} onChange={e => updateClient(cl.id, "groups", (cl.groups || []).map(x => x.id === gr.id ? { ...x, groupType: e.target.value } : x))} style={{ ...inputStyle, fontSize: 12 }}>
+                            <option value="">-- Type --</option>
+                            {GROUP_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                          <select value={gr.platform || ""} onChange={e => updateClient(cl.id, "groups", (cl.groups || []).map(x => x.id === gr.id ? { ...x, platform: e.target.value } : x))} style={{ ...inputStyle, fontSize: 12 }}>
+                            <option value="">-- Platform --</option>
+                            {GROUP_PLATFORM_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                          <input value={gr.groupName || ""} onChange={e => updateClient(cl.id, "groups", (cl.groups || []).map(x => x.id === gr.id ? { ...x, groupName: e.target.value } : x))} placeholder="Group name" style={{ ...inputStyle, fontSize: 12, flex: 1 }} />
+                          <button onClick={() => updateClient(cl.id, "groups", (cl.groups || []).filter(x => x.id !== gr.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>)}
+              </div>
+
+              {/* Client Overview */}
+              <div style={sectionCard}>
+                <SectionHeader sectionKey="homeOverview" title="Client Overview" />
+                {!collapsed.homeOverview && (<>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={labelStyle}>Client Profile</label>
+                    <select value={cl.clientProfile || ""} onChange={e => updateClient(cl.id, "clientProfile", e.target.value)} style={{ ...inputStyle, width: "100%" }}>
+                      <option value="">-- Select Profile --</option>
+                      {CLIENT_PROFILES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: c.textSecondary, textTransform: "uppercase" }}>Notes</span>
+                      <button onClick={() => updateClient(cl.id, "notes", [...(cl.notes || []), { id: `nt-${Date.now()}`, title: "", text: "", createdAt: new Date().toISOString() }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Note</button>
+                    </div>
+                    {(cl.notes || []).length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "4px 0" }}>No notes yet.</div>}
+                    {(cl.notes || []).map(nt => (
+                      <div key={nt.id} style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 10, padding: 14, marginBottom: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                          <input value={nt.title || ""} onChange={e => updateClient(cl.id, "notes", (cl.notes || []).map(x => x.id === nt.id ? { ...x, title: e.target.value } : x))} placeholder="Note title..." style={{ ...inputStyle, fontSize: 13, fontWeight: 700, border: "none", background: "transparent", padding: 0, flex: 1 }} />
+                          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            {nt.createdAt && <span style={{ fontSize: 10, color: c.textMuted }}>{new Date(nt.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                            <button onClick={() => updateClient(cl.id, "notes", (cl.notes || []).filter(x => x.id !== nt.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}>Delete</button>
+                          </div>
+                        </div>
+                        <textarea value={nt.text || ""} onChange={e => updateClient(cl.id, "notes", (cl.notes || []).map(x => x.id === nt.id ? { ...x, text: e.target.value } : x))} placeholder="Note content..." rows={3} style={{ ...inputStyle, width: "100%", fontSize: 12, resize: "vertical", fontFamily: "inherit" }} />
+                      </div>
+                    ))}
+                  </div>
+                </>)}
+              </div>
+
+              {/* Client Targets */}
+              <div style={sectionCard}>
+                <SectionHeader sectionKey="homeTargets" title="Client Targets" />
+                {!collapsed.homeTargets && (<>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={labelStyle}>Estimated Target Volume (Monthly)</label>
+                    <input value={cl.targetVolume || ""} onChange={e => updateClient(cl.id, "targetVolume", e.target.value)} placeholder="e.g. $500,000" style={{ ...inputStyle, width: "100%" }} />
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={labelStyle}>Target Regions</label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                      {HOME_REGIONS.map(r => {
+                        const sel = (cl.targetRegions || []).includes(r);
+                        return <button key={r} onClick={() => {
+                          const cur = cl.targetRegions || [];
+                          if (sel) {
+                            const removed = cur.filter(x => x !== r);
+                            const countriesInRegion = HOME_REGION_COUNTRIES[r] || [];
+                            const filteredCountries = (cl.targetCountries || []).filter(tc => !countriesInRegion.includes(tc));
+                            updateClient(cl.id, "targetRegions", removed);
+                            updateClient(cl.id, "targetCountries", filteredCountries);
+                          } else {
+                            updateClient(cl.id, "targetRegions", [...cur, r]);
+                          }
+                        }} style={{ background: sel ? `${c.accent}20` : "transparent", border: `1px solid ${sel ? c.accent : c.border}`, color: sel ? c.accent : c.textMuted, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 12, fontWeight: sel ? 600 : 400, transition: "all 0.15s" }}>{r}</button>;
+                      })}
+                    </div>
+                  </div>
+                  {(cl.targetRegions || []).length > 0 && (() => {
+                    const availableCountries = (cl.targetRegions || []).flatMap(r => HOME_REGION_COUNTRIES[r] || []);
+                    const selectedCountries = cl.targetCountries || [];
+                    const showCountries = !collapsed.homeTargetCountries;
+                    return (
+                      <div style={{ marginBottom: 16 }}>
+                        <div onClick={() => toggleSection("homeTargetCountries")} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: showCountries ? 8 : 0 }}>
+                          <span style={{ fontSize: 13, color: c.textMuted, transition: "transform 0.15s", display: "inline-block", transform: showCountries ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
+                          <label style={{ ...labelStyle, margin: 0, cursor: "pointer" }}>Specific Target Countries ({selectedCountries.length}/{availableCountries.length})</label>
+                        </div>
+                        {showCountries && <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {availableCountries.map(co => {
+                            const sel = selectedCountries.includes(co);
+                            return <button key={co} onClick={() => {
+                              const cur = cl.targetCountries || [];
+                              updateClient(cl.id, "targetCountries", sel ? cur.filter(x => x !== co) : [...cur, co]);
+                            }} style={{ background: sel ? `${c.accent}15` : "transparent", border: `1px solid ${sel ? c.accent : c.border}`, color: sel ? c.accent : c.textMuted, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: sel ? 600 : 400, transition: "all 0.15s" }}>{co}</button>;
+                          })}
+                        </div>}
+                      </div>
+                    );
+                  })()}
+                  {/* Proposed Providers */}
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: c.textSecondary, textTransform: "uppercase" }}>Proposed Providers</span>
+                      <button onClick={() => updateClient(cl.id, "proposedProviders", [...proposedProviders, { id: `pp-${Date.now()}`, providerId: "", serviceId: "", region: "" }])} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Provider</button>
+                    </div>
+                    {proposedProviders.length === 0 && <div style={{ color: c.textMuted, fontSize: 12, padding: "4px 0" }}>No proposed providers yet.</div>}
+                    {proposedProviders.map(pp => {
+                      const selProv = providers.find(p => p.id === pp.providerId);
+                      const selSvcs = selProv ? (selProv.services || []) : [];
+                      const selSvc = selSvcs.find(s => s.id === pp.serviceId);
+                      const regionOptions = selSvc ? [...(selSvc.regions || []), ...(selSvc.specificCountries || [])] : (cl.targetRegions || []);
+                      return (
+                        <div key={pp.id} style={{ background: c.surface, border: `1px solid ${c.border}`, borderRadius: 10, padding: 12, marginBottom: 6 }}>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <select value={pp.providerId || ""} onChange={e => updateClient(cl.id, "proposedProviders", proposedProviders.map(x => x.id === pp.id ? { ...x, providerId: e.target.value, serviceId: "", region: "" } : x))} style={{ ...inputStyle, fontSize: 12, flex: 1, minWidth: 140 }}>
+                              <option value="">-- Provider --</option>
+                              {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                            <select value={pp.serviceId || ""} onChange={e => updateClient(cl.id, "proposedProviders", proposedProviders.map(x => x.id === pp.id ? { ...x, serviceId: e.target.value, region: "" } : x))} style={{ ...inputStyle, fontSize: 12, flex: 1, minWidth: 140 }}>
+                              <option value="">-- Service --</option>
+                              {selSvcs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                            <select value={pp.region || ""} onChange={e => updateClient(cl.id, "proposedProviders", proposedProviders.map(x => x.id === pp.id ? { ...x, region: e.target.value } : x))} style={{ ...inputStyle, fontSize: 12, flex: 1, minWidth: 120 }}>
+                              <option value="">-- Region --</option>
+                              {regionOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                            <button onClick={() => updateClient(cl.id, "proposedProviders", proposedProviders.filter(x => x.id !== pp.id))} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}>Delete</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>)}
+              </div>
+
+              {/* Onboarding Status */}
+              {showOnboarding && (
+                <div style={sectionCard}>
+                  <SectionHeader sectionKey="homeOnboarding" title="Onboarding Status" />
+                  {!collapsed.homeOnboarding && (
+                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                      {[{ key: "proposalSent", label: "Proposal Sent" }, { key: "contractsSigned", label: "Contracts Signed" }, { key: "midsCreated", label: "MIDs Created" }].map(item => {
+                        const val = cl[item.key] || false;
+                        return (
+                          <div key={item.key} style={{ flex: 1, minWidth: 140 }}>
+                            <label style={labelStyle}>{item.label}</label>
+                            <div style={{ display: "flex", gap: 4 }}>
+                              <button onClick={() => updateClient(cl.id, item.key, true)} style={{ flex: 1, background: val ? "rgba(52,211,153,0.15)" : "transparent", border: `1px solid ${val ? "#34d399" : c.border}`, color: val ? "#34d399" : c.textMuted, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Yes</button>
+                              <button onClick={() => updateClient(cl.id, item.key, false)} style={{ flex: 1, background: !val ? "rgba(107,114,128,0.15)" : "transparent", border: `1px solid ${!val ? "#6b7280" : c.border}`, color: !val ? "#6b7280" : c.textMuted, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>No</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              </>);
+            })()}
 
             {/* ===== ENTITY INFORMATION & KYB TAB ===== */}
             {clientDetailTab === "corporate" && (<>
@@ -2787,7 +3070,7 @@ function AviroDashboard() {
               <label style={labelStyle}>Client Name</label>
               <input value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="Enter client name..." style={{ ...inputStyle, width: "100%" }} onKeyDown={e => {
                 if (e.key === "Enter" && newClientName.trim()) {
-                  const newCl = { id: `cl-${Date.now()}`, name: newClientName.trim(), clientType: "", clientEntities: [], agreements: [], introduction: "", introductionDeal: "", monthlyFee: "", monthlyFeeCurrency: "USD", revenueSharePct: "", revenueShareFrom: "", settlementGroup: "", settlementTerms: "", settlementFee: "", bankAccounts: [], clientProviders: [] };
+                  const newCl = { id: `cl-${Date.now()}`, name: newClientName.trim(), clientType: "", clientEntities: [], agreements: [], introduction: "", introductionDeal: "", monthlyFee: "", monthlyFeeCurrency: "USD", revenueSharePct: "", revenueShareFrom: "", settlementGroup: "", settlementTerms: "", settlementFee: "", bankAccounts: [], clientProviders: [], contacts: [], groups: [], notes: [], actionPoints: [], proposedProviders: [], targetRegions: [], targetCountries: [], clientProfile: "", targetVolume: "" };
                   setGatewayClients([...gatewayClients, newCl]);
                   setNewClientName(""); setShowAddClient(false);
                 }
@@ -2795,7 +3078,7 @@ function AviroDashboard() {
             </div>
             <button onClick={() => {
               if (!newClientName.trim()) return;
-              const newCl = { id: `cl-${Date.now()}`, name: newClientName.trim(), clientType: "", clientEntities: [], agreements: [], introduction: "", introductionDeal: "", monthlyFee: "", monthlyFeeCurrency: "USD", revenueSharePct: "", revenueShareFrom: "", settlementGroup: "", settlementTerms: "", settlementFee: "", bankAccounts: [], clientProviders: [] };
+              const newCl = { id: `cl-${Date.now()}`, name: newClientName.trim(), clientType: "", clientEntities: [], agreements: [], introduction: "", introductionDeal: "", monthlyFee: "", monthlyFeeCurrency: "USD", revenueSharePct: "", revenueShareFrom: "", settlementGroup: "", settlementTerms: "", settlementFee: "", bankAccounts: [], clientProviders: [], contacts: [], groups: [], notes: [], actionPoints: [], proposedProviders: [], targetRegions: [], targetCountries: [], clientProfile: "", targetVolume: "" };
               setGatewayClients([...gatewayClients, newCl]);
               setNewClientName(""); setShowAddClient(false);
             }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>Create</button>
@@ -2818,11 +3101,16 @@ function AviroDashboard() {
                   <div style={{ fontSize: 16, fontWeight: 700, color: c.text }}>{cl.name}</div>
                   {(() => { const sc = { active: "#34d399", onboarding: "#fbbf24", discussion: "#60a5fa", inactive: "#6b7280" }; const sl = { active: "Active", onboarding: "Onboarding", discussion: "In Discussion", inactive: "Inactive" }; const st = cl.status || "onboarding"; return <span style={{ fontSize: 9, color: sc[st] || c.textMuted, background: `${sc[st] || c.textMuted}15`, border: `1px solid ${sc[st] || c.textMuted}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 700, textTransform: "uppercase" }}>{sl[st] || st}</span>; })()}
                 </div>
-                {cl.clientType && <span style={{ fontSize: 11, color: typeColor, background: `${typeColor}15`, border: `1px solid ${typeColor}40`, padding: "4px 10px", borderRadius: 6, fontWeight: 600 }}>{cl.clientType}</span>}
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  {cl.clientType && <span style={{ fontSize: 11, color: typeColor, background: `${typeColor}15`, border: `1px solid ${typeColor}40`, padding: "4px 10px", borderRadius: 6, fontWeight: 600 }}>{cl.clientType}</span>}
+                  {cl.clientProfile && <span style={{ fontSize: 10, color: c.accent, background: `${c.accent}15`, border: `1px solid ${c.accent}40`, padding: "3px 8px", borderRadius: 5, fontWeight: 600 }}>{cl.clientProfile}</span>}
+                  {(() => { const ap = (cl.actionPoints || []).filter(a => a.status !== "Done").length; return ap > 0 ? <span style={{ fontSize: 10, color: "#fff", background: "#f87171", padding: "2px 7px", borderRadius: 10, fontWeight: 700, minWidth: 18, textAlign: "center" }}>{ap}</span> : null; })()}
+                </div>
                 <div style={{ marginTop: 10, fontSize: 12, color: c.textMuted }}>
                   {(cl.agreements || []).length > 0 && <span>{(cl.agreements || []).length} contract{(cl.agreements || []).length !== 1 ? "s" : ""}</span>}
                   {cl.monthlyFee && <span>{(cl.agreements || []).length > 0 ? " · " : ""}{cl.monthlyFeeCurrency || "USD"} {cl.monthlyFee}/mo</span>}
                   {cl.revenueSharePct && <span> · {cl.revenueSharePct}% rev share</span>}
+                  {cl.targetVolume && <span>{((cl.agreements || []).length > 0 || cl.monthlyFee || cl.revenueSharePct) ? " · " : ""}Target: {cl.targetVolume}/mo</span>}
                 </div>
                 {(cl.clientEntities || []).length > 0 && (
                   <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
