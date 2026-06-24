@@ -5579,13 +5579,6 @@ function AviroDashboard() {
         return { ...r, supportChannels: (r.supportChannels || []).filter((_, i) => i !== idx) };
       }));
     };
-    const toggleRelEntity = (id, entityName) => {
-      setBankRelationships(bankRelationships.map(r => {
-        if (r.id !== id) return r;
-        const ents = r.onboardedEntities || [];
-        return { ...r, onboardedEntities: ents.includes(entityName) ? ents.filter(e => e !== entityName) : [...ents, entityName] };
-      }));
-    };
     const addNote = (id, text) => {
       if (!text || !text.trim()) return;
       setBankRelationships(bankRelationships.map(r => {
@@ -5651,7 +5644,7 @@ function AviroDashboard() {
         var lvl = rel.relationshipLevel || 5;
         var lc = levelColor(lvl);
         var services = rel.offeredServices || [];
-        var entOnboarded = (rel.onboardedEntities || []).length;
+
 
         return (
         <div key={rel.id} style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 0, marginBottom: 14, boxShadow: "0 2px 12px rgba(0,0,0,0.15)", overflow: "hidden" }}>
@@ -5664,9 +5657,6 @@ function AviroDashboard() {
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                   {services.map(function(svc) { return <span key={svc} style={{ fontSize: 10, fontWeight: 600, color: c.accent, background: c.accentBg, padding: "2px 8px", borderRadius: 4 }}>{svc}</span>; })}
                 </div>
-              )}
-              {entOnboarded > 0 && (
-                <span style={{ fontSize: 10, fontWeight: 600, color: c.textSecondary, background: c.surface, padding: "3px 8px", borderRadius: 4, border: `1px solid ${c.border}` }}>{entOnboarded} entit{entOnboarded !== 1 ? "ies" : "y"}</span>
               )}
               {rel.canOpenNamedAccounts === true && <span style={{ fontSize: 10, fontWeight: 600, color: "#34d399", background: "rgba(34,197,94,0.1)", padding: "3px 8px", borderRadius: 4, border: "1px solid rgba(34,197,94,0.3)" }}>Named Accounts</span>}
             </div>
@@ -5727,26 +5717,6 @@ function AviroDashboard() {
                   {(rel.supportChannels || []).length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No channels added</div>}
                 </div>
 
-                {/* Entities Onboarded */}
-                <div style={{ background: c.surface, borderRadius: 10, padding: 16, border: `1px solid ${c.border}` }}>
-                  <div style={sectionHeader}>Entities Onboarded</div>
-                  {Object.entries(CORPORATE_ENTITIES).map(function(entry) {
-                    var cat = entry[0];
-                    var ents = entry[1];
-                    return (
-                      <div key={cat} style={{ marginBottom: 10 }}>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", marginBottom: 4, letterSpacing: "0.05em" }}>{cat}</div>
-                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                          {ents.map(function(ent) {
-                            var active = (rel.onboardedEntities || []).includes(ent.name);
-                            return <button key={ent.name} onClick={() => toggleRelEntity(rel.id, ent.name)} style={{ fontSize: 11, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontWeight: 600, border: active ? "1px solid " + c.accent : "1px solid " + c.border, background: active ? c.accent + "20" : "transparent", color: active ? c.accent : c.textMuted, transition: "all 0.15s" }}>{ent.name}</button>;
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {Object.keys(CORPORATE_ENTITIES).length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No entities configured</div>}
-                </div>
               </div>
 
               {/* === RIGHT COLUMN === */}
