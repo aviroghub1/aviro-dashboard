@@ -5817,8 +5817,9 @@ function AviroDashboard() {
 
   // ===== CONTRACT GENERATOR =====
   const renderContractGenerator = () => {
+    var inputStyle = { fontSize: 13, padding: "9px 14px", borderRadius: 8, border: "1px solid " + c.border, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" };
     var cgLabelStyle = { fontSize: 11, fontWeight: 600, color: c.textMuted, display: "block", marginBottom: 4 };
-    var cgInputStyle = { ...inputStyle, width: "100%" };
+    var cgInputStyle = Object.assign({}, inputStyle, { width: "100%" });
     var cgSectionCard = { background: c.card, borderRadius: 12, border: "1px solid " + c.border, padding: 20, marginBottom: 16 };
 
     var selectedClientId = contractDefaults._selectedClient || "";
