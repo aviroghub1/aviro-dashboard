@@ -1617,7 +1617,7 @@ function AviroDashboard() {
 
           {/* Sub-tab navigation */}
           <div style={{ display: "flex", gap: 6, marginBottom: 24, borderBottom: `1px solid ${c.border}`, paddingBottom: 0 }}>
-            {[{ key: "home", label: "Client Home" }, { key: "corporate", label: "Entity Information & KYB" }, { key: "contracts", label: "Contracts" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }, { key: "contractgen", label: "Contract Generator" }].map(tab => {
+            {[{ key: "home", label: "Client Home" }, { key: "corporate", label: "Entity Information & KYB" }, { key: "contracts", label: "Contracts" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }].map(tab => {
               const sel = clientDetailTab === tab.key;
               return <button key={tab.key} onClick={() => setClientDetailTab(tab.key)} style={{ padding: "12px 22px", fontSize: 13, fontWeight: sel ? 700 : 500, color: sel ? c.accent : c.textMuted, background: sel ? `${c.accent}12` : "transparent", border: "none", borderBottom: sel ? `2px solid ${c.accent}` : "2px solid transparent", cursor: "pointer", marginBottom: -1, transition: "all 0.15s" }}>{tab.label}</button>;
             })}
@@ -3060,326 +3060,6 @@ function AviroDashboard() {
               </>);
             })()}
 
-
-            {/* ===== CONTRACT GENERATOR TAB ===== */}
-            {clientDetailTab === "contractgen" && (() => {
-              var ents = cl.entities || [];
-              var contractConfig = cl.contractConfig || {};
-              var updateCC = function(field, val) {
-                var updated = Object.assign({}, cl.contractConfig || {}, {});
-                updated[field] = val;
-                updateClient(cl.id, "contractConfig", updated);
-              };
-
-              var selectedEntity = ents.find(function(e) { return e.id === contractConfig.entityId; });
-              var selectedTemplate = contractConfig.template || "gateway";
-              var defaultsOpen = contractConfig.defaultsOpen || false;
-
-              var generateContract = async function() {
-                if (!contractConfig.entityId) { alert("Please select an entity first"); return; }
-                if (!selectedEntity) { alert("Entity not found"); return; }
-
-                try {
-                  // Decode the base64 template
-                  var templateB64 = selectedTemplate === "gateway" ? GATEWAY_CONTRACT_TEMPLATE_B64 : null;
-                  if (!templateB64) { alert("Cube Pay template not yet available. Please upload one."); return; }
-
-                  var binaryStr = atob(templateB64);
-                  var bytes = new Uint8Array(binaryStr.length);
-                  for (var i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-
-                  var zip = await JSZip.loadAsync(bytes);
-                  var docXml = await zip.file("word/document.xml").async("string");
-
-                  // Build replacement map
-                  var cd = contractDefaults;
-                  var effectiveDate = contractConfig.effectiveDate || new Date().toISOString().split("T")[0];
-                  var formattedDate = new Date(effectiveDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-
-                  var replacements = {
-                    "[CLIENT LEGAL NAME]": selectedEntity.entityName || cl.name || "",
-                    "[AGREEMENT REF]": contractConfig.agreementRef || ("GW-" + Date.now().toString(36).toUpperCase()),
-                    "[EFFECTIVE DATE]": formattedDate,
-                    "[FREE ZONE / EMIRATE, UAE]": cd.freeZone || "",
-                    "[REGISTRATION NUMBER]": cd.registrationNumber || "",
-                    "[REGISTERED ADDRESS]": cd.registeredAddress || "",
-                    "[JURISDICTION]": selectedEntity.jurisdiction || "",
-                    "[CLIENT REG. NO.]": selectedEntity.companyNumber || "",
-                    "[CLIENT ADDRESS]": selectedEntity.registeredAddress || "",
-                    "[CURRENCY]": contractConfig.currency || "USD",
-                    "[PCI DSS LEVEL]": cd.pciLevel || "",
-                    "[AOC DATE]": cd.aocDate || "",
-                    "[PROVIDER NOTICE NAME / EMAIL]": cd.providerNoticeName ? (cd.providerNoticeName + " / " + (cd.providerNoticeEmail || "")) : "",
-                    "[CLIENT NOTICE NAME / EMAIL]": contractConfig.clientNoticeName ? (contractConfig.clientNoticeName + " / " + (contractConfig.clientNoticeEmail || "")) : "",
-                    "[GOVERNING LAW \\u2013 e.g. the Emirate of Dubai / DIFC]": cd.governingLaw || "",
-                    "[ARBITRAL INSTITUTION \\u2013 e.g. DIAC / DIFC-LCIA]": cd.arbitralInstitution || "",
-                    "[SEAT \\u2013 e.g. Dubai / DIFC]": cd.arbitrationSeat || "",
-                    "[one (1) / three (3)]": cd.arbitrators || "one (1)",
-                    "[SUPPORT EMAIL]": cd.supportEmail || "",
-                    "[ACCOUNT NAME]": cd.accountName || "",
-                    "[BANK DETAILS]": cd.bankDetails || "",
-                    "[AMOUNT RANGE]": cd.amountRange || "",
-                  };
-
-                  // Handle the three separate [AMOUNT] placeholders (set-up, monthly, transaction)
-                  // They appear in order in the document
-                  var amountCount = 0;
-                  var amounts = [
-                    contractConfig.setupFee || "[AMOUNT]",
-                    (contractConfig.monthlyFee || "[AMOUNT]") + " / month",
-                    (contractConfig.transactionFee || "[AMOUNT]") + " per transaction",
-                  ];
-                  docXml = docXml.replace(/\[AMOUNT\] \/ month/g, amounts[1]);
-                  docXml = docXml.replace(/\[AMOUNT\] per transaction/g, amounts[2]);
-                  docXml = docXml.replace(/\[AMOUNT\]/g, amounts[0]);
-
-                  // Handle signature names/titles/dates
-                  var nameCount = 0;
-                  var nameValues = [cd.providerSignName || "[NAME]", contractConfig.clientSignName || "[NAME]", cd.providerSignName || "[NAME]", contractConfig.clientSignName || "[NAME]"];
-                  docXml = docXml.replace(/\[NAME\]/g, function() { return nameValues[nameCount++] || "[NAME]"; });
-
-                  var titleCount = 0;
-                  var titleValues = [cd.providerSignTitle || "[TITLE]", contractConfig.clientSignTitle || "[TITLE]"];
-                  docXml = docXml.replace(/\[TITLE\]/g, function() { return titleValues[titleCount++] || "[TITLE]"; });
-
-                  var dateCount = 0;
-                  var dateValues = [formattedDate, formattedDate, formattedDate, formattedDate];
-                  docXml = docXml.replace(/\[DATE\]/g, function() { return dateValues[dateCount++] || "[DATE]"; });
-
-                  // Apply all standard replacements
-                  Object.keys(replacements).forEach(function(placeholder) {
-                    var escaped = placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                    docXml = docXml.replace(new RegExp(escaped, "g"), replacements[placeholder]);
-                  });
-
-                  // Also handle en-dash variants in governing law etc
-                  docXml = docXml.replace(/\[GOVERNING LAW [^[\]]*\]/g, cd.governingLaw || "");
-                  docXml = docXml.replace(/\[ARBITRAL INSTITUTION [^[\]]*\]/g, cd.arbitralInstitution || "");
-                  docXml = docXml.replace(/\[SEAT [^[\]]*\]/g, cd.arbitrationSeat || "");
-
-                  // Remove template note paragraph
-                  docXml = docXml.replace(/<w:p [^>]*>.*?TEMPLATE NOTE.*?<\/w:p>/g, "");
-
-                  zip.file("word/document.xml", docXml);
-
-                  var blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-                  var fileName = (selectedTemplate === "gateway" ? "Gateway_TSA" : "CubePay_Agreement") + "_" + (selectedEntity.entityName || cl.name || "Client").replace(/[^a-zA-Z0-9]/g, "_") + "_" + effectiveDate + ".docx";
-                  saveAs(blob, fileName);
-                } catch (err) {
-                  console.error("Contract generation error:", err);
-                  alert("Error generating contract: " + err.message);
-                }
-              };
-
-              var cgLabelStyle = { fontSize: 11, fontWeight: 600, color: c.textMuted, display: "block", marginBottom: 4 };
-              var cgInputStyle = { ...inputStyle, width: "100%" };
-
-              return (<>
-
-              {/* Template Selector */}
-              <div style={sectionCard}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: c.accent, margin: "0 0 16px 0", textTransform: "uppercase", letterSpacing: "0.03em" }}>Contract Generator</div>
-                <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-                  {["gateway", "cubepay"].map(function(tmpl) {
-                    var active = selectedTemplate === tmpl;
-                    var label = tmpl === "gateway" ? "Gateway.io" : "Cube Pay";
-                    return <button key={tmpl} onClick={function() { updateCC("template", tmpl); }} style={{ padding: "12px 28px", borderRadius: 10, border: active ? "2px solid " + c.accent : "1px solid " + c.border, background: active ? c.accent + "15" : "transparent", color: active ? c.accent : c.textMuted, fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "all 0.15s" }}>{label}</button>;
-                  })}
-                </div>
-
-                {/* Entity Selection */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
-                  <div>
-                    <label style={cgLabelStyle}>Entity</label>
-                    <select value={contractConfig.entityId || ""} onChange={function(e) { updateCC("entityId", e.target.value); }} style={cgInputStyle}>
-                      <option value="">{"—"} Select Entity {"—"}</option>
-                      {ents.map(function(ent) { return <option key={ent.id} value={ent.id}>{ent.entityName || "(Unnamed)"}</option>; })}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={cgLabelStyle}>Effective Date</label>
-                    <input type="date" value={contractConfig.effectiveDate || ""} onChange={function(e) { updateCC("effectiveDate", e.target.value); }} style={cgInputStyle} />
-                  </div>
-                  <div>
-                    <label style={cgLabelStyle}>Agreement Reference</label>
-                    <input value={contractConfig.agreementRef || ""} onChange={function(e) { updateCC("agreementRef", e.target.value); }} placeholder="e.g. GW-2026-001" style={cgInputStyle} />
-                  </div>
-                </div>
-
-                {/* Auto-filled entity preview */}
-                {selectedEntity && (
-                  <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: "1px solid " + c.border, marginBottom: 16 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 8, letterSpacing: "0.05em" }}>Entity Details (Auto-filled)</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                      <div><span style={{ fontSize: 10, color: c.textMuted }}>Legal Name</span><div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{selectedEntity.entityName || "—"}</div></div>
-                      <div><span style={{ fontSize: 10, color: c.textMuted }}>Jurisdiction</span><div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{selectedEntity.jurisdiction || "—"}</div></div>
-                      <div><span style={{ fontSize: 10, color: c.textMuted }}>Company No.</span><div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{selectedEntity.companyNumber || "—"}</div></div>
-                      <div style={{ gridColumn: "span 3" }}><span style={{ fontSize: 10, color: c.textMuted }}>Registered Address</span><div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{selectedEntity.registeredAddress || "—"}</div></div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Fees */}
-                <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 10 }}>Fees</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
-                  <div>
-                    <label style={cgLabelStyle}>Set-Up Fee</label>
-                    <input value={contractConfig.setupFee || ""} onChange={function(e) { updateCC("setupFee", e.target.value); }} placeholder="e.g. 5,000" style={cgInputStyle} />
-                  </div>
-                  <div>
-                    <label style={cgLabelStyle}>Monthly Fee</label>
-                    <input value={contractConfig.monthlyFee || ""} onChange={function(e) { updateCC("monthlyFee", e.target.value); }} placeholder="e.g. 2,500" style={cgInputStyle} />
-                  </div>
-                  <div>
-                    <label style={cgLabelStyle}>Transaction Fee</label>
-                    <input value={contractConfig.transactionFee || ""} onChange={function(e) { updateCC("transactionFee", e.target.value); }} placeholder="e.g. 0.10" style={cgInputStyle} />
-                  </div>
-                  <div>
-                    <label style={cgLabelStyle}>Currency</label>
-                    <select value={contractConfig.currency || "USD"} onChange={function(e) { updateCC("currency", e.target.value); }} style={cgInputStyle}>
-                      {["USD", "EUR", "GBP", "AED", "USDT"].map(function(cur) { return <option key={cur} value={cur}>{cur}</option>; })}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Client signing info */}
-                <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 10 }}>Client Signing Details</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
-                  <div>
-                    <label style={cgLabelStyle}>Signatory Name</label>
-                    <input value={contractConfig.clientSignName || ""} onChange={function(e) { updateCC("clientSignName", e.target.value); }} placeholder="Client signatory" style={cgInputStyle} />
-                  </div>
-                  <div>
-                    <label style={cgLabelStyle}>Signatory Title</label>
-                    <input value={contractConfig.clientSignTitle || ""} onChange={function(e) { updateCC("clientSignTitle", e.target.value); }} placeholder="e.g. Director" style={cgInputStyle} />
-                  </div>
-                  <div>
-                    <label style={cgLabelStyle}>Notice Contact Name</label>
-                    <input value={contractConfig.clientNoticeName || ""} onChange={function(e) { updateCC("clientNoticeName", e.target.value); }} placeholder="Contact name" style={cgInputStyle} />
-                  </div>
-                  <div>
-                    <label style={cgLabelStyle}>Notice Email</label>
-                    <input value={contractConfig.clientNoticeEmail || ""} onChange={function(e) { updateCC("clientNoticeEmail", e.target.value); }} placeholder="email@client.com" style={cgInputStyle} />
-                  </div>
-                </div>
-
-                {/* Generate Button */}
-                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  <button onClick={generateContract} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 10, padding: "14px 36px", cursor: "pointer", fontSize: 15, fontWeight: 700, letterSpacing: "0.02em", transition: "all 0.15s" }}>Generate Contract</button>
-                  <span style={{ fontSize: 12, color: c.textMuted }}>Downloads a .docx with all fields populated</span>
-                </div>
-              </div>
-
-              {/* Provider Defaults (collapsible) */}
-              <div style={sectionCard}>
-                <div onClick={function() { updateCC("defaultsOpen", !defaultsOpen); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>Provider Defaults</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 11, color: c.textMuted }}>Company information used across all contracts</span>
-                    <span style={{ fontSize: 14, color: c.textMuted, transition: "transform 0.2s", transform: defaultsOpen ? "rotate(180deg)" : "rotate(0deg)" }}>{"▼"}</span>
-                  </div>
-                </div>
-
-                {defaultsOpen && (
-                  <div style={{ marginTop: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 10, letterSpacing: "0.04em" }}>Company Information</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
-                      <div>
-                        <label style={cgLabelStyle}>Provider Name</label>
-                        <input value={contractDefaults.providerName || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { providerName: e.target.value })); }} style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Free Zone / Emirate</label>
-                        <input value={contractDefaults.freeZone || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { freeZone: e.target.value })); }} placeholder="e.g. DMCC Free Zone, Dubai" style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Registration Number</label>
-                        <input value={contractDefaults.registrationNumber || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { registrationNumber: e.target.value })); }} style={cgInputStyle} />
-                      </div>
-                      <div style={{ gridColumn: "span 3" }}>
-                        <label style={cgLabelStyle}>Registered Address</label>
-                        <input value={contractDefaults.registeredAddress || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { registeredAddress: e.target.value })); }} style={cgInputStyle} />
-                      </div>
-                    </div>
-
-                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 10, letterSpacing: "0.04em" }}>Compliance</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
-                      <div>
-                        <label style={cgLabelStyle}>PCI DSS Level</label>
-                        <input value={contractDefaults.pciLevel || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { pciLevel: e.target.value })); }} placeholder="e.g. Level 1" style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>AOC Date</label>
-                        <input value={contractDefaults.aocDate || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { aocDate: e.target.value })); }} placeholder="e.g. 1 January 2026" style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Support Email</label>
-                        <input value={contractDefaults.supportEmail || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { supportEmail: e.target.value })); }} placeholder="support@gateway.io" style={cgInputStyle} />
-                      </div>
-                    </div>
-
-                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 10, letterSpacing: "0.04em" }}>Legal</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
-                      <div>
-                        <label style={cgLabelStyle}>Governing Law</label>
-                        <input value={contractDefaults.governingLaw || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { governingLaw: e.target.value })); }} placeholder="e.g. the Emirate of Dubai / DIFC" style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Arbitral Institution</label>
-                        <input value={contractDefaults.arbitralInstitution || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { arbitralInstitution: e.target.value })); }} placeholder="e.g. DIAC / DIFC-LCIA" style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Arbitration Seat</label>
-                        <input value={contractDefaults.arbitrationSeat || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { arbitrationSeat: e.target.value })); }} placeholder="e.g. Dubai / DIFC" style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Number of Arbitrators</label>
-                        <select value={contractDefaults.arbitrators || "one (1)"} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { arbitrators: e.target.value })); }} style={cgInputStyle}>
-                          <option value="one (1)">One (1)</option>
-                          <option value="three (3)">Three (3)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Provider Notice Contact</label>
-                        <input value={contractDefaults.providerNoticeName || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { providerNoticeName: e.target.value })); }} placeholder="Name" style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Provider Notice Email</label>
-                        <input value={contractDefaults.providerNoticeEmail || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { providerNoticeEmail: e.target.value })); }} placeholder="notices@company.com" style={cgInputStyle} />
-                      </div>
-                    </div>
-
-                    <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 10, letterSpacing: "0.04em" }}>Banking & Signing</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
-                      <div>
-                        <label style={cgLabelStyle}>Account Name (for fee payments)</label>
-                        <input value={contractDefaults.accountName || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { accountName: e.target.value })); }} style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Bank / IBAN / SWIFT</label>
-                        <input value={contractDefaults.bankDetails || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { bankDetails: e.target.value })); }} style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>New PSP Integration Fee Range</label>
-                        <input value={contractDefaults.amountRange || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { amountRange: e.target.value })); }} placeholder="e.g. $1,000 - $5,000" style={cgInputStyle} />
-                      </div>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-                      <div>
-                        <label style={cgLabelStyle}>Provider Signatory Name</label>
-                        <input value={contractDefaults.providerSignName || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { providerSignName: e.target.value })); }} style={cgInputStyle} />
-                      </div>
-                      <div>
-                        <label style={cgLabelStyle}>Provider Signatory Title</label>
-                        <input value={contractDefaults.providerSignTitle || ""} onChange={function(e) { setContractDefaults(Object.assign({}, contractDefaults, { providerSignTitle: e.target.value })); }} style={cgInputStyle} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              </>);
-            })()}
 
 
           </>);
@@ -6135,6 +5815,338 @@ function AviroDashboard() {
     );
   };
 
+  // ===== CONTRACT GENERATOR =====
+  const renderContractGenerator = () => {
+    var cgLabelStyle = { fontSize: 11, fontWeight: 600, color: c.textMuted, display: "block", marginBottom: 4 };
+    var cgInputStyle = { ...inputStyle, width: "100%" };
+    var cgSectionCard = { background: c.card, borderRadius: 12, border: "1px solid " + c.border, padding: 20, marginBottom: 16 };
+
+    var selectedClientId = contractDefaults._selectedClient || "";
+    var cl = gatewayClients.find(function(x) { return x.id === selectedClientId; });
+    var ents = cl ? (cl.entities || []) : [];
+    var contractConfig = cl ? (cl.contractConfig || {}) : {};
+
+    var updateCC = function(field, val) {
+      if (!cl) return;
+      var updated = Object.assign({}, cl.contractConfig || {});
+      updated[field] = val;
+      setGatewayClients(function(prev) { return prev.map(function(x) { return x.id === cl.id ? Object.assign({}, x, { contractConfig: updated }) : x; }); });
+    };
+
+    var updateDefault = function(field, val) {
+      setContractDefaults(function(prev) { return Object.assign({}, prev, (function() { var o = {}; o[field] = val; return o; })()); });
+    };
+
+    var selectedEntity = ents.find(function(e) { return e.id === contractConfig.entityId; });
+    var selectedTemplate = contractConfig.template || "gateway";
+    var defaultsOpen = contractDefaults._defaultsOpen || false;
+
+    var generateContract = async function() {
+      if (!cl) { alert("Please select a client first"); return; }
+      if (!contractConfig.entityId) { alert("Please select an entity"); return; }
+      if (!selectedEntity) { alert("Entity not found"); return; }
+
+      try {
+        var templateB64 = selectedTemplate === "gateway" ? GATEWAY_CONTRACT_TEMPLATE_B64 : null;
+        if (!templateB64) { alert("Cube Pay template not yet available. Please upload one."); return; }
+
+        var binaryStr = atob(templateB64);
+        var bytes = new Uint8Array(binaryStr.length);
+        for (var i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+        var zip = await JSZip.loadAsync(bytes);
+        var docXml = await zip.file("word/document.xml").async("string");
+
+        var cd = contractDefaults;
+        var effectiveDate = contractConfig.effectiveDate || new Date().toISOString().split("T")[0];
+        var formattedDate = new Date(effectiveDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
+        var replacements = {
+          "[CLIENT LEGAL NAME]": selectedEntity.entityName || cl.name || "",
+          "[AGREEMENT REF]": contractConfig.agreementRef || ("GW-" + Date.now().toString(36).toUpperCase()),
+          "[EFFECTIVE DATE]": formattedDate,
+          "[FREE ZONE / EMIRATE, UAE]": cd.freeZone || "",
+          "[REGISTRATION NUMBER]": cd.registrationNumber || "",
+          "[REGISTERED ADDRESS]": cd.registeredAddress || "",
+          "[JURISDICTION]": selectedEntity.jurisdiction || "",
+          "[CLIENT REG. NO.]": selectedEntity.companyNumber || "",
+          "[CLIENT ADDRESS]": selectedEntity.registeredAddress || "",
+          "[CURRENCY]": contractConfig.currency || "USD",
+          "[PCI DSS LEVEL]": cd.pciLevel || "",
+          "[AOC DATE]": cd.aocDate || "",
+          "[PROVIDER NOTICE NAME / EMAIL]": cd.providerNoticeName ? (cd.providerNoticeName + " / " + (cd.providerNoticeEmail || "")) : "",
+          "[CLIENT NOTICE NAME / EMAIL]": contractConfig.clientNoticeName ? (contractConfig.clientNoticeName + " / " + (contractConfig.clientNoticeEmail || "")) : "",
+          "[SUPPORT EMAIL]": cd.supportEmail || "",
+          "[ACCOUNT NAME]": cd.accountName || "",
+          "[BANK DETAILS]": cd.bankDetails || "",
+          "[AMOUNT RANGE]": cd.amountRange || "",
+        };
+
+        // Handle the three [AMOUNT] placeholders in order (set-up, monthly, transaction)
+        docXml = docXml.replace(/\[AMOUNT\] \/ month/g, (contractConfig.monthlyFee || "[AMOUNT]") + " / month");
+        docXml = docXml.replace(/\[AMOUNT\] per transaction/g, (contractConfig.transactionFee || "[AMOUNT]") + " per transaction");
+        docXml = docXml.replace(/\[AMOUNT\]/g, contractConfig.setupFee || "[AMOUNT]");
+
+        // Handle signature [NAME], [TITLE], [DATE] in order
+        var nameCount = 0;
+        var nameValues = [cd.providerSignName || "[NAME]", contractConfig.clientSignName || "[NAME]", cd.providerSignName || "[NAME]", contractConfig.clientSignName || "[NAME]"];
+        docXml = docXml.replace(/\[NAME\]/g, function() { return nameValues[nameCount++] || "[NAME]"; });
+
+        var titleCount = 0;
+        var titleValues = [cd.providerSignTitle || "[TITLE]", contractConfig.clientSignTitle || "[TITLE]"];
+        docXml = docXml.replace(/\[TITLE\]/g, function() { return titleValues[titleCount++] || "[TITLE]"; });
+
+        docXml = docXml.replace(/\[DATE\]/g, formattedDate);
+
+        // Apply standard replacements
+        Object.keys(replacements).forEach(function(placeholder) {
+          var escaped = placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          docXml = docXml.replace(new RegExp(escaped, "g"), replacements[placeholder]);
+        });
+
+        // Handle en-dash variants
+        docXml = docXml.replace(/\[GOVERNING LAW [^\[\]]*\]/g, cd.governingLaw || "");
+        docXml = docXml.replace(/\[ARBITRAL INSTITUTION [^\[\]]*\]/g, cd.arbitralInstitution || "");
+        docXml = docXml.replace(/\[SEAT [^\[\]]*\]/g, cd.arbitrationSeat || "");
+        docXml = docXml.replace(/\[one \(1\) \/ three \(3\)\]/g, cd.arbitrators || "one (1)");
+
+        zip.file("word/document.xml", docXml);
+
+        var blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+        var fileName = (selectedTemplate === "gateway" ? "Gateway_TSA" : "CubePay_Agreement") + "_" + (selectedEntity.entityName || cl.name || "Client").replace(/[^a-zA-Z0-9]/g, "_") + "_" + effectiveDate + ".docx";
+        saveAs(blob, fileName);
+      } catch (err) {
+        console.error("Contract generation error:", err);
+        alert("Error generating contract: " + err.message);
+      }
+    };
+
+    return (
+      <div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 4px 0", letterSpacing: "-0.02em" }}>Contract Generator</h2>
+        <p style={{ color: c.textSecondary, fontSize: 13, margin: "0 0 20px 0" }}>Generate populated contracts for clients</p>
+
+        {/* Template & Client Selection */}
+        <div style={cgSectionCard}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 14, letterSpacing: "0.04em" }}>1. Select Template & Client</div>
+
+          {/* Template buttons */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+            {["gateway", "cubepay"].map(function(tmpl) {
+              var active = selectedTemplate === tmpl;
+              var label = tmpl === "gateway" ? "Gateway.io" : "Cube Pay";
+              return <button key={tmpl} onClick={function() { updateCC("template", tmpl); }} style={{ padding: "12px 28px", borderRadius: 10, border: active ? "2px solid " + c.accent : "1px solid " + c.border, background: active ? c.accent + "15" : "transparent", color: active ? c.accent : c.textMuted, fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "all 0.15s" }}>{label}</button>;
+            })}
+          </div>
+
+          {/* Client & Entity selectors */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div>
+              <label style={cgLabelStyle}>Client</label>
+              <select value={selectedClientId} onChange={function(e) { updateDefault("_selectedClient", e.target.value); }} style={cgInputStyle}>
+                <option value="">{"—"} Select Client {"—"}</option>
+                {gatewayClients.map(function(gc) { return <option key={gc.id} value={gc.id}>{gc.name}</option>; })}
+              </select>
+            </div>
+            <div>
+              <label style={cgLabelStyle}>Entity</label>
+              <select value={contractConfig.entityId || ""} onChange={function(e) { updateCC("entityId", e.target.value); }} style={cgInputStyle} disabled={!cl}>
+                <option value="">{"—"} Select Entity {"—"}</option>
+                {ents.map(function(ent) { return <option key={ent.id} value={ent.id}>{ent.entityName || "(Unnamed)"}</option>; })}
+              </select>
+            </div>
+          </div>
+
+          {/* Auto-filled entity preview */}
+          {selectedEntity && (
+            <div style={{ background: c.surface, borderRadius: 8, padding: 14, border: "1px solid " + c.border, marginTop: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 8, letterSpacing: "0.05em" }}>Entity Details (Auto-filled from KYB)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                <div><span style={{ fontSize: 10, color: c.textMuted }}>Legal Name</span><div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{selectedEntity.entityName || "—"}</div></div>
+                <div><span style={{ fontSize: 10, color: c.textMuted }}>Jurisdiction</span><div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{selectedEntity.jurisdiction || "—"}</div></div>
+                <div><span style={{ fontSize: 10, color: c.textMuted }}>Company No.</span><div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{selectedEntity.companyNumber || "—"}</div></div>
+                <div style={{ gridColumn: "span 3" }}><span style={{ fontSize: 10, color: c.textMuted }}>Registered Address</span><div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{selectedEntity.registeredAddress || "—"}</div></div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Agreement Details */}
+        {cl && (
+        <div style={cgSectionCard}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 14, letterSpacing: "0.04em" }}>2. Agreement Details</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
+            <div>
+              <label style={cgLabelStyle}>Effective Date</label>
+              <input type="date" value={contractConfig.effectiveDate || ""} onChange={function(e) { updateCC("effectiveDate", e.target.value); }} style={cgInputStyle} />
+            </div>
+            <div>
+              <label style={cgLabelStyle}>Agreement Reference</label>
+              <input value={contractConfig.agreementRef || ""} onChange={function(e) { updateCC("agreementRef", e.target.value); }} placeholder="e.g. GW-2026-001" style={cgInputStyle} />
+            </div>
+            <div>
+              <label style={cgLabelStyle}>Currency</label>
+              <select value={contractConfig.currency || "USD"} onChange={function(e) { updateCC("currency", e.target.value); }} style={cgInputStyle}>
+                {["USD", "EUR", "GBP", "AED", "USDT"].map(function(cur) { return <option key={cur} value={cur}>{cur}</option>; })}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 10 }}>Fees</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
+            <div>
+              <label style={cgLabelStyle}>Set-Up Fee</label>
+              <input value={contractConfig.setupFee || ""} onChange={function(e) { updateCC("setupFee", e.target.value); }} placeholder="e.g. 5,000" style={cgInputStyle} />
+            </div>
+            <div>
+              <label style={cgLabelStyle}>Monthly Fee</label>
+              <input value={contractConfig.monthlyFee || ""} onChange={function(e) { updateCC("monthlyFee", e.target.value); }} placeholder="e.g. 2,500" style={cgInputStyle} />
+            </div>
+            <div>
+              <label style={cgLabelStyle}>Transaction Fee</label>
+              <input value={contractConfig.transactionFee || ""} onChange={function(e) { updateCC("transactionFee", e.target.value); }} placeholder="e.g. 0.10" style={cgInputStyle} />
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 700, color: c.text, marginBottom: 10 }}>Client Signing Details</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14, marginBottom: 20 }}>
+            <div>
+              <label style={cgLabelStyle}>Signatory Name</label>
+              <input value={contractConfig.clientSignName || ""} onChange={function(e) { updateCC("clientSignName", e.target.value); }} placeholder="Client signatory" style={cgInputStyle} />
+            </div>
+            <div>
+              <label style={cgLabelStyle}>Signatory Title</label>
+              <input value={contractConfig.clientSignTitle || ""} onChange={function(e) { updateCC("clientSignTitle", e.target.value); }} placeholder="e.g. Director" style={cgInputStyle} />
+            </div>
+            <div>
+              <label style={cgLabelStyle}>Notice Contact</label>
+              <input value={contractConfig.clientNoticeName || ""} onChange={function(e) { updateCC("clientNoticeName", e.target.value); }} placeholder="Contact name" style={cgInputStyle} />
+            </div>
+            <div>
+              <label style={cgLabelStyle}>Notice Email</label>
+              <input value={contractConfig.clientNoticeEmail || ""} onChange={function(e) { updateCC("clientNoticeEmail", e.target.value); }} placeholder="email@client.com" style={cgInputStyle} />
+            </div>
+          </div>
+
+          {/* Generate Button */}
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <button onClick={generateContract} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 10, padding: "14px 36px", cursor: "pointer", fontSize: 15, fontWeight: 700, letterSpacing: "0.02em", transition: "all 0.15s" }}>Generate Contract</button>
+            <span style={{ fontSize: 12, color: c.textMuted }}>Downloads a .docx with all fields populated</span>
+          </div>
+        </div>
+        )}
+
+        {/* Provider Defaults (collapsible) */}
+        <div style={cgSectionCard}>
+          <div onClick={function() { updateDefault("_defaultsOpen", !defaultsOpen); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>Provider Defaults</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 11, color: c.textMuted }}>Company information used across all contracts</span>
+              <span style={{ fontSize: 14, color: c.textMuted, transition: "transform 0.2s", transform: defaultsOpen ? "rotate(180deg)" : "rotate(0deg)" }}>{"▼"}</span>
+            </div>
+          </div>
+
+          {defaultsOpen && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 10, letterSpacing: "0.04em" }}>Company Information</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
+                <div>
+                  <label style={cgLabelStyle}>Provider Name</label>
+                  <input value={contractDefaults.providerName || ""} onChange={function(e) { updateDefault("providerName", e.target.value); }} style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Free Zone / Emirate</label>
+                  <input value={contractDefaults.freeZone || ""} onChange={function(e) { updateDefault("freeZone", e.target.value); }} placeholder="e.g. DMCC Free Zone, Dubai" style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Registration Number</label>
+                  <input value={contractDefaults.registrationNumber || ""} onChange={function(e) { updateDefault("registrationNumber", e.target.value); }} style={cgInputStyle} />
+                </div>
+                <div style={{ gridColumn: "span 3" }}>
+                  <label style={cgLabelStyle}>Registered Address</label>
+                  <input value={contractDefaults.registeredAddress || ""} onChange={function(e) { updateDefault("registeredAddress", e.target.value); }} style={cgInputStyle} />
+                </div>
+              </div>
+
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 10, letterSpacing: "0.04em" }}>Compliance</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
+                <div>
+                  <label style={cgLabelStyle}>PCI DSS Level</label>
+                  <input value={contractDefaults.pciLevel || ""} onChange={function(e) { updateDefault("pciLevel", e.target.value); }} placeholder="e.g. Level 1" style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>AOC Date</label>
+                  <input value={contractDefaults.aocDate || ""} onChange={function(e) { updateDefault("aocDate", e.target.value); }} placeholder="e.g. 1 January 2026" style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Support Email</label>
+                  <input value={contractDefaults.supportEmail || ""} onChange={function(e) { updateDefault("supportEmail", e.target.value); }} placeholder="support@gateway.io" style={cgInputStyle} />
+                </div>
+              </div>
+
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 10, letterSpacing: "0.04em" }}>Legal</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
+                <div>
+                  <label style={cgLabelStyle}>Governing Law</label>
+                  <input value={contractDefaults.governingLaw || ""} onChange={function(e) { updateDefault("governingLaw", e.target.value); }} placeholder="e.g. the Emirate of Dubai / DIFC" style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Arbitral Institution</label>
+                  <input value={contractDefaults.arbitralInstitution || ""} onChange={function(e) { updateDefault("arbitralInstitution", e.target.value); }} placeholder="e.g. DIAC / DIFC-LCIA" style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Arbitration Seat</label>
+                  <input value={contractDefaults.arbitrationSeat || ""} onChange={function(e) { updateDefault("arbitrationSeat", e.target.value); }} placeholder="e.g. Dubai / DIFC" style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Number of Arbitrators</label>
+                  <select value={contractDefaults.arbitrators || "one (1)"} onChange={function(e) { updateDefault("arbitrators", e.target.value); }} style={cgInputStyle}>
+                    <option value="one (1)">One (1)</option>
+                    <option value="three (3)">Three (3)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Provider Notice Contact</label>
+                  <input value={contractDefaults.providerNoticeName || ""} onChange={function(e) { updateDefault("providerNoticeName", e.target.value); }} placeholder="Name" style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Provider Notice Email</label>
+                  <input value={contractDefaults.providerNoticeEmail || ""} onChange={function(e) { updateDefault("providerNoticeEmail", e.target.value); }} placeholder="notices@company.com" style={cgInputStyle} />
+                </div>
+              </div>
+
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 10, letterSpacing: "0.04em" }}>Banking & Signing</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+                <div>
+                  <label style={cgLabelStyle}>Account Name (for fee payments)</label>
+                  <input value={contractDefaults.accountName || ""} onChange={function(e) { updateDefault("accountName", e.target.value); }} style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Bank / IBAN / SWIFT</label>
+                  <input value={contractDefaults.bankDetails || ""} onChange={function(e) { updateDefault("bankDetails", e.target.value); }} style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>New PSP Integration Fee Range</label>
+                  <input value={contractDefaults.amountRange || ""} onChange={function(e) { updateDefault("amountRange", e.target.value); }} placeholder="e.g. $1,000 - $5,000" style={cgInputStyle} />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                <div>
+                  <label style={cgLabelStyle}>Provider Signatory Name</label>
+                  <input value={contractDefaults.providerSignName || ""} onChange={function(e) { updateDefault("providerSignName", e.target.value); }} style={cgInputStyle} />
+                </div>
+                <div>
+                  <label style={cgLabelStyle}>Provider Signatory Title</label>
+                  <input value={contractDefaults.providerSignTitle || ""} onChange={function(e) { updateDefault("providerSignTitle", e.target.value); }} style={cgInputStyle} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderBankAccounts = () => {
     const updateAcct = (id, field, val) => setBankAccountsList(bankAccountsList.map(a => a.id === id ? { ...a, [field]: val } : a));
     const toggleAcctPurpose = (id, purpose) => {
@@ -6811,7 +6823,7 @@ function AviroDashboard() {
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
     david: { label: "DAVID", sections: ["quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
-    gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers", "bankaccounts"] },
+    gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers", "bankaccounts", "contractgen"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
     settings: { label: "SETTINGS", sections: ["settings"] },
   };
@@ -6838,6 +6850,7 @@ function AviroDashboard() {
     { section: "roadmap", icon: "roadmap", label: "Integration Roadmap", group: "gateway" },
     { section: "providers", icon: "bank", label: "Providers", group: "gateway" },
     { section: "bankaccounts", icon: "bank", label: "Bank Accounts", group: "gateway" },
+    { section: "contractgen", icon: "note", label: "Contract Generator", group: "gateway" },
     { section: "corporate", label: "CORPORATE MATRIX", isHeader: true, group: "corporate" },
     { section: "entities", icon: "building", label: "Entity Matrix", group: "corporate" },
     { section: "moneyflow", icon: "flow", label: "Corporate Flow", group: "corporate" },
@@ -6849,7 +6862,7 @@ function AviroDashboard() {
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings };
+  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
