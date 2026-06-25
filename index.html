@@ -6113,6 +6113,26 @@ function AviroDashboard() {
 
           {defaultsOpen && (
             <div style={{ marginTop: 16 }}>
+              {/* Populate from Entity Matrix */}
+              <div style={{ marginBottom: 16, padding: 14, background: c.accentBg, borderRadius: 10, border: "1px solid " + c.accent + "30" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: c.accent, whiteSpace: "nowrap" }}>Populate from Entity:</label>
+                  <select onChange={function(e) {
+                    var ent = corporateEntities.find(function(x) { return x.id === e.target.value; });
+                    if (!ent) return;
+                    updateDefault("providerName", ent.name || "");
+                    updateDefault("registrationNumber", ent.companyNumber || ent.licenseNumber || "");
+                    updateDefault("registeredAddress", ent.address || "");
+                    updateDefault("freeZone", ent.jurisdiction || "");
+                    updateDefault("providerSignName", "");
+                    updateDefault("providerSignTitle", "");
+                  }} value="" style={Object.assign({}, cgInputStyle, { flex: 1 })}>
+                    <option value="">{"—"} Select entity to auto-fill {"—"}</option>
+                    {corporateEntities.map(function(ent) { return <option key={ent.id} value={ent.id}>{ent.name} {ent.category ? "(" + ent.category + ")" : ""}</option>; })}
+                  </select>
+                </div>
+              </div>
+
               <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 10, letterSpacing: "0.04em" }}>Company Information</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
                 <div>
