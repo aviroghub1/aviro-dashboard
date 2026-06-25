@@ -264,13 +264,24 @@ function AviroDashboard() {
   const [bankNoteDrafts, setBankNoteDrafts] = useState({});
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [contractDefaults, setContractDefaults] = useState({
-    providerName: "Aviro Technology Services L.L.P-FZ",
-    freeZone: "", registrationNumber: "", registeredAddress: "",
-    supportEmail: "", pciLevel: "", aocDate: "",
-    providerNoticeName: "", providerNoticeEmail: "",
-    governingLaw: "", arbitralInstitution: "", arbitrationSeat: "", arbitrators: "one (1)",
-    accountName: "", bankDetails: "", amountRange: "",
-    providerSignName: "", providerSignTitle: ""
+    gateway: {
+      providerName: "Aviro Technology Services L.L.P-FZ",
+      freeZone: "", registrationNumber: "", registeredAddress: "",
+      supportEmail: "", pciLevel: "", aocDate: "",
+      providerNoticeName: "", providerNoticeEmail: "",
+      governingLaw: "", arbitralInstitution: "", arbitrationSeat: "", arbitrators: "one (1)",
+      accountName: "", bankDetails: "", amountRange: "",
+      providerSignName: "", providerSignTitle: ""
+    },
+    cubepay: {
+      providerName: "Cube Pay Services Inc",
+      freeZone: "", registrationNumber: "", registeredAddress: "",
+      supportEmail: "", pciLevel: "", aocDate: "",
+      providerNoticeName: "", providerNoticeEmail: "",
+      governingLaw: "", arbitralInstitution: "", arbitrationSeat: "", arbitrators: "one (1)",
+      accountName: "", bankDetails: "", amountRange: "",
+      providerSignName: "", providerSignTitle: ""
+    }
   });
   const [pvBreakdownOpen, setPvBreakdownOpen] = useState(false);
   const [cubePayProvOpen, setCubePayProvOpen] = useState(false);
@@ -5834,12 +5845,32 @@ function AviroDashboard() {
       setGatewayClients(function(prev) { return prev.map(function(x) { return x.id === cl.id ? Object.assign({}, x, { contractConfig: updated }) : x; }); });
     };
 
+    var selectedTemplate = contractConfig.template || "gateway";
+
+    // Backward compat: migrate flat contractDefaults to nested structure
+    var cd = contractDefaults[selectedTemplate] || contractDefaults.gateway || {};
+    if (!contractDefaults.gateway && contractDefaults.providerName) {
+      // Old flat format — migrate
+      cd = Object.assign({}, contractDefaults);
+    }
+
     var updateDefault = function(field, val) {
+      setContractDefaults(function(prev) {
+        var tmpl = selectedTemplate;
+        var existing = prev[tmpl] || {};
+        var updated = Object.assign({}, existing);
+        updated[field] = val;
+        var result = Object.assign({}, prev);
+        result[tmpl] = updated;
+        return result;
+      });
+    };
+
+    var updateGlobal = function(field, val) {
       setContractDefaults(function(prev) { return Object.assign({}, prev, (function() { var o = {}; o[field] = val; return o; })()); });
     };
 
     var selectedEntity = ents.find(function(e) { return e.id === contractConfig.entityId; });
-    var selectedTemplate = contractConfig.template || "gateway";
     var defaultsOpen = contractDefaults._defaultsOpen || false;
 
     var generateContract = async function() {
@@ -5858,13 +5889,13 @@ function AviroDashboard() {
         var zip = await JSZip.loadAsync(bytes);
         var docXml = await zip.file("word/document.xml").async("string");
 
-        var cd = contractDefaults;
-        var effectiveDate = contractConfig.effectiveDate || new Date().toISOString().split("T")[0];
-        var formattedDate = new Date(effectiveDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+        var effectiveDate = contractConfig.effectiveDate || "";
+        var formattedDate = effectiveDate ? new Date(effectiveDate).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "";
 
+        // Build replacement map — blank values keep the original placeholder (with yellow highlight)
         var replacements = {
           "[CLIENT LEGAL NAME]": selectedEntity.entityName || cl.name || "",
-          "[AGREEMENT REF]": contractConfig.agreementRef || ("GW-" + Date.now().toString(36).toUpperCase()),
+          "[AGREEMENT REF]": contractConfig.agreementRef || "",
           "[EFFECTIVE DATE]": formattedDate,
           "[FREE ZONE / EMIRATE, UAE]": cd.freeZone || "",
           "[REGISTRATION NUMBER]": cd.registrationNumber || "",
@@ -5883,38 +5914,71 @@ function AviroDashboard() {
           "[AMOUNT RANGE]": cd.amountRange || "",
         };
 
+        // Helper: replace only if value is non-empty, otherwise leave placeholder highlighted
+        var replaceIfFilled = function(xml, placeholder, value) {
+          if (!value) return xml; // leave original placeholder text + yellow highlight
+          var escaped = placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          // Replace text AND remove yellow highlight for filled values
+          xml = xml.replace(new RegExp(escaped, "g"), value);
+          return xml;
+        };
+
+        // Apply standard replacements — only replace if value is provided
+        Object.keys(replacements).forEach(function(placeholder) {
+          docXml = replaceIfFilled(docXml, placeholder, replacements[placeholder]);
+        });
+
+        // For filled values, remove yellow highlight from the run so it looks clean
+        // We do this by finding runs that HAD a placeholder but now have real text (no brackets)
+        // Simpler approach: remove highlight from runs that no longer contain [BRACKETS]
+        docXml = docXml.replace(/<w:highlight w:val="yellow"\/>\s*<\/w:rPr>\s*<w:t[^>]*>([^<]*)<\/w:t>/g, function(match, text) {
+          if (text.indexOf("[") === -1) {
+            // No brackets = value was filled in, remove highlight
+            return match.replace(/<w:highlight w:val="yellow"\/>/, "");
+          }
+          return match; // Still has placeholder, keep highlight
+        });
+
         // Handle the three [AMOUNT] placeholders in order (set-up, monthly, transaction)
-        docXml = docXml.replace(/\[AMOUNT\] \/ month/g, (contractConfig.monthlyFee || "[AMOUNT]") + " / month");
-        docXml = docXml.replace(/\[AMOUNT\] per transaction/g, (contractConfig.transactionFee || "[AMOUNT]") + " per transaction");
-        docXml = docXml.replace(/\[AMOUNT\]/g, contractConfig.setupFee || "[AMOUNT]");
+        if (contractConfig.monthlyFee) {
+          docXml = docXml.replace(/\[AMOUNT\] \/ month/g, contractConfig.monthlyFee + " / month");
+        }
+        if (contractConfig.transactionFee) {
+          docXml = docXml.replace(/\[AMOUNT\] per transaction/g, contractConfig.transactionFee + " per transaction");
+        }
+        if (contractConfig.setupFee) {
+          docXml = docXml.replace(/\[AMOUNT\]/g, contractConfig.setupFee);
+        }
 
         // Handle signature [NAME], [TITLE], [DATE] in order
         var nameCount = 0;
-        var nameValues = [cd.providerSignName || "[NAME]", contractConfig.clientSignName || "[NAME]", cd.providerSignName || "[NAME]", contractConfig.clientSignName || "[NAME]"];
-        docXml = docXml.replace(/\[NAME\]/g, function() { return nameValues[nameCount++] || "[NAME]"; });
+        var nameValues = [cd.providerSignName || "", contractConfig.clientSignName || "", cd.providerSignName || "", contractConfig.clientSignName || ""];
+        docXml = docXml.replace(/\[NAME\]/g, function(m) { var v = nameValues[nameCount++]; return v || m; });
 
         var titleCount = 0;
-        var titleValues = [cd.providerSignTitle || "[TITLE]", contractConfig.clientSignTitle || "[TITLE]"];
-        docXml = docXml.replace(/\[TITLE\]/g, function() { return titleValues[titleCount++] || "[TITLE]"; });
+        var titleValues = [cd.providerSignTitle || "", contractConfig.clientSignTitle || ""];
+        docXml = docXml.replace(/\[TITLE\]/g, function(m) { var v = titleValues[titleCount++]; return v || m; });
 
-        docXml = docXml.replace(/\[DATE\]/g, formattedDate);
-
-        // Apply standard replacements
-        Object.keys(replacements).forEach(function(placeholder) {
-          var escaped = placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          docXml = docXml.replace(new RegExp(escaped, "g"), replacements[placeholder]);
-        });
+        if (formattedDate) {
+          docXml = docXml.replace(/\[DATE\]/g, formattedDate);
+        }
 
         // Handle en-dash variants
-        docXml = docXml.replace(/\[GOVERNING LAW [^\[\]]*\]/g, cd.governingLaw || "");
-        docXml = docXml.replace(/\[ARBITRAL INSTITUTION [^\[\]]*\]/g, cd.arbitralInstitution || "");
-        docXml = docXml.replace(/\[SEAT [^\[\]]*\]/g, cd.arbitrationSeat || "");
-        docXml = docXml.replace(/\[one \(1\) \/ three \(3\)\]/g, cd.arbitrators || "one (1)");
+        if (cd.governingLaw) docXml = docXml.replace(/\[GOVERNING LAW [^\[\]]*\]/g, cd.governingLaw);
+        if (cd.arbitralInstitution) docXml = docXml.replace(/\[ARBITRAL INSTITUTION [^\[\]]*\]/g, cd.arbitralInstitution);
+        if (cd.arbitrationSeat) docXml = docXml.replace(/\[SEAT [^\[\]]*\]/g, cd.arbitrationSeat);
+        if (cd.arbitrators) docXml = docXml.replace(/\[one \(1\) \/ three \(3\)\]/g, cd.arbitrators);
+
+        // Clean up highlights on filled runs
+        docXml = docXml.replace(/<w:highlight w:val="yellow"\/>\s*<\/w:rPr>\s*<w:t[^>]*>([^<]*)<\/w:t>/g, function(match, text) {
+          if (text.indexOf("[") === -1) return match.replace(/<w:highlight w:val="yellow"\/>/, "");
+          return match;
+        });
 
         zip.file("word/document.xml", docXml);
 
         var blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-        var fileName = (selectedTemplate === "gateway" ? "Gateway_TSA" : "CubePay_Agreement") + "_" + (selectedEntity.entityName || cl.name || "Client").replace(/[^a-zA-Z0-9]/g, "_") + "_" + effectiveDate + ".docx";
+        var fileName = (selectedTemplate === "gateway" ? "Gateway_TSA" : "CubePay_Agreement") + "_" + (selectedEntity.entityName || cl.name || "Client").replace(/[^a-zA-Z0-9]/g, "_") + "_" + (effectiveDate || "DRAFT") + ".docx";
         saveAs(blob, fileName);
       } catch (err) {
         console.error("Contract generation error:", err);
@@ -5944,7 +6008,7 @@ function AviroDashboard() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <div>
               <label style={cgLabelStyle}>Client</label>
-              <select value={selectedClientId} onChange={function(e) { updateDefault("_selectedClient", e.target.value); }} style={cgInputStyle}>
+              <select value={selectedClientId} onChange={function(e) { updateGlobal("_selectedClient", e.target.value); }} style={cgInputStyle}>
                 <option value="">{"—"} Select Client {"—"}</option>
                 {gatewayClients.map(function(gc) { return <option key={gc.id} value={gc.id}>{gc.name}</option>; })}
               </select>
@@ -6039,10 +6103,10 @@ function AviroDashboard() {
 
         {/* Provider Defaults (collapsible) */}
         <div style={cgSectionCard}>
-          <div onClick={function() { updateDefault("_defaultsOpen", !defaultsOpen); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>Provider Defaults</div>
+          <div onClick={function() { updateGlobal("_defaultsOpen", !defaultsOpen); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>Provider Defaults <span style={{ fontSize: 11, fontWeight: 500, color: c.accent }}>({selectedTemplate === "gateway" ? "Gateway.io" : "Cube Pay"})</span></div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 11, color: c.textMuted }}>Company information used across all contracts</span>
+              <span style={{ fontSize: 11, color: c.textMuted }}>Editing {selectedTemplate === "gateway" ? "Gateway.io" : "Cube Pay"} defaults</span>
               <span style={{ fontSize: 14, color: c.textMuted, transition: "transform 0.2s", transform: defaultsOpen ? "rotate(180deg)" : "rotate(0deg)" }}>{"▼"}</span>
             </div>
           </div>
@@ -6053,19 +6117,19 @@ function AviroDashboard() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
                 <div>
                   <label style={cgLabelStyle}>Provider Name</label>
-                  <input value={contractDefaults.providerName || ""} onChange={function(e) { updateDefault("providerName", e.target.value); }} style={cgInputStyle} />
+                  <input value={cd.providerName || ""} onChange={function(e) { updateDefault("providerName", e.target.value); }} style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Free Zone / Emirate</label>
-                  <input value={contractDefaults.freeZone || ""} onChange={function(e) { updateDefault("freeZone", e.target.value); }} placeholder="e.g. DMCC Free Zone, Dubai" style={cgInputStyle} />
+                  <input value={cd.freeZone || ""} onChange={function(e) { updateDefault("freeZone", e.target.value); }} placeholder="e.g. DMCC Free Zone, Dubai" style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Registration Number</label>
-                  <input value={contractDefaults.registrationNumber || ""} onChange={function(e) { updateDefault("registrationNumber", e.target.value); }} style={cgInputStyle} />
+                  <input value={cd.registrationNumber || ""} onChange={function(e) { updateDefault("registrationNumber", e.target.value); }} style={cgInputStyle} />
                 </div>
                 <div style={{ gridColumn: "span 3" }}>
                   <label style={cgLabelStyle}>Registered Address</label>
-                  <input value={contractDefaults.registeredAddress || ""} onChange={function(e) { updateDefault("registeredAddress", e.target.value); }} style={cgInputStyle} />
+                  <input value={cd.registeredAddress || ""} onChange={function(e) { updateDefault("registeredAddress", e.target.value); }} style={cgInputStyle} />
                 </div>
               </div>
 
@@ -6073,15 +6137,15 @@ function AviroDashboard() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
                 <div>
                   <label style={cgLabelStyle}>PCI DSS Level</label>
-                  <input value={contractDefaults.pciLevel || ""} onChange={function(e) { updateDefault("pciLevel", e.target.value); }} placeholder="e.g. Level 1" style={cgInputStyle} />
+                  <input value={cd.pciLevel || ""} onChange={function(e) { updateDefault("pciLevel", e.target.value); }} placeholder="e.g. Level 1" style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>AOC Date</label>
-                  <input value={contractDefaults.aocDate || ""} onChange={function(e) { updateDefault("aocDate", e.target.value); }} placeholder="e.g. 1 January 2026" style={cgInputStyle} />
+                  <input value={cd.aocDate || ""} onChange={function(e) { updateDefault("aocDate", e.target.value); }} placeholder="e.g. 1 January 2026" style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Support Email</label>
-                  <input value={contractDefaults.supportEmail || ""} onChange={function(e) { updateDefault("supportEmail", e.target.value); }} placeholder="support@gateway.io" style={cgInputStyle} />
+                  <input value={cd.supportEmail || ""} onChange={function(e) { updateDefault("supportEmail", e.target.value); }} placeholder="support@gateway.io" style={cgInputStyle} />
                 </div>
               </div>
 
@@ -6089,30 +6153,30 @@ function AviroDashboard() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
                 <div>
                   <label style={cgLabelStyle}>Governing Law</label>
-                  <input value={contractDefaults.governingLaw || ""} onChange={function(e) { updateDefault("governingLaw", e.target.value); }} placeholder="e.g. the Emirate of Dubai / DIFC" style={cgInputStyle} />
+                  <input value={cd.governingLaw || ""} onChange={function(e) { updateDefault("governingLaw", e.target.value); }} placeholder="e.g. the Emirate of Dubai / DIFC" style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Arbitral Institution</label>
-                  <input value={contractDefaults.arbitralInstitution || ""} onChange={function(e) { updateDefault("arbitralInstitution", e.target.value); }} placeholder="e.g. DIAC / DIFC-LCIA" style={cgInputStyle} />
+                  <input value={cd.arbitralInstitution || ""} onChange={function(e) { updateDefault("arbitralInstitution", e.target.value); }} placeholder="e.g. DIAC / DIFC-LCIA" style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Arbitration Seat</label>
-                  <input value={contractDefaults.arbitrationSeat || ""} onChange={function(e) { updateDefault("arbitrationSeat", e.target.value); }} placeholder="e.g. Dubai / DIFC" style={cgInputStyle} />
+                  <input value={cd.arbitrationSeat || ""} onChange={function(e) { updateDefault("arbitrationSeat", e.target.value); }} placeholder="e.g. Dubai / DIFC" style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Number of Arbitrators</label>
-                  <select value={contractDefaults.arbitrators || "one (1)"} onChange={function(e) { updateDefault("arbitrators", e.target.value); }} style={cgInputStyle}>
+                  <select value={cd.arbitrators || "one (1)"} onChange={function(e) { updateDefault("arbitrators", e.target.value); }} style={cgInputStyle}>
                     <option value="one (1)">One (1)</option>
                     <option value="three (3)">Three (3)</option>
                   </select>
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Provider Notice Contact</label>
-                  <input value={contractDefaults.providerNoticeName || ""} onChange={function(e) { updateDefault("providerNoticeName", e.target.value); }} placeholder="Name" style={cgInputStyle} />
+                  <input value={cd.providerNoticeName || ""} onChange={function(e) { updateDefault("providerNoticeName", e.target.value); }} placeholder="Name" style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Provider Notice Email</label>
-                  <input value={contractDefaults.providerNoticeEmail || ""} onChange={function(e) { updateDefault("providerNoticeEmail", e.target.value); }} placeholder="notices@company.com" style={cgInputStyle} />
+                  <input value={cd.providerNoticeEmail || ""} onChange={function(e) { updateDefault("providerNoticeEmail", e.target.value); }} placeholder="notices@company.com" style={cgInputStyle} />
                 </div>
               </div>
 
@@ -6120,25 +6184,25 @@ function AviroDashboard() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
                 <div>
                   <label style={cgLabelStyle}>Account Name (for fee payments)</label>
-                  <input value={contractDefaults.accountName || ""} onChange={function(e) { updateDefault("accountName", e.target.value); }} style={cgInputStyle} />
+                  <input value={cd.accountName || ""} onChange={function(e) { updateDefault("accountName", e.target.value); }} style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Bank / IBAN / SWIFT</label>
-                  <input value={contractDefaults.bankDetails || ""} onChange={function(e) { updateDefault("bankDetails", e.target.value); }} style={cgInputStyle} />
+                  <input value={cd.bankDetails || ""} onChange={function(e) { updateDefault("bankDetails", e.target.value); }} style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>New PSP Integration Fee Range</label>
-                  <input value={contractDefaults.amountRange || ""} onChange={function(e) { updateDefault("amountRange", e.target.value); }} placeholder="e.g. $1,000 - $5,000" style={cgInputStyle} />
+                  <input value={cd.amountRange || ""} onChange={function(e) { updateDefault("amountRange", e.target.value); }} placeholder="e.g. $1,000 - $5,000" style={cgInputStyle} />
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
                 <div>
                   <label style={cgLabelStyle}>Provider Signatory Name</label>
-                  <input value={contractDefaults.providerSignName || ""} onChange={function(e) { updateDefault("providerSignName", e.target.value); }} style={cgInputStyle} />
+                  <input value={cd.providerSignName || ""} onChange={function(e) { updateDefault("providerSignName", e.target.value); }} style={cgInputStyle} />
                 </div>
                 <div>
                   <label style={cgLabelStyle}>Provider Signatory Title</label>
-                  <input value={contractDefaults.providerSignTitle || ""} onChange={function(e) { updateDefault("providerSignTitle", e.target.value); }} style={cgInputStyle} />
+                  <input value={cd.providerSignTitle || ""} onChange={function(e) { updateDefault("providerSignTitle", e.target.value); }} style={cgInputStyle} />
                 </div>
               </div>
             </div>
