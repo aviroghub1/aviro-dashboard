@@ -1641,7 +1641,7 @@ function AviroDashboard() {
 
           {/* Sub-tab navigation */}
           <div style={{ display: "flex", gap: 6, marginBottom: 24, borderBottom: `1px solid ${c.border}`, paddingBottom: 0 }}>
-            {[{ key: "home", label: "Client Home" }, { key: "corporate", label: "Entity Information & KYB" }, { key: "contracts", label: "Contracts" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }].map(tab => {
+            {[{ key: "home", label: "Client Home" }, { key: "corporate", label: "Entity Information & KYB" }, { key: "contracts", label: "Contracts" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }, { key: "provideracceptance", label: "Provider Acceptance" }].map(tab => {
               const sel = clientDetailTab === tab.key;
               return <button key={tab.key} onClick={() => setClientDetailTab(tab.key)} style={{ padding: "12px 22px", fontSize: 13, fontWeight: sel ? 700 : 500, color: sel ? c.accent : c.textMuted, background: sel ? `${c.accent}12` : "transparent", border: "none", borderBottom: sel ? `2px solid ${c.accent}` : "2px solid transparent", cursor: "pointer", marginBottom: -1, transition: "all 0.15s" }}>{tab.label}</button>;
             })}
@@ -2461,6 +2461,95 @@ function AviroDashboard() {
               )}
             </div>
 
+            </>)}
+
+            {/* ===== PROVIDER ACCEPTANCE TAB ===== */}
+            {clientDetailTab === "provideracceptance" && (<>
+              <div style={sectionCard}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                  <div style={sectionTitle}>Provider Acceptance</div>
+                  <button onClick={() => {
+                    const pas = cl.providerAcceptances || [];
+                    updateClient(cl.id, "providerAcceptances", [...pas, { id: `pa-${Date.now()}`, providerName: "", status: "pending", midsIssued: false, dedicatedMids: true, midsUsed: "", notes: "" }]);
+                  }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Provider</button>
+                </div>
+
+                {(cl.providerAcceptances || []).length === 0 && (
+                  <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "20px 0" }}>No provider acceptance records. Click "+ Add Provider" to add one.</div>
+                )}
+
+                {(cl.providerAcceptances || []).map((pa, idx) => {
+                  const updatePA = (field, val) => {
+                    const pas = cl.providerAcceptances || [];
+                    updateClient(cl.id, "providerAcceptances", pas.map(p => p.id === pa.id ? { ...p, [field]: val } : p));
+                  };
+                  const statusColors = { pending: "#fbbf24", approved: "#34d399", rejected: "#f87171" };
+                  const statusLabels = { pending: "Pending", approved: "Approved", rejected: "Rejected" };
+
+                  return (
+                    <div key={pa.id} style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 12, borderLeft: `4px solid ${statusColors[pa.status] || "#fbbf24"}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={labelStyle}>Provider</label>
+                          <select value={pa.providerName || ""} onChange={e => updatePA("providerName", e.target.value)} style={{ ...inputStyle, width: "100%", fontSize: 14, padding: "10px 14px" }}>
+                            <option value="">— Select Provider —</option>
+                            {providers.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                          </select>
+                        </div>
+                        <button onClick={() => {
+                          updateClient(cl.id, "providerAcceptances", (cl.providerAcceptances || []).filter(p => p.id !== pa.id));
+                        }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600, marginLeft: 12, marginTop: 18 }}>{"✕"}</button>
+                      </div>
+
+                      <div style={{ marginBottom: 14 }}>
+                        <label style={labelStyle}>Status</label>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {["pending", "approved", "rejected"].map(s => (
+                            <button key={s} onClick={() => updatePA("status", s)} style={{
+                              background: pa.status === s ? `${statusColors[s]}20` : "transparent",
+                              border: `1px solid ${pa.status === s ? statusColors[s] : c.border}`,
+                              color: pa.status === s ? statusColors[s] : c.textMuted,
+                              borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                            }}>{statusLabels[s]}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ marginBottom: 14 }}>
+                        <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 8 }}>
+                          <input type="checkbox" checked={pa.midsIssued || false} onChange={e => updatePA("midsIssued", e.target.checked)} style={{ accentColor: c.accent, width: 16, height: 16 }} />
+                          MIDs Issued
+                        </label>
+                      </div>
+
+                      <div style={{ marginBottom: 14 }}>
+                        <label style={labelStyle}>Dedicated MIDs</label>
+                        <div style={{ display: "flex", gap: 4, marginBottom: pa.dedicatedMids === false ? 8 : 0 }}>
+                          {["Yes", "No"].map(opt => (
+                            <button key={opt} onClick={() => updatePA("dedicatedMids", opt === "Yes")} style={{
+                              background: (pa.dedicatedMids === true && opt === "Yes") || (pa.dedicatedMids === false && opt === "No") ? `${c.accent}20` : "transparent",
+                              border: `1px solid ${(pa.dedicatedMids === true && opt === "Yes") || (pa.dedicatedMids === false && opt === "No") ? c.accent : c.border}`,
+                              color: (pa.dedicatedMids === true && opt === "Yes") || (pa.dedicatedMids === false && opt === "No") ? c.accent : c.textMuted,
+                              borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                            }}>{opt}</button>
+                          ))}
+                        </div>
+                        {pa.dedicatedMids === false && (
+                          <div>
+                            <label style={labelStyle}>MIDs Used</label>
+                            <input value={pa.midsUsed || ""} onChange={e => updatePA("midsUsed", e.target.value)} placeholder="Enter MID details..." style={{ ...inputStyle, width: "100%" }} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label style={labelStyle}>Notes</label>
+                        <textarea value={pa.notes || ""} onChange={e => updatePA("notes", e.target.value)} placeholder="Notes about this provider acceptance..." rows={3} style={{ ...inputStyle, width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </>)}
 
             {/* ===== RATES OVERVIEW TAB ===== */}
@@ -7260,6 +7349,9 @@ function AviroDashboard() {
           } else if (docType === "sow_document" && docId) {
             var sowDocs = cl.sowDocuments || [];
             updateCPClient("sowDocuments", sowDocs.map(function(d) { return d.id === docId ? Object.assign({}, d, { fileName: file.name, fileUrl: publicUrl, uploadedAt: new Date().toISOString() }) : d; }));
+          } else if (docType === "other_document" && docId) {
+            var otherDocs = cl.otherDocuments || [];
+            updateCPClient("otherDocuments", otherDocs.map(function(d) { return d.id === docId ? Object.assign({}, d, { fileName: file.name, fileUrl: publicUrl, uploadedAt: new Date().toISOString() }) : d; }));
           }
         }).catch(function(e) { alert("Upload error: " + e.message); });
       };
@@ -7280,6 +7372,28 @@ function AviroDashboard() {
                 }
               }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Delete Client</button>
             </div>
+          </div>
+
+          {/* Status */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+            {(function() {
+              var statuses = ["onboarding", "approved", "rejected"];
+              var statusColors = { onboarding: "#fbbf24", approved: "#34d399", rejected: "#f87171" };
+              var statusLabels = { onboarding: "Onboarding", approved: "Approved", rejected: "Rejected" };
+              var current = cl.onboardingStatus || "onboarding";
+              return (
+                <div style={{ display: "flex", gap: 4 }}>
+                  {statuses.map(function(s) {
+                    return <button key={s} onClick={function() { updateCPClient("onboardingStatus", s); }} style={{
+                      background: current === s ? statusColors[s] + "20" : "transparent",
+                      border: "1px solid " + (current === s ? statusColors[s] : c.border),
+                      color: current === s ? statusColors[s] : c.textMuted,
+                      borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                    }}>{statusLabels[s]}</button>;
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Client Name */}
@@ -7643,6 +7757,51 @@ function AviroDashboard() {
                   );
                 })}
               </div>
+
+              {/* Other Documents */}
+              <div style={{ marginTop: 20, borderTop: "1px solid " + c.border, paddingTop: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>Other Documents</div>
+                  <button onClick={function() {
+                    var otherDocs = cl.otherDocuments || [];
+                    updateCPClient("otherDocuments", [].concat(otherDocs, [{ id: "other-" + Date.now(), name: "", fileName: "", fileUrl: "", uploadedAt: "" }]));
+                  }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Document</button>
+                </div>
+                {(cl.otherDocuments || []).length === 0 && <div style={{ fontSize: 11, color: c.textMuted, padding: "8px 0" }}>No other documents added yet.</div>}
+                {(cl.otherDocuments || []).map(function(doc) {
+                  return (
+                    <div key={doc.id} style={{ background: c.surface, borderRadius: 8, border: "1px solid " + c.border, padding: 14, marginBottom: 8 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <input value={doc.name || ""} onChange={function(e) {
+                          var otherDocs = cl.otherDocuments || [];
+                          updateCPClient("otherDocuments", otherDocs.map(function(d) { return d.id === doc.id ? Object.assign({}, d, { name: e.target.value }) : d; }));
+                        }} placeholder="Document name..." style={Object.assign({}, inputStyle, { flex: 1, marginRight: 8 })} />
+                        <button onClick={function() {
+                          updateCPClient("otherDocuments", (cl.otherDocuments || []).filter(function(d) { return d.id !== doc.id; }));
+                        }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{"✕"}</button>
+                      </div>
+                      <div
+                        onDragOver={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                        onDragLeave={function(e) { e.currentTarget.style.borderColor = c.border; }}
+                        onDrop={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.border; if (e.dataTransfer.files[0]) handleCPPrivateUpload("other_document", e.dataTransfer.files[0], doc.id); }}
+                        style={{ border: "2px dashed " + c.border, borderRadius: 6, padding: "10px 12px", textAlign: "center", cursor: "pointer", background: doc.fileUrl ? "#34d39908" : "transparent" }}
+                        onClick={function() { var inp = document.createElement("input"); inp.type = "file"; inp.onchange = function(ev) { if (ev.target.files[0]) handleCPPrivateUpload("other_document", ev.target.files[0], doc.id); }; inp.click(); }}
+                      >
+                        {doc.fileUrl ? (
+                          <div>
+                            <span style={{ fontSize: 12, color: "#34d399", fontWeight: 600 }}>{doc.fileName}</span>
+                            <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 8 }}> - click to replace</span>
+                            <div style={{ marginTop: 4 }}><a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, textDecoration: "none" }} onClick={function(e) { e.stopPropagation(); }}>{"↓ Download"}</a></div>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 11, color: c.textMuted }}>Drop file or click to upload</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
             </div>
           </>)}
         </div>
@@ -7666,7 +7825,9 @@ function AviroDashboard() {
               privateAddress: "",
               idDocument: { fileName: "", fileUrl: "", uploadedAt: "" },
               poaDocument: { fileName: "", fileUrl: "", uploadedAt: "", validFrom: "", validTo: "" },
-              sowDocuments: []
+              sowDocuments: [],
+              onboardingStatus: "onboarding",
+              otherDocuments: []
             };
             setCubePayOnboardClients([].concat(cubePayOnboardClients, [newCl]));
             setSelectedCPClient(newCl.id);
@@ -7688,7 +7849,15 @@ function AviroDashboard() {
                 style={{ background: c.card, border: "1px solid " + c.border, borderRadius: 14, padding: 22, cursor: "pointer", borderLeft: "4px solid #06b6d4", transition: "all 0.15s", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}
                 onMouseEnter={function(e) { e.currentTarget.style.background = c.cardHover; e.currentTarget.style.transform = "translateY(-1px)"; }}
                 onMouseLeave={function(e) { e.currentTarget.style.background = c.card; e.currentTarget.style.transform = "none"; }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 8 }}>{cl.name || "Unnamed Client"}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: c.text }}>{cl.name || "Unnamed Client"}</div>
+                  {(function() {
+                    var st = cl.onboardingStatus || "onboarding";
+                    var stColors = { onboarding: "#fbbf24", approved: "#34d399", rejected: "#f87171" };
+                    var stLabels = { onboarding: "Onboarding", approved: "Approved", rejected: "Rejected" };
+                    return <span style={{ fontSize: 10, color: stColors[st], background: stColors[st] + "15", border: "1px solid " + stColors[st] + "40", padding: "3px 8px", borderRadius: 5, fontWeight: 600 }}>{stLabels[st]}</span>;
+                  })()}
+                </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                   {hasCorporate && <span style={{ fontSize: 10, color: "#06b6d4", background: "#06b6d415", border: "1px solid #06b6d440", padding: "3px 8px", borderRadius: 5, fontWeight: 600 }}>Corporate</span>}
                   {hasPrivate && <span style={{ fontSize: 10, color: "#a78bfa", background: "#a78bfa15", border: "1px solid #a78bfa40", padding: "3px 8px", borderRadius: 5, fontWeight: 600 }}>Private</span>}
