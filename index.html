@@ -6325,23 +6325,25 @@ function AviroDashboard() {
                 {/* Rows */}
                 {(method.rows || []).map(function(row, rIdx) {
                   var isAlt = rIdx % 2 === 0;
+                  var rowBgLeft = isAlt ? "#EAF4F0" : "#ffffff";
+                  var rowBgRight = isAlt ? "#f4f7f6" : "#fafafa";
                   return (
-                  <div key={rIdx} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 32px", padding: "0", borderTop: "1px solid " + c.border }}>
-                    <div style={{ padding: "6px 14px", background: isAlt ? "#EAF4F0" : c.surface }}>
-                      <input value={row.label} onChange={function(e) { updateRowLabel(mIdx, rIdx, e.target.value); }} style={{ width: "100%", background: "transparent", border: "none", fontSize: 12, fontWeight: 600, color: c.text, outline: "none", padding: 0 }} />
+                  <div key={rIdx} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 32px", padding: "0", borderTop: "1px solid #d0d5dd" }}>
+                    <div style={{ padding: "6px 14px", background: rowBgLeft }}>
+                      <input value={row.label} onChange={function(e) { updateRowLabel(mIdx, rIdx, e.target.value); }} style={{ width: "100%", background: "transparent", border: "none", fontSize: 12, fontWeight: 600, color: "#1a1a2e", outline: "none", padding: 0 }} />
                     </div>
-                    <div style={{ padding: "6px 14px", background: isAlt ? "#f9fafb" : c.surface }}>
-                      <input value={row.value} onChange={function(e) { updateRowValue(mIdx, rIdx, e.target.value); }} placeholder="[ ]" style={{ width: "100%", background: "transparent", border: "none", fontSize: 12, color: c.text, outline: "none", padding: 0 }} />
+                    <div style={{ padding: "6px 14px", background: rowBgRight }}>
+                      <input value={row.value} onChange={function(e) { updateRowValue(mIdx, rIdx, e.target.value); }} placeholder="[ ]" style={{ width: "100%", background: "transparent", border: "none", fontSize: 12, color: "#1a1a2e", outline: "none", padding: 0 }} />
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", background: isAlt ? "#f9fafb" : c.surface }}>
-                      <button onClick={function() { removeRow(mIdx, rIdx); }} style={{ background: "none", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }} title="Remove row">{"×"}</button>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", background: rowBgRight }}>
+                      <button onClick={function() { removeRow(mIdx, rIdx); }} style={{ background: "none", border: "none", color: "#999", cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }} title="Remove row">{"×"}</button>
                     </div>
                   </div>
                   );
                 })}
 
                 {/* Add row button */}
-                <div style={{ padding: "8px 14px", borderTop: "1px solid " + c.border, background: c.surface }}>
+                <div style={{ padding: "8px 14px", borderTop: "1px solid #d0d5dd", background: "#ffffff" }}>
                   <button onClick={function() { addRow(mIdx); }} style={{ background: "none", border: "1px dashed " + c.border, borderRadius: 6, padding: "4px 14px", color: c.textMuted, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Row</button>
                 </div>
               </div>
