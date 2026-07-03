@@ -248,6 +248,8 @@ function AviroDashboard() {
   const [copiedText, setCopiedText] = useState(null);
   const [analysisFilter, setAnalysisFilter] = useState("all");
   const [analysisProfileFilter, setAnalysisProfileFilter] = useState("all");
+  const [kybProviderRequirements, setKybProviderRequirements] = useState([]); // [{ id, providerName, documents: ["doc1", "doc2", ...] }]
+  const [kybTemplateSelected, setKybTemplateSelected] = useState([]); // provider names selected for template generation
 
   // ===== REVENUE STATE =====
   const [revenueSubSection, setRevenueSubSection] = useState("overview"); // overview, cubepay, gatewayrev, bettingrev
@@ -345,7 +347,8 @@ function AviroDashboard() {
     pmPipeline, pmRoadmap, pmClients,
     contractDefaults,
     cubePayOnboardClients,
-  }), [quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, dailyProgress, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, contractDefaults, cubePayOnboardClients]);
+    kybProviderRequirements,
+  }), [quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, dailyProgress, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, contractDefaults, cubePayOnboardClients, kybProviderRequirements]);
 
   const saveState = useCallback(async () => {
     if (!hasLoaded) return; // NEVER save before data has loaded
@@ -428,6 +431,7 @@ function AviroDashboard() {
     if (s.pmRoadmap) setPmRoadmap(s.pmRoadmap);
     if (s.pmClients) setPmClients(s.pmClients);
     if (s.contractDefaults) setContractDefaults(s.contractDefaults);
+    if (s.kybProviderRequirements) setKybProviderRequirements(s.kybProviderRequirements);
     if (s.cubePayOnboardClients) setCubePayOnboardClients(s.cubePayOnboardClients);
   }, []);
 
@@ -8111,10 +8115,225 @@ function AviroDashboard() {
     );
   };
 
+  // ===== KYB TEMPLATE =====
+  const renderKybTemplate = () => {
+    const inputStyle = { fontSize: 13, padding: "9px 14px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" };
+    const labelStyle = { fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 5, letterSpacing: "0.03em" };
+    const sectionCard = { background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 26, marginBottom: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" };
+    const sectionTitle = { fontSize: 14, fontWeight: 700, color: c.accent, margin: "0 0 0 0", textTransform: "uppercase", letterSpacing: "0.03em" };
+
+    const providerOptions = ["BASE", ...providers.map(p => p.name)];
+    const usedProviders = new Set(kybProviderRequirements.map(r => r.providerName));
+
+    const addProviderReq = (provName) => {
+      if (!provName || usedProviders.has(provName)) return;
+      setKybProviderRequirements([...kybProviderRequirements, { id: `kpr-${Date.now()}`, providerName: provName, documents: [] }]);
+    };
+
+    const removeProviderReq = (id) => {
+      setKybProviderRequirements(kybProviderRequirements.filter(r => r.id !== id));
+      setKybTemplateSelected(kybTemplateSelected.filter(n => {
+        const req = kybProviderRequirements.find(r => r.id === id);
+        return req ? n !== req.providerName : true;
+      }));
+    };
+
+    const addDoc = (reqId, docName) => {
+      if (!docName.trim()) return;
+      setKybProviderRequirements(kybProviderRequirements.map(r =>
+        r.id === reqId ? { ...r, documents: [...r.documents, docName.trim()] } : r
+      ));
+    };
+
+    const removeDoc = (reqId, docIdx) => {
+      setKybProviderRequirements(kybProviderRequirements.map(r =>
+        r.id === reqId ? { ...r, documents: r.documents.filter((_, i) => i !== docIdx) } : r
+      ));
+    };
+
+    const toggleTemplateProvider = (provName) => {
+      setKybTemplateSelected(prev =>
+        prev.includes(provName) ? prev.filter(n => n !== provName) : [...prev, provName]
+      );
+    };
+
+    // Build consolidated checklist
+    const consolidatedDocs = (() => {
+      const docMap = {};
+      kybProviderRequirements.filter(r => kybTemplateSelected.includes(r.providerName)).forEach(r => {
+        r.documents.forEach(doc => {
+          const key = doc.toLowerCase().trim();
+          if (!docMap[key]) docMap[key] = { name: doc, providers: [] };
+          docMap[key].providers.push(r.providerName);
+        });
+      });
+      return Object.values(docMap).sort((a, b) => a.name.localeCompare(b.name));
+    })();
+
+    const printTemplate = () => {
+      let rows = "";
+      consolidatedDocs.forEach((doc, idx) => {
+        rows += `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f8f7fc'}">
+          <td class="td" style="font-weight:600">${doc.name}</td>
+          <td class="td" style="font-size:11px;color:#6b7280">${doc.providers.join(", ")}</td>
+          <td class="td" style="text-align:center"><div style="width:16px;height:16px;border:2px solid #d1d5db;border-radius:3px;margin:0 auto"></div></td>
+        </tr>`;
+      });
+      const selectedStr = kybTemplateSelected.join(", ");
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>KYB Document Checklist</title>`;
+      html += `<style>*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:40px;background:#fff;color:#1a1a2e;font-size:13px;line-height:1.5}`;
+      html += `h1{font-size:22px;font-weight:800;margin:0 0 4px}p.sub{font-size:12px;color:#6b7280;margin:0 0 20px}`;
+      html += `table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden}.th{text-align:left;padding:10px 14px;font-size:10px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:0.05em;background:linear-gradient(135deg,#4c1d95,#7c3aed);white-space:nowrap}.td{padding:10px 14px;font-size:13px;color:#1a1a2e;vertical-align:middle;border-bottom:1px solid #e5e1f0}`;
+      html += `.footer{margin-top:24px;padding:16px 0;border-top:1px solid #e5e1f0;text-align:center;font-size:10px;color:#9ca3af}`;
+      html += `@media print{body{padding:20px}button{display:none !important}}</style></head><body>`;
+      html += `<h1>KYB Document Checklist</h1>`;
+      html += `<p class="sub">Providers: ${selectedStr} · ${consolidatedDocs.length} documents required · Generated ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>`;
+      html += `<table><thead><tr><th class="th">Document</th><th class="th">Required By</th><th class="th" style="text-align:center;width:60px">✓</th></tr></thead><tbody>${rows}</tbody></table>`;
+      html += `<div class="footer">Aviro Dashboard · KYB Template</div>`;
+      html += `<button onclick="window.print()" style="margin-top:16px;padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">Print</button>`;
+      html += `</body></html>`;
+      const w = window.open("", "_blank");
+      if (w) { w.document.write(html); w.document.close(); }
+    };
+
+    return (
+      <div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: "0 0 6px 0", letterSpacing: "-0.02em" }}>KYB Template</h2>
+        <p style={{ color: c.textSecondary, fontSize: 13, margin: "0 0 20px 0" }}>Define provider document requirements and generate consolidated checklists</p>
+
+        {/* ===== PROVIDER REQUIREMENTS CONFIG ===== */}
+        <div style={sectionCard}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={sectionTitle}>Provider Requirements</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select id="kybAddProvSelect" style={{ ...inputStyle, fontSize: 12, padding: "6px 12px" }}>
+                <option value="">— Select Provider —</option>
+                {providerOptions.filter(p => !usedProviders.has(p)).map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <button onClick={() => {
+                const sel = document.getElementById("kybAddProvSelect");
+                if (sel && sel.value) { addProviderReq(sel.value); sel.value = ""; }
+              }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>+ Add Provider</button>
+            </div>
+          </div>
+
+          {kybProviderRequirements.length === 0 && (
+            <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "20px 0" }}>No provider requirements configured yet. Select a provider above and click "+ Add Provider" to start.</div>
+          )}
+
+          {kybProviderRequirements.map(req => (
+            <div key={req.id} style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, padding: 20, marginBottom: 12, borderLeft: `4px solid ${req.providerName === "BASE" ? c.accent : "#06b6d4"}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: c.text }}>{req.providerName}</span>
+                  {req.providerName === "BASE" && <span style={{ fontSize: 9, color: c.accent, background: `${c.accent}15`, border: `1px solid ${c.accent}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 700, textTransform: "uppercase" }}>Standard</span>}
+                  <span style={{ fontSize: 11, color: c.textMuted }}>{req.documents.length} document{req.documents.length !== 1 ? "s" : ""}</span>
+                </div>
+                <button onClick={() => { if (confirm(`Remove ${req.providerName} requirements?`)) removeProviderReq(req.id); }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Remove</button>
+              </div>
+
+              {/* Document list */}
+              {req.documents.map((doc, idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: idx < req.documents.length - 1 ? `1px solid ${c.border}30` : "none" }}>
+                  <span style={{ fontSize: 12, color: c.text, flex: 1 }}>{doc}</span>
+                  <button onClick={() => removeDoc(req.id, idx)} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 14, padding: "2px 6px", fontWeight: 600 }}>✕</button>
+                </div>
+              ))}
+
+              {/* Add document input */}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <input id={`kybDocInput-${req.id}`} placeholder="Document name..." onKeyDown={e => {
+                  if (e.key === "Enter" && e.target.value.trim()) { addDoc(req.id, e.target.value); e.target.value = ""; }
+                }} style={{ ...inputStyle, flex: 1, fontSize: 12 }} />
+                <button onClick={() => {
+                  const inp = document.getElementById(`kybDocInput-${req.id}`);
+                  if (inp && inp.value.trim()) { addDoc(req.id, inp.value); inp.value = ""; }
+                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>+ Add</button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ===== TEMPLATE GENERATOR ===== */}
+        {kybProviderRequirements.length > 0 && (
+          <div style={sectionCard}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={sectionTitle}>Generate Checklist</div>
+              {consolidatedDocs.length > 0 && (
+                <button onClick={printTemplate} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Print Checklist</button>
+              )}
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>Select Providers for this Onboarding</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {kybProviderRequirements.map(req => {
+                  const isSelected = kybTemplateSelected.includes(req.providerName);
+                  return (
+                    <button key={req.id} onClick={() => toggleTemplateProvider(req.providerName)} style={{
+                      background: isSelected ? `${c.accent}20` : "transparent",
+                      border: `1px solid ${isSelected ? c.accent : c.border}`,
+                      color: isSelected ? c.accent : c.textMuted,
+                      borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                    }}>{req.providerName} <span style={{ fontSize: 10, opacity: 0.7 }}>({req.documents.length})</span></button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {kybTemplateSelected.length === 0 && (
+              <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "20px 0" }}>Select one or more providers above to generate a consolidated document checklist.</div>
+            )}
+
+            {consolidatedDocs.length > 0 && (
+              <div>
+                <div style={{ display: "flex", gap: 14, marginBottom: 16 }}>
+                  <div style={{ background: c.surface, borderRadius: 10, padding: "12px 18px", border: `1px solid ${c.border}` }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: c.text }}>{consolidatedDocs.length}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Total Documents</div>
+                  </div>
+                  <div style={{ background: c.surface, borderRadius: 10, padding: "12px 18px", border: `1px solid ${c.border}` }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: c.accent }}>{kybTemplateSelected.length}</div>
+                    <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Providers Selected</div>
+                  </div>
+                </div>
+
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: "0.05em", background: "linear-gradient(135deg, #4c1d95, #7c3aed)" }}>Document</th>
+                        <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: "0.05em", background: "linear-gradient(135deg, #4c1d95, #7c3aed)" }}>Required By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {consolidatedDocs.map((doc, idx) => (
+                        <tr key={idx} style={{ background: idx % 2 === 0 ? "transparent" : `${c.surface}` }}>
+                          <td style={{ padding: "10px 14px", fontWeight: 600, color: c.text, borderBottom: `1px solid ${c.border}30` }}>{doc.name}</td>
+                          <td style={{ padding: "10px 14px", fontSize: 11, color: c.textMuted, borderBottom: `1px solid ${c.border}30` }}>
+                            {doc.providers.map((p, pi) => (
+                              <span key={pi} style={{ display: "inline-block", fontSize: 10, background: p === "BASE" ? `${c.accent}15` : "#06b6d415", color: p === "BASE" ? c.accent : "#06b6d4", border: `1px solid ${p === "BASE" ? c.accent : "#06b6d4"}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 600, marginRight: 4, marginBottom: 2 }}>{p}</span>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
     david: { label: "DAVID", sections: ["quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
-    gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers", "bankaccounts", "contractgen", "clientanalysis"] },
+    gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers", "bankaccounts", "contractgen", "clientanalysis", "kybtemplate"] },
     cubepay: { label: "CUBE PAY", sections: ["cpclients"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
     settings: { label: "SETTINGS", sections: ["settings"] },
@@ -8144,6 +8363,7 @@ function AviroDashboard() {
     { section: "bankaccounts", icon: "bank", label: "Bank Accounts", group: "gateway" },
     { section: "contractgen", icon: "note", label: "Contract Generator", group: "gateway" },
     { section: "clientanalysis", icon: "check", label: "Client Analysis", group: "gateway" },
+    { section: "kybtemplate", icon: "list", label: "KYB Template", group: "gateway" },
     { section: "cubepay_header", label: "CUBE PAY", isHeader: true, group: "cubepay" },
     { section: "cpclients", icon: "user", label: "Client Onboarding", group: "cubepay" },
     { section: "corporate", label: "CORPORATE MATRIX", isHeader: true, group: "corporate" },
@@ -8157,7 +8377,7 @@ function AviroDashboard() {
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator, cpclients: renderCubePayClients, clientanalysis: renderClientAnalysis };
+  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator, cpclients: renderCubePayClients, clientanalysis: renderClientAnalysis, kybtemplate: renderKybTemplate };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
