@@ -246,7 +246,6 @@ function AviroDashboard() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [expandedFlows, setExpandedFlows] = useState({});
   const [copiedText, setCopiedText] = useState(null);
-  const [showClientAnalysis, setShowClientAnalysis] = useState(false);
   const [analysisFilter, setAnalysisFilter] = useState("all");
   const [analysisProfileFilter, setAnalysisProfileFilter] = useState("all");
 
@@ -3268,176 +3267,6 @@ function AviroDashboard() {
           </div>
         )}
 
-        {/* Client Analysis Toggle */}
-        <div style={{ marginBottom: 16, marginTop: 8 }}>
-          <button onClick={function() { setShowClientAnalysis(!showClientAnalysis); }} style={{ background: showClientAnalysis ? c.accent : c.surface, border: "1px solid " + (showClientAnalysis ? c.accent : c.border), color: showClientAnalysis ? "#fff" : c.text, borderRadius: 8, padding: "8px 20px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-            {showClientAnalysis ? "✕ Close Analysis" : "📊 Client Analysis"}
-          </button>
-        </div>
-
-        {showClientAnalysis && (() => {
-          const ANALYSIS_KYB_STD = ["Certificate of Incorporation/Registration", "Articles of Association/Memorandum of Association", "Certificate of Incumbency", "Corporate Structure Chart", "Register of Shareholders", "Register of Directors", "ID Documents for UBOs/Directors", "Proof of Address for UBOs/Directors"];
-          const stColors = { active: "#34d399", onboarding: "#fbbf24", discussion: "#60a5fa", inactive: "#6b7280" };
-          const stLabels = { active: "Active", onboarding: "Onboarding", discussion: "In Discussion", inactive: "Inactive" };
-          const profileOptions = ["VIP Client", "Strategic Client", "Small Client", "Gateway/Reseller"];
-
-          const filtered = gatewayClients.filter(function(cl) {
-            if (analysisFilter !== "all" && (cl.status || "onboarding") !== analysisFilter) return false;
-            if (analysisProfileFilter !== "all" && cl.clientProfile !== analysisProfileFilter) return false;
-            return true;
-          });
-
-          const computeKyb = function(cl) {
-            const ents = cl.entities || [];
-            const autoKyb = ents.length > 0 && ents.every(function(ent) {
-              const docs = ent.kybDocuments || [];
-              return ANALYSIS_KYB_STD.every(function(sd) { return docs.some(function(d) { return d.name === sd && d.fileUrl; }); });
-            });
-            return (cl.kybCompletedOverride !== undefined && cl.kybCompletedOverride !== null) ? cl.kybCompletedOverride : autoKyb;
-          };
-
-          const computeExpiring = function(cl) {
-            const now = new Date();
-            const expiring = [];
-            (cl.entities || []).forEach(function(ent) {
-              (ent.kybDocuments || []).forEach(function(doc) {
-                if (doc.startDate && doc.renewalMonths) {
-                  const exp = new Date(doc.startDate);
-                  exp.setMonth(exp.getMonth() + parseInt(doc.renewalMonths));
-                  const daysLeft = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
-                  if (daysLeft <= 90) expiring.push({ name: doc.name, daysLeft: daysLeft, entity: ent.entityName || "Entity" });
-                }
-              });
-            });
-            return expiring;
-          };
-
-          const kybCompleteCount = filtered.filter(function(cl) { return computeKyb(cl); }).length;
-          const contractCount = filtered.filter(function(cl) { return (cl.agreements || []).length > 0; }).length;
-          const expiringCount = filtered.filter(function(cl) { return computeExpiring(cl).length > 0; }).length;
-
-          const printAnalysis = function() {
-            var rows = "";
-            filtered.forEach(function(cl) {
-              var st = cl.status || "onboarding";
-              var acceptedProvs = (cl.providerAcceptances || []).filter(function(pa) { return pa.status === "approved"; }).map(function(pa) { return pa.providerName; }).filter(Boolean);
-              var provsStr = acceptedProvs.length > 0 ? acceptedProvs.join(", ") : "—";
-              var hasContracts = (cl.agreements || []).length > 0;
-              var kybDone = computeKyb(cl);
-              var expiring = computeExpiring(cl);
-              var expStr = expiring.length > 0 ? expiring.map(function(e) { return e.name + " (" + (e.daysLeft <= 0 ? "EXPIRED" : e.daysLeft + "d") + ")"; }).join(", ") : "None";
-              var expColor = expiring.some(function(e) { return e.daysLeft <= 0; }) ? "#f87171" : expiring.length > 0 ? "#fbbf24" : "#34d399";
-
-              rows += "<tr>";
-              rows += '<td class="td" style="font-weight:700">' + cl.name + "</td>";
-              rows += '<td class="td"><span style="color:' + (stColors[st] || "#6b7280") + ";font-weight:600\">" + (stLabels[st] || st) + "</span></td>";
-              rows += '<td class="td">' + (cl.clientProfile || "—") + "</td>";
-              rows += '<td class="td">' + provsStr + "</td>";
-              rows += '<td class="td"><span style="color:' + (hasContracts ? "#34d399" : "#f87171") + ";font-weight:600\">" + (hasContracts ? "Yes" : "No") + "</span></td>";
-              rows += '<td class="td"><span style="color:' + (kybDone ? "#34d399" : "#f87171") + ";font-weight:600\">" + (kybDone ? "✓ Complete" : "✕ Incomplete") + "</span></td>";
-              rows += '<td class="td" style="color:' + expColor + ";font-size:11px\">" + expStr + "</td>";
-              rows += "</tr>";
-            });
-
-            var filterLabel = analysisFilter === "all" ? "All Clients" : (stLabels[analysisFilter] || analysisFilter);
-
-            var html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Client Analysis</title>";
-            html += "<style>*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:40px;background:#fff;color:#1a1a2e;font-size:13px;line-height:1.5}";
-            html += "h1{font-size:22px;font-weight:800;margin:0 0 4px}p.sub{font-size:12px;color:#6b7280;margin:0 0 20px}";
-            html += "table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden}.th{text-align:left;padding:10px 12px;font-size:10px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:0.05em;background:linear-gradient(135deg,#4c1d95,#7c3aed);white-space:nowrap}.td{padding:9px 12px;font-size:12px;color:#1a1a2e;vertical-align:top;border-bottom:1px solid #e5e1f0}tbody tr:nth-child(even){background:#f8f7fc}";
-            html += ".footer{margin-top:20px;padding:16px 0;border-top:1px solid #e5e1f0;text-align:center;font-size:10px;color:#9ca3af}";
-            html += "@media print{body{padding:20px}button{display:none !important}}</style></head><body>";
-            html += "<h1>Client Analysis Report</h1>";
-            html += "<p class=\"sub\">Filter: " + filterLabel + (analysisProfileFilter !== "all" ? " · Profile: " + analysisProfileFilter : "") + " · Generated " + new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) + "</p>";
-            html += "<table><thead><tr><th class=\"th\">Client</th><th class=\"th\">Status</th><th class=\"th\">Profile</th><th class=\"th\">Providers Accepted</th><th class=\"th\">Contracts</th><th class=\"th\">KYB</th><th class=\"th\">Expiring Documents</th></tr></thead><tbody>" + rows + "</tbody></table>";
-            html += "<div class=\"footer\">Aviro Dashboard · Client Analysis</div>";
-            html += "<button onclick=\"window.print()\" style=\"margin-top:16px;padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px\">Print</button>";
-            html += "</body></html>";
-            var w = window.open("", "_blank");
-            if (w) { w.document.write(html); w.document.close(); }
-          };
-
-          return (
-            <div style={{ background: c.card, borderRadius: 16, border: "1px solid " + c.border, padding: 26, marginBottom: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.03em" }}>Client Analysis</div>
-                <button onClick={printAnalysis} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Print Analysis</button>
-              </div>
-
-              {/* Filters */}
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {[{ key: "all", label: "All" }, { key: "active", label: "Active" }, { key: "onboarding", label: "Onboarding" }, { key: "discussion", label: "In Discussion" }, { key: "inactive", label: "Inactive" }].map(function(f) {
-                    return <button key={f.key} onClick={function() { setAnalysisFilter(f.key); }} style={{ background: analysisFilter === f.key ? c.accent : "transparent", border: "1px solid " + (analysisFilter === f.key ? c.accent : c.border), color: analysisFilter === f.key ? "#fff" : c.textMuted, borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{f.label}</button>;
-                  })}
-                </div>
-                <select value={analysisProfileFilter} onChange={function(e) { setAnalysisProfileFilter(e.target.value); }} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: "1px solid " + c.border, background: c.surface, color: c.text, outline: "none" }}>
-                  <option value="all">All Profiles</option>
-                  {profileOptions.map(function(p) { return <option key={p} value={p}>{p}</option>; })}
-                </select>
-              </div>
-
-              {/* Summary Stats */}
-              <div style={{ display: "flex", gap: 14, marginBottom: 16 }}>
-                <div style={{ flex: 1, background: c.surface, borderRadius: 10, padding: "12px 16px", border: "1px solid " + c.border }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: c.text }}>{filtered.length}</div>
-                  <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Total Clients</div>
-                </div>
-                <div style={{ flex: 1, background: c.surface, borderRadius: 10, padding: "12px 16px", border: "1px solid " + c.border }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#34d399" }}>{kybCompleteCount}</div>
-                  <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>KYB Complete</div>
-                </div>
-                <div style={{ flex: 1, background: c.surface, borderRadius: 10, padding: "12px 16px", border: "1px solid " + c.border }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#60a5fa" }}>{contractCount}</div>
-                  <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>With Contracts</div>
-                </div>
-                <div style={{ flex: 1, background: c.surface, borderRadius: 10, padding: "12px 16px", border: "1px solid " + c.border }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: expiringCount > 0 ? "#f87171" : "#34d399" }}>{expiringCount}</div>
-                  <div style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Expiring Docs</div>
-                </div>
-              </div>
-
-              {/* Table */}
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead>
-                    <tr>
-                      {["Client", "Status", "Profile", "Providers Accepted", "Contracts", "KYB", "Expiring Docs"].map(function(h) {
-                        return <th key={h} style={{ textAlign: "left", padding: "8px 10px", fontSize: 10, fontWeight: 700, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "2px solid " + c.border, whiteSpace: "nowrap" }}>{h}</th>;
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(function(cl) {
-                      var st = cl.status || "onboarding";
-                      var acceptedProvs = (cl.providerAcceptances || []).filter(function(pa) { return pa.status === "approved"; }).map(function(pa) { return pa.providerName; }).filter(Boolean);
-                      var hasContracts = (cl.agreements || []).length > 0;
-                      var kybDone = computeKyb(cl);
-                      var expiring = computeExpiring(cl);
-
-                      return (
-                        <tr key={cl.id} style={{ borderBottom: "1px solid " + c.border }}>
-                          <td style={{ padding: "8px 10px", fontWeight: 700, color: c.text }}>{cl.name}</td>
-                          <td style={{ padding: "8px 10px" }}><span style={{ color: stColors[st] || "#6b7280", fontWeight: 600, fontSize: 11 }}>{stLabels[st] || st}</span></td>
-                          <td style={{ padding: "8px 10px", color: c.textMuted }}>{cl.clientProfile || "—"}</td>
-                          <td style={{ padding: "8px 10px", color: c.textMuted, fontSize: 11 }}>{acceptedProvs.length > 0 ? acceptedProvs.join(", ") : "—"}</td>
-                          <td style={{ padding: "8px 10px" }}><span style={{ color: hasContracts ? "#34d399" : "#f87171", fontWeight: 600 }}>{hasContracts ? "Yes" : "No"}</span></td>
-                          <td style={{ padding: "8px 10px" }}><span style={{ color: kybDone ? "#34d399" : "#f87171", fontWeight: 600 }}>{kybDone ? "✓ Complete" : "✕ Incomplete"}</span></td>
-                          <td style={{ padding: "8px 10px", fontSize: 11, color: expiring.some(function(e) { return e.daysLeft <= 0; }) ? "#f87171" : expiring.length > 0 ? "#fbbf24" : "#34d399" }}>
-                            {expiring.length > 0 ? expiring.map(function(e) { return e.name + " (" + (e.daysLeft <= 0 ? "EXPIRED" : e.daysLeft + "d") + ")"; }).join(", ") : "None"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {filtered.length === 0 && (
-                      <tr><td colSpan={7} style={{ padding: "20px 10px", textAlign: "center", color: c.textMuted, fontSize: 12 }}>No clients match the selected filters.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        })()}
 
         {/* Client Grid */}
         {gatewayClients.length === 0 && !showAddClient && (
@@ -8098,10 +7927,194 @@ function AviroDashboard() {
     );
   };
 
+  // ===== CLIENT ANALYSIS =====
+  const renderClientAnalysis = () => {
+    const inputStyle = { fontSize: 13, padding: "9px 14px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" };
+    const labelStyle = { fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 5, letterSpacing: "0.03em" };
+    const sectionCard = { background: c.card, borderRadius: 16, border: `1px solid ${c.border}`, padding: 26, marginBottom: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" };
+    const sectionTitle = { fontSize: 14, fontWeight: 700, color: c.accent, margin: "0 0 14px 0", textTransform: "uppercase", letterSpacing: "0.03em" };
+
+    const KYB_STD = ["Certificate of Incorporation/Registration", "Articles of Association/Memorandum of Association", "Certificate of Incumbency", "Corporate Structure Chart", "Register of Shareholders", "Register of Directors", "ID Documents for UBOs/Directors", "Proof of Address for UBOs/Directors"];
+    const stColors = { active: "#34d399", onboarding: "#fbbf24", discussion: "#60a5fa", inactive: "#6b7280" };
+    const stLabels = { active: "Active", onboarding: "Onboarding", discussion: "In Discussion", inactive: "Inactive" };
+    const profileOptions = ["VIP Client", "Strategic Client", "Small Client", "Gateway/Reseller"];
+
+    const filtered = gatewayClients.filter(cl => {
+      if (analysisFilter !== "all" && (cl.status || "onboarding") !== analysisFilter) return false;
+      if (analysisProfileFilter !== "all" && cl.clientProfile !== analysisProfileFilter) return false;
+      return true;
+    });
+
+    const computeKyb = (cl) => {
+      const ents = cl.entities || [];
+      const autoKyb = ents.length > 0 && ents.every(ent => {
+        const docs = ent.kybDocuments || [];
+        return KYB_STD.every(sd => docs.some(d => d.name === sd && d.fileUrl));
+      });
+      return (cl.kybCompletedOverride !== undefined && cl.kybCompletedOverride !== null) ? cl.kybCompletedOverride : autoKyb;
+    };
+
+    const computeExpiring = (cl) => {
+      const now = new Date();
+      const expiring = [];
+      (cl.entities || []).forEach(ent => {
+        (ent.kybDocuments || []).forEach(doc => {
+          if (doc.startDate && doc.renewalMonths) {
+            const exp = new Date(doc.startDate);
+            exp.setMonth(exp.getMonth() + parseInt(doc.renewalMonths));
+            const daysLeft = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+            if (daysLeft <= 90) expiring.push({ name: doc.name, daysLeft, entity: ent.entityName || "Entity" });
+          }
+        });
+      });
+      return expiring;
+    };
+
+    const kybCompleteCount = filtered.filter(cl => computeKyb(cl)).length;
+    const contractCount = filtered.filter(cl => (cl.agreements || []).length > 0).length;
+    const expiringCount = filtered.filter(cl => computeExpiring(cl).length > 0).length;
+
+    const printAnalysis = () => {
+      let rows = "";
+      filtered.forEach(cl => {
+        const st = cl.status || "onboarding";
+        const acceptedProvs = (cl.providerAcceptances || []).filter(pa => pa.status === "approved").map(pa => pa.providerName).filter(Boolean);
+        const provsStr = acceptedProvs.length > 0 ? acceptedProvs.join(", ") : "—";
+        const hasContracts = (cl.agreements || []).length > 0;
+        const kybDone = computeKyb(cl);
+        const expiring = computeExpiring(cl);
+        const expStr = expiring.length > 0 ? expiring.map(e => e.name + " (" + (e.daysLeft <= 0 ? "EXPIRED" : e.daysLeft + "d") + ")").join(", ") : "None";
+        const expColor = expiring.some(e => e.daysLeft <= 0) ? "#f87171" : expiring.length > 0 ? "#fbbf24" : "#34d399";
+
+        rows += `<tr>
+          <td class="td" style="font-weight:700">${cl.name}</td>
+          <td class="td"><span style="color:${stColors[st] || "#6b7280"};font-weight:600">${stLabels[st] || st}</span></td>
+          <td class="td">${cl.clientProfile || "—"}</td>
+          <td class="td">${provsStr}</td>
+          <td class="td"><span style="color:${hasContracts ? "#34d399" : "#f87171"};font-weight:600">${hasContracts ? "Yes" : "No"}</span></td>
+          <td class="td"><span style="color:${kybDone ? "#34d399" : "#f87171"};font-weight:600">${kybDone ? "✓ Complete" : "✕ Incomplete"}</span></td>
+          <td class="td" style="color:${expColor};font-size:11px">${expStr}</td>
+        </tr>`;
+      });
+
+      const filterLabel = analysisFilter === "all" ? "All Clients" : (stLabels[analysisFilter] || analysisFilter);
+
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Client Analysis</title>`;
+      html += `<style>*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:40px;background:#fff;color:#1a1a2e;font-size:13px;line-height:1.5}`;
+      html += `h1{font-size:22px;font-weight:800;margin:0 0 4px}p.sub{font-size:12px;color:#6b7280;margin:0 0 20px}`;
+      html += `table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden}.th{text-align:left;padding:10px 12px;font-size:10px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:0.05em;background:linear-gradient(135deg,#4c1d95,#7c3aed);white-space:nowrap}.td{padding:9px 12px;font-size:12px;color:#1a1a2e;vertical-align:top;border-bottom:1px solid #e5e1f0}tbody tr:nth-child(even){background:#f8f7fc}`;
+      html += `.footer{margin-top:20px;padding:16px 0;border-top:1px solid #e5e1f0;text-align:center;font-size:10px;color:#9ca3af}`;
+      html += `@media print{body{padding:20px}button{display:none !important}}</style></head><body>`;
+      html += `<h1>Client Analysis Report</h1>`;
+      html += `<p class="sub">Filter: ${filterLabel}${analysisProfileFilter !== "all" ? " · Profile: " + analysisProfileFilter : ""} · Generated ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>`;
+      html += `<table><thead><tr><th class="th">Client</th><th class="th">Status</th><th class="th">Profile</th><th class="th">Providers Accepted</th><th class="th">Contracts</th><th class="th">KYB</th><th class="th">Expiring Documents</th></tr></thead><tbody>${rows}</tbody></table>`;
+      html += `<div class="footer">Aviro Dashboard · Client Analysis</div>`;
+      html += `<button onclick="window.print()" style="margin-top:16px;padding:8px 20px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">Print</button>`;
+      html += `</body></html>`;
+      const w = window.open("", "_blank");
+      if (w) { w.document.write(html); w.document.close(); }
+    };
+
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Client Analysis</h2>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gatewayClients.length} total clients</p>
+          </div>
+          <button onClick={printAnalysis} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Print Analysis</button>
+        </div>
+
+        {/* Filters */}
+        <div style={sectionCard}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Status:</span>
+            <div style={{ display: "flex", gap: 4 }}>
+              {[{ key: "all", label: "All" }, { key: "active", label: "Active" }, { key: "onboarding", label: "Onboarding" }, { key: "discussion", label: "In Discussion" }, { key: "inactive", label: "Inactive" }].map(f => (
+                <button key={f.key} onClick={() => setAnalysisFilter(f.key)} style={{
+                  background: analysisFilter === f.key ? c.accent : "transparent",
+                  border: `1px solid ${analysisFilter === f.key ? c.accent : c.border}`,
+                  color: analysisFilter === f.key ? "#fff" : c.textMuted,
+                  borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                }}>{f.label}</button>
+              ))}
+            </div>
+            <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginLeft: 12 }}>Profile:</span>
+            <select value={analysisProfileFilter} onChange={e => setAnalysisProfileFilter(e.target.value)} style={{ ...inputStyle, fontSize: 12, padding: "6px 12px" }}>
+              <option value="all">All Profiles</option>
+              {profileOptions.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Summary Stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
+          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: "18px 22px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: c.text }}>{filtered.length}</div>
+            <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Total Clients</div>
+          </div>
+          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: "18px 22px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", borderLeft: "4px solid #34d399" }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: "#34d399" }}>{kybCompleteCount}</div>
+            <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>KYB Complete</div>
+          </div>
+          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: "18px 22px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", borderLeft: "4px solid #60a5fa" }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: "#60a5fa" }}>{contractCount}</div>
+            <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>With Contracts</div>
+          </div>
+          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: "18px 22px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", borderLeft: `4px solid ${expiringCount > 0 ? "#f87171" : "#34d399"}` }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: expiringCount > 0 ? "#f87171" : "#34d399" }}>{expiringCount}</div>
+            <div style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", marginTop: 4 }}>Expiring Docs</div>
+          </div>
+        </div>
+
+        {/* Analysis Table */}
+        <div style={sectionCard}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr>
+                  {["Client", "Status", "Profile", "Providers Accepted", "Contracts", "KYB", "Expiring Docs"].map(h => (
+                    <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 10, fontWeight: 700, color: "#fff", textTransform: "uppercase", letterSpacing: "0.05em", background: "linear-gradient(135deg, #4c1d95, #7c3aed)", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(cl => {
+                  const st = cl.status || "onboarding";
+                  const acceptedProvs = (cl.providerAcceptances || []).filter(pa => pa.status === "approved").map(pa => pa.providerName).filter(Boolean);
+                  const hasContracts = (cl.agreements || []).length > 0;
+                  const kybDone = computeKyb(cl);
+                  const expiring = computeExpiring(cl);
+
+                  return (
+                    <tr key={cl.id} style={{ borderBottom: `1px solid ${c.border}`, cursor: "pointer" }} onClick={() => { setSelectedClient(cl.id); setSection("clients"); }}>
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: c.text, fontSize: 14 }}>{cl.name}</td>
+                      <td style={{ padding: "10px 12px" }}><span style={{ color: stColors[st] || "#6b7280", fontWeight: 600, fontSize: 12, background: `${stColors[st] || "#6b7280"}15`, border: `1px solid ${stColors[st] || "#6b7280"}40`, padding: "3px 10px", borderRadius: 6 }}>{stLabels[st] || st}</span></td>
+                      <td style={{ padding: "10px 12px", color: c.textMuted, fontSize: 12 }}>{cl.clientProfile || "—"}</td>
+                      <td style={{ padding: "10px 12px", color: c.textMuted, fontSize: 12 }}>{acceptedProvs.length > 0 ? acceptedProvs.join(", ") : "—"}</td>
+                      <td style={{ padding: "10px 12px" }}><span style={{ color: hasContracts ? "#34d399" : "#f87171", fontWeight: 700, fontSize: 13 }}>{hasContracts ? "Yes" : "No"}</span></td>
+                      <td style={{ padding: "10px 12px" }}><span style={{ color: kybDone ? "#34d399" : "#f87171", fontWeight: 700, fontSize: 13 }}>{kybDone ? "✓ Complete" : "✕ Incomplete"}</span></td>
+                      <td style={{ padding: "10px 12px", fontSize: 11, color: expiring.some(e => e.daysLeft <= 0) ? "#f87171" : expiring.length > 0 ? "#fbbf24" : "#34d399" }}>
+                        {expiring.length > 0 ? expiring.map(e => e.name + " (" + (e.daysLeft <= 0 ? "EXPIRED" : e.daysLeft + "d") + ")").join(", ") : "None"}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={7} style={{ padding: "30px 12px", textAlign: "center", color: c.textMuted, fontSize: 13 }}>No clients match the selected filters.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
     david: { label: "DAVID", sections: ["quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
-    gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers", "bankaccounts", "contractgen"] },
+    gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers", "bankaccounts", "contractgen", "clientanalysis"] },
     cubepay: { label: "CUBE PAY", sections: ["cpclients"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
     settings: { label: "SETTINGS", sections: ["settings"] },
@@ -8130,6 +8143,7 @@ function AviroDashboard() {
     { section: "providers", icon: "bank", label: "Providers", group: "gateway" },
     { section: "bankaccounts", icon: "bank", label: "Bank Accounts", group: "gateway" },
     { section: "contractgen", icon: "note", label: "Contract Generator", group: "gateway" },
+    { section: "clientanalysis", icon: "check", label: "Client Analysis", group: "gateway" },
     { section: "cubepay_header", label: "CUBE PAY", isHeader: true, group: "cubepay" },
     { section: "cpclients", icon: "user", label: "Client Onboarding", group: "cubepay" },
     { section: "corporate", label: "CORPORATE MATRIX", isHeader: true, group: "corporate" },
@@ -8143,7 +8157,7 @@ function AviroDashboard() {
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator, cpclients: renderCubePayClients };
+  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator, cpclients: renderCubePayClients, clientanalysis: renderClientAnalysis };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
