@@ -303,6 +303,13 @@ function AviroDashboard() {
   const [fxNewCurr, setFxNewCurr] = useState("");
   const [fxNewRate, setFxNewRate] = useState("");
 
+  // ===== CUBE PAY CLIENT ONBOARDING STATE =====
+  const [cubePayOnboardClients, setCubePayOnboardClients] = useState([]);
+  const [selectedCPClient, setSelectedCPClient] = useState(null);
+  const [cpClientTab, setCpClientTab] = useState("corporate");
+  const [cpEditingField, setCpEditingField] = useState(null);
+  const [cpCollapsed, setCpCollapsed] = useState({});
+
   // FX conversion function using live rates
   const toEUR = useCallback((amount, currency) => {
     return (parseFloat(amount) || 0) * (fxRates[(currency || "EUR").toUpperCase()] || 1);
@@ -335,7 +342,8 @@ function AviroDashboard() {
     fxRates, fxBaseCurrency, fxLastUpdated,
     pmPipeline, pmRoadmap, pmClients,
     contractDefaults,
-  }), [quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, dailyProgress, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, contractDefaults]);
+    cubePayOnboardClients,
+  }), [quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, dailyProgress, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, contractDefaults, cubePayOnboardClients]);
 
   const saveState = useCallback(async () => {
     if (!hasLoaded) return; // NEVER save before data has loaded
@@ -418,6 +426,7 @@ function AviroDashboard() {
     if (s.pmRoadmap) setPmRoadmap(s.pmRoadmap);
     if (s.pmClients) setPmClients(s.pmClients);
     if (s.contractDefaults) setContractDefaults(s.contractDefaults);
+    if (s.cubePayOnboardClients) setCubePayOnboardClients(s.cubePayOnboardClients);
   }, []);
 
   // Load state on mount — try Supabase first, fall back to localStorage
@@ -6985,6 +6994,7 @@ function AviroDashboard() {
   const renderHome = () => {
     const homeCards = [
       { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #818cf8, #a78bfa)", defaultSection: "clients" },
+      { key: "cubepay", title: "Cube Pay", desc: "Client Onboarding & KYB Management", icon: "user", gradient: "linear-gradient(135deg, #06b6d4, #0891b2)", defaultSection: "cpclients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #fbbf24, #f87171)", defaultSection: null },
       { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #34d399, #10b981)", defaultSection: "entities" },
       { key: "david", title: "David Tasks", desc: "Quick Jobs, Signal Tasks & Daily Operations", icon: "zap", gradient: "linear-gradient(135deg, #60a5fa, #3b82f6)", defaultSection: "quickjobs" },
@@ -7184,10 +7194,522 @@ function AviroDashboard() {
     );
   };
 
+  // ===== CUBE PAY CLIENT ONBOARDING =====
+  const renderCubePayClients = () => {
+    var inputStyle = { fontSize: 13, padding: "9px 14px", borderRadius: 8, border: "1px solid " + c.border, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" };
+    var labelStyle = { fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 5, letterSpacing: "0.03em" };
+    var sectionCard = { background: c.card, borderRadius: 16, border: "1px solid " + c.border, padding: 26, marginBottom: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.15)" };
+    var sectionTitle = { fontSize: 14, fontWeight: 700, color: c.accent, margin: "0 0 14px 0", textTransform: "uppercase", letterSpacing: "0.03em" };
+
+    // ===== CLIENT DETAIL VIEW =====
+    if (selectedCPClient) {
+      var cl = cubePayOnboardClients.find(function(x) { return x.id === selectedCPClient; });
+      if (!cl) { setSelectedCPClient(null); return null; }
+
+      var updateCPClient = function(field, val) {
+        setCubePayOnboardClients(function(prev) { return prev.map(function(x) { return x.id === cl.id ? Object.assign({}, x, (_t = {}, _t[field] = val, _t)) : x; var _t; }); });
+      };
+
+      var cpToggleSection = function(key) {
+        setCpCollapsed(function(prev) { return Object.assign({}, prev, (_t = {}, _t[key] = !prev[key], _t)); var _t; });
+      };
+
+      var updateCPEntity = function(entId, field, val) {
+        var ents = cl.entities || [];
+        var updated = ents.map(function(e) { return e.id === entId ? Object.assign({}, e, (_t = {}, _t[field] = val, _t)) : e; var _t; });
+        updateCPClient("entities", updated);
+      };
+
+      var handleCPKybUpload = function(entId, docId, file) {
+        if (!file) return;
+        if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first"); return; }
+        var ents = cl.entities || [];
+        var ent = ents.find(function(e) { return e.id === entId; });
+        var docs = ent ? (ent.kybDocuments || []) : [];
+        var safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
+        var filePath = "cubepay_clients/" + safeName + "/" + entId + "/kyb/" + docId + "_" + Date.now() + "_" + file.name;
+        updateCPEntity(entId, "kybDocuments", docs.map(function(d) { return d.id === docId ? Object.assign({}, d, { uploadStatus: "uploading" }) : d; }));
+        fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+          method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file
+        }).then(function(resp) {
+          if (!resp.ok) throw new Error("Upload failed: " + resp.status);
+          var publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+          var updatedDocs = docs.map(function(d) { return d.id === docId ? Object.assign({}, d, { fileName: file.name, fileSize: file.size, fileUrl: publicUrl, uploadedAt: new Date().toISOString(), uploadStatus: null }) : d; });
+          updateCPEntity(entId, "kybDocuments", updatedDocs);
+        }).catch(function(e) {
+          alert("Upload error: " + e.message);
+          updateCPEntity(entId, "kybDocuments", docs.map(function(d) { return d.id === docId ? Object.assign({}, d, { uploadStatus: null }) : d; }));
+        });
+      };
+
+      var handleCPPrivateUpload = function(docType, file, docId) {
+        if (!file) return;
+        if (!supabaseUrl || !supabaseKey) { alert("Connect to Supabase database first"); return; }
+        var safeName = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
+        var filePath = "cubepay_clients/" + safeName + "/private/" + docType + "_" + Date.now() + "_" + file.name;
+        fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath, {
+          method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file
+        }).then(function(resp) {
+          if (!resp.ok) throw new Error("Upload failed: " + resp.status);
+          var publicUrl = supabaseUrl + "/storage/v1/object/public/documents/" + filePath;
+          if (docType === "id_document") {
+            updateCPClient("idDocument", { fileName: file.name, fileUrl: publicUrl, uploadedAt: new Date().toISOString() });
+          } else if (docType === "poa_document") {
+            var poa = cl.poaDocument || {};
+            updateCPClient("poaDocument", Object.assign({}, poa, { fileName: file.name, fileUrl: publicUrl, uploadedAt: new Date().toISOString() }));
+          } else if (docType === "sow_document" && docId) {
+            var sowDocs = cl.sowDocuments || [];
+            updateCPClient("sowDocuments", sowDocs.map(function(d) { return d.id === docId ? Object.assign({}, d, { fileName: file.name, fileUrl: publicUrl, uploadedAt: new Date().toISOString() }) : d; }));
+          }
+        }).catch(function(e) { alert("Upload error: " + e.message); });
+      };
+
+      var KYB_STD = ["Certificate of Incorporation/Registration", "Articles of Association/Memorandum of Association", "Certificate of Incumbency", "Corporate Structure Chart", "Register of Shareholders", "Register of Directors", "ID Documents for UBOs/Directors", "Proof of Address for UBOs/Directors"];
+      var formatFileSize = function(bytes) { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
+
+      return (
+        <div>
+          <div style={{ position: "sticky", top: 0, zIndex: 20, background: c.bg, paddingTop: 12, paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid " + c.border }}>
+            <button onClick={function() { setSelectedCPClient(null); setCpEditingField(null); }} style={{ background: c.surface, border: "1px solid " + c.border, color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 10, padding: "6px 16px", borderRadius: 8, fontWeight: 600 }}>&larr; Back to Client Onboarding</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ fontSize: 24, fontWeight: 800, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>{cl.name || "Unnamed Client"}</h2>
+              <button onClick={function() {
+                if (confirm("Delete this client?")) {
+                  setCubePayOnboardClients(cubePayOnboardClients.filter(function(x) { return x.id !== cl.id; }));
+                  setSelectedCPClient(null);
+                }
+              }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Delete Client</button>
+            </div>
+          </div>
+
+          {/* Client Name */}
+          <div style={sectionCard}>
+            <div style={sectionTitle}>Client Name</div>
+            <input value={cl.name || ""} onChange={function(e) { updateCPClient("name", e.target.value); }} placeholder="Client name..." style={Object.assign({}, inputStyle, { width: "100%", fontSize: 16, fontWeight: 600 })} />
+          </div>
+
+          {/* Tab navigation: Corporate | Private */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 24, borderBottom: "1px solid " + c.border, paddingBottom: 0 }}>
+            {[{ key: "corporate", label: "Corporate" }, { key: "private", label: "Private" }].map(function(tab) {
+              var sel = cpClientTab === tab.key;
+              return <button key={tab.key} onClick={function() { setCpClientTab(tab.key); }} style={{ padding: "12px 22px", fontSize: 13, fontWeight: sel ? 700 : 500, color: sel ? c.accent : c.textMuted, background: sel ? c.accent + "12" : "transparent", border: "none", borderBottom: sel ? "2px solid " + c.accent : "2px solid transparent", cursor: "pointer", marginBottom: -1, transition: "all 0.15s" }}>{tab.label}</button>;
+            })}
+          </div>
+
+          {/* ===== CORPORATE TAB ===== */}
+          {cpClientTab === "corporate" && (<>
+            <div style={sectionCard}>
+              <div onClick={function() { cpToggleSection("cp_entity"); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: cpCollapsed.cp_entity ? 0 : 16, userSelect: "none", padding: "4px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 13, color: c.textMuted, transition: "transform 0.15s", display: "inline-block", transform: cpCollapsed.cp_entity ? "rotate(-90deg)" : "rotate(0deg)" }}>&#9662;</span>
+                  <h3 style={sectionTitle}>Entity Details</h3>
+                  <span style={{ fontSize: 12, color: c.textMuted, fontWeight: 500, textTransform: "none" }}>{(cl.entities || []).length} {(cl.entities || []).length === 1 ? "entity" : "entities"}</span>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }} onClick={function(e) { e.stopPropagation(); }}>
+                  {!cpCollapsed.cp_entity && <button onClick={function() {
+                    updateCPClient("entities", [].concat(cl.entities || [], [{ id: "ent-" + Date.now(), entityName: "", jurisdiction: "", companyNumber: "", registeredAddress: "", isLicensed: false, licenseJurisdiction: "", licenseNumber: "", licenseExpiry: "", uboIsEntity: false, uboEntityName: "", ubo: "", director: "", kybDocuments: [] }]));
+                  }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Entity</button>}
+                </div>
+              </div>
+              {!cpCollapsed.cp_entity && (function() {
+                var ents = cl.entities || [];
+                if (ents.length === 0) return <div style={{ fontSize: 11, color: c.textMuted }}>No entities yet. Click "+ Add Entity" to add one.</div>;
+
+                return ents.map(function(ent, idx) {
+                  var entDocs = ent.kybDocuments || [];
+                  var existingNames = {};
+                  entDocs.forEach(function(d) { existingNames[d.name] = true; });
+                  var missingDocs = KYB_STD.filter(function(d) { return !existingNames[d]; });
+
+                  return (
+                    <div key={ent.id} style={{ background: c.surface, borderRadius: 12, border: "1px solid " + c.border, padding: 20, marginBottom: idx < ents.length - 1 ? 14 : 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ width: 4, height: 24, borderRadius: 2, background: c.accent }} />
+                          <span style={{ fontSize: 15, fontWeight: 700, color: c.text }}>{"Entity " + (idx + 1)}{ent.entityName ? " — " + ent.entityName : ""}</span>
+                        </div>
+                        {ents.length > 1 && <button onClick={function() { updateCPClient("entities", ents.filter(function(e) { return e.id !== ent.id; })); }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Remove</button>}
+                      </div>
+
+                      {/* Entity fields */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Entity Name</label><input value={ent.entityName || ""} onChange={function(e) { updateCPEntity(ent.id, "entityName", e.target.value); }} placeholder="Entity name..." style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                        <div><label style={labelStyle}>Jurisdiction</label><input value={ent.jurisdiction || ""} onChange={function(e) { updateCPEntity(ent.id, "jurisdiction", e.target.value); }} placeholder="Jurisdiction..." style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                        <div><label style={labelStyle}>Company Number</label><input value={ent.companyNumber || ""} onChange={function(e) { updateCPEntity(ent.id, "companyNumber", e.target.value); }} placeholder="Company number..." style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                        <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Registered Address</label><input value={ent.registeredAddress || ""} onChange={function(e) { updateCPEntity(ent.id, "registeredAddress", e.target.value); }} placeholder="Registered address..." style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+
+                        {/* Licensed */}
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                            <label style={labelStyle}>Licensed</label>
+                            <div style={{ display: "flex", gap: 4 }}>
+                              {["Yes", "No"].map(function(opt) {
+                                var isActive = (ent.isLicensed === true && opt === "Yes") || (ent.isLicensed === false && opt === "No");
+                                return <button key={opt} onClick={function() { updateCPEntity(ent.id, "isLicensed", opt === "Yes"); }} style={{
+                                  background: isActive ? c.accent + "20" : "transparent",
+                                  border: "1px solid " + (isActive ? c.accent : c.border),
+                                  color: isActive ? c.accent : c.textMuted,
+                                  borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600
+                                }}>{opt}</button>;
+                              })}
+                            </div>
+                          </div>
+                          {ent.isLicensed && (
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                              <div><label style={labelStyle}>License Jurisdiction</label><input value={ent.licenseJurisdiction || ""} onChange={function(e) { updateCPEntity(ent.id, "licenseJurisdiction", e.target.value); }} style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                              <div><label style={labelStyle}>License Number</label><input value={ent.licenseNumber || ""} onChange={function(e) { updateCPEntity(ent.id, "licenseNumber", e.target.value); }} style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                              <div>
+                                <label style={labelStyle}>License Expiry</label>
+                                <input type="date" value={ent.licenseExpiry || ""} onChange={function(e) { updateCPEntity(ent.id, "licenseExpiry", e.target.value); }} style={Object.assign({}, inputStyle, { width: "100%" })} />
+                                {ent.licenseExpiry && (function() {
+                                  var exp = new Date(ent.licenseExpiry); var now = new Date(); var daysLeft = Math.ceil((exp - now) / (1000*60*60*24));
+                                  var ac = daysLeft <= 0 ? "#f87171" : daysLeft <= 30 ? "#fbbf24" : daysLeft <= 90 ? "#eab308" : "#34d399";
+                                  var at = daysLeft <= 0 ? "EXPIRED" : daysLeft <= 30 ? daysLeft + "d — EXPIRING" : daysLeft <= 90 ? daysLeft + "d — Review" : daysLeft + "d";
+                                  return <span style={{ fontSize: 9, color: ac, fontWeight: 700, marginTop: 2, display: "block" }}>{at}</span>;
+                                })()}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* UBO */}
+                        <div>
+                          <label style={labelStyle}>UBO</label>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                            <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: c.textMuted, cursor: "pointer" }}>
+                              <input type="checkbox" checked={ent.uboIsEntity || false} onChange={function(e) { updateCPEntity(ent.id, "uboIsEntity", e.target.checked); }} style={{ accentColor: c.accent }} /> Owned by entity
+                            </label>
+                          </div>
+                          {!ent.uboIsEntity && <input value={ent.ubo || ""} onChange={function(e) { updateCPEntity(ent.id, "ubo", e.target.value); }} placeholder="UBO name..." style={Object.assign({}, inputStyle, { width: "100%" })} />}
+                        </div>
+
+                        {/* Director */}
+                        <div><label style={labelStyle}>Director</label><input value={ent.director || ""} onChange={function(e) { updateCPEntity(ent.id, "director", e.target.value); }} placeholder="Director name..." style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                      </div>
+
+                      {/* UBO owned by entity — nested entity fields */}
+                      {ent.uboIsEntity && (
+                        <div style={{ marginTop: 10, background: c.accent + "08", border: "1px solid " + c.accent + "25", borderRadius: 8, padding: 14 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" }}>UBO Entity Details</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                            {[["uboEntityName", "Entity Name"], ["uboEntJurisdiction", "Jurisdiction"], ["uboEntCompanyNumber", "Company Number"]].map(function(pair) {
+                              return <div key={pair[0]}><label style={labelStyle}>{pair[1]}</label><input value={ent[pair[0]] || ""} onChange={function(e) { updateCPEntity(ent.id, pair[0], e.target.value); }} placeholder={pair[1] + "..."} style={Object.assign({}, inputStyle, { width: "100%" })} /></div>;
+                            })}
+                            <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Registered Address</label><input value={ent.uboEntAddress || ""} onChange={function(e) { updateCPEntity(ent.id, "uboEntAddress", e.target.value); }} placeholder="Address..." style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                            <div><label style={labelStyle}>UBO</label><input value={ent.uboEntUbo || ""} onChange={function(e) { updateCPEntity(ent.id, "uboEntUbo", e.target.value); }} placeholder="UBO of parent entity..." style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                            <div><label style={labelStyle}>Director</label><input value={ent.uboEntDirector || ""} onChange={function(e) { updateCPEntity(ent.id, "uboEntDirector", e.target.value); }} placeholder="Director..." style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                          </div>
+                          {/* UBO Entity KYB Documents */}
+                          <div style={{ marginTop: 10, borderTop: "1px solid " + c.border, paddingTop: 10 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: c.accent, marginBottom: 6, textTransform: "uppercase" }}>UBO Entity — KYB Documents</div>
+                            {(ent.uboEntKybDocs || []).map(function(doc) {
+                              return (
+                                <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid " + c.border }}>
+                                  <span style={{ fontSize: 12, color: c.text, flex: 1 }}>{doc.name || "Untitled"}</span>
+                                  {doc.fileUrl ? <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 10, color: c.accent, fontWeight: 600, textDecoration: "none" }}>{"↓ " + doc.fileName}</a> : <span style={{ fontSize: 10, color: c.textMuted }}>No file</span>}
+                                  <label style={{ cursor: "pointer" }}><input type="file" style={{ display: "none" }} onChange={function(ev) {
+                                    if (!ev.target.files[0] || !supabaseUrl || !supabaseKey) return;
+                                    var file = ev.target.files[0];
+                                    var safeName2 = cl.name.replace(/[^a-zA-Z0-9]/g, "_");
+                                    var filePath2 = "cubepay_clients/" + safeName2 + "/ubo_ent/" + doc.id + "_" + Date.now() + "_" + file.name;
+                                    fetch(supabaseUrl + "/storage/v1/object/documents/" + filePath2, { method: "POST", headers: { "apikey": supabaseKey, "Authorization": "Bearer " + supabaseKey, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file }).then(function(r) {
+                                      if (r.ok) { var url = supabaseUrl + "/storage/v1/object/public/documents/" + filePath2; updateCPEntity(ent.id, "uboEntKybDocs", (ent.uboEntKybDocs || []).map(function(d) { return d.id === doc.id ? Object.assign({}, d, { fileName: file.name, fileUrl: url }) : d; })); }
+                                    });
+                                  }} /><span style={{ fontSize: 10, color: c.accent, border: "1px solid " + c.accent, borderRadius: 4, padding: "2px 6px" }}>Upload</span></label>
+                                  <button onClick={function() { updateCPEntity(ent.id, "uboEntKybDocs", (ent.uboEntKybDocs || []).filter(function(d) { return d.id !== doc.id; })); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 12 }}>{"✕"}</button>
+                                </div>
+                              );
+                            })}
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                              {KYB_STD.filter(function(d) { return !(ent.uboEntKybDocs || []).some(function(x) { return x.name === d; }); }).slice(0, 4).map(function(d) {
+                                return <button key={d} onClick={function() { updateCPEntity(ent.id, "uboEntKybDocs", [].concat(ent.uboEntKybDocs || [], [{ id: "ukd-" + Date.now() + "-" + Math.random().toString(36).slice(2,5), name: d, fileName: "", fileUrl: "" }])); }} style={{ background: "transparent", border: "1px solid " + c.accent + "40", color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer", fontSize: 9 }}>{"+ " + (d.length > 30 ? d.slice(0,28) + "..." : d)}</button>;
+                              })}
+                              <button onClick={function() { updateCPEntity(ent.id, "uboEntKybDocs", [].concat(ent.uboEntKybDocs || [], [{ id: "ukd-" + Date.now(), name: "", fileName: "", fileUrl: "" }])); }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 9, fontWeight: 600 }}>+ Add</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* KYB Documents for this entity */}
+                      <div style={{ marginTop: 16, borderTop: "1px solid " + c.border, paddingTop: 16 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: c.accent, textTransform: "uppercase", letterSpacing: "0.03em" }}>KYB Documents <span style={{ fontWeight: 500, color: c.textMuted, textTransform: "none", fontSize: 12 }}>{entDocs.filter(function(d) { return d.fileUrl; }).length}/{entDocs.length} uploaded</span></div>
+                          <button onClick={function() {
+                            if (!window.JSZip) { alert("JSZip not loaded"); return; }
+                            var zip = new window.JSZip();
+                            var withFiles = entDocs.filter(function(d) { return d.fileUrl; });
+                            if (withFiles.length === 0) { alert("No documents uploaded yet"); return; }
+                            var promises = withFiles.map(function(doc) { return fetch(doc.fileUrl).then(function(r) { if (r.ok) return r.blob().then(function(b) { zip.file(doc.fileName || doc.name + ".pdf", b); }); }).catch(function() {}); });
+                            Promise.all(promises).then(function() { return zip.generateAsync({ type: "blob" }); }).then(function(blob) {
+                              window.saveAs(blob, cl.name.replace(/[^a-zA-Z0-9]/g, "_") + "_Entity_" + (idx + 1) + "_KYB.zip");
+                            });
+                          }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{"↓ Download KYB Pack"}</button>
+                        </div>
+                        {/* Missing docs quick-add */}
+                        {missingDocs.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                            {missingDocs.map(function(d) {
+                              return <button key={d} onClick={function() { updateCPEntity(ent.id, "kybDocuments", [].concat(entDocs, [{ id: "kd-" + Date.now() + "-" + Math.random().toString(36).slice(2,5), name: d, startDate: "", renewalMonths: "", fileName: "", fileSize: 0, fileUrl: "", uploadStatus: null }])); }} style={{ background: "transparent", border: "1px solid " + c.accent + "40", color: c.accent, borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 500 }}>{"+ " + (d.length > 35 ? d.slice(0,33) + "..." : d)}</button>;
+                            })}
+                          </div>
+                        )}
+                        {entDocs.length === 0 && <div style={{ fontSize: 11, color: c.textMuted, marginBottom: 6 }}>No KYB documents — use buttons above to add standard docs</div>}
+                        {entDocs.map(function(doc) {
+                          var isEd = cpEditingField === "kd-" + doc.id;
+                          var renewal = doc.startDate && doc.renewalMonths ? (function() { var d = new Date(doc.startDate); d.setMonth(d.getMonth() + parseInt(doc.renewalMonths)); return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); })() : null;
+                          var sc = doc.fileUrl ? "#34d399" : "#fbbf24";
+                          return (
+                            <div key={doc.id}
+                              onDragOver={function(e) { e.preventDefault(); e.currentTarget.style.outline = "2px solid " + c.accent; }}
+                              onDragLeave={function(e) { e.currentTarget.style.outline = "none"; }}
+                              onDrop={function(e) { e.preventDefault(); e.currentTarget.style.outline = "none"; if (e.dataTransfer.files[0]) handleCPKybUpload(ent.id, doc.id, e.dataTransfer.files[0]); }}
+                              style={{ borderLeft: "3px solid " + sc, padding: "12px 16px", marginBottom: 8, background: sc + "08", borderRadius: "0 8px 8px 0", border: "1px solid " + sc + "25" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{doc.name || "Untitled"}</div>
+                                  {!isEd && <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2 }}>
+                                    {doc.startDate && <span>{doc.startDate}</span>}{renewal && <span>{" · Renews " + renewal}</span>}
+                                    {doc.fileName && <span> · <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ color: c.accent, textDecoration: "none" }}>{"↓ " + doc.fileName}</a> {formatFileSize(doc.fileSize)}</span>}
+                                  </div>}
+                                </div>
+                                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                  {doc.fileUrl && <a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, fontWeight: 600, textDecoration: "none", padding: "5px 10px", border: "1px solid " + c.accent, borderRadius: 6 }}>{"↓"}</a>}
+                                  <button onClick={function() { setCpEditingField(isEd ? null : "kd-" + doc.id); }} style={{ background: "transparent", border: "1px solid " + c.border, color: c.textMuted, cursor: "pointer", fontSize: 11, borderRadius: 6, padding: "5px 10px", fontWeight: 600 }}>{isEd ? "Done" : "Edit"}</button>
+                                  <button onClick={function() { updateCPEntity(ent.id, "kybDocuments", entDocs.filter(function(d) { return d.id !== doc.id; })); }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{"✕"}</button>
+                                </div>
+                              </div>
+                              {isEd && (
+                                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                                  <div><label style={labelStyle}>Document Name</label><input value={doc.name || ""} onChange={function(e) { updateCPEntity(ent.id, "kybDocuments", entDocs.map(function(d) { return d.id === doc.id ? Object.assign({}, d, { name: e.target.value }) : d; })); }} style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                    <div><label style={labelStyle}>Start Date</label><input type="date" value={doc.startDate || ""} onChange={function(e) { updateCPEntity(ent.id, "kybDocuments", entDocs.map(function(d) { return d.id === doc.id ? Object.assign({}, d, { startDate: e.target.value }) : d; })); }} style={Object.assign({}, inputStyle, { width: "100%" })} /></div>
+                                    <div><label style={labelStyle}>Renewal (months)</label><input type="number" min="0" value={doc.renewalMonths || ""} onChange={function(e) { updateCPEntity(ent.id, "kybDocuments", entDocs.map(function(d) { return d.id === doc.id ? Object.assign({}, d, { renewalMonths: e.target.value }) : d; })); }} placeholder="No renewal" style={Object.assign({}, inputStyle, { width: "100%" })} />{renewal && <div style={{ fontSize: 9, color: c.accent, marginTop: 2 }}>{"Renews: " + renewal}</div>}</div>
+                                  </div>
+                                  <div
+                                    onDragOver={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                                    onDragLeave={function(e) { e.currentTarget.style.borderColor = c.border; }}
+                                    onDrop={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.border; if (e.dataTransfer.files[0]) handleCPKybUpload(ent.id, doc.id, e.dataTransfer.files[0]); }}
+                                    style={{ border: "2px dashed " + c.border, borderRadius: 6, padding: "10px 12px", textAlign: "center", cursor: "pointer" }}
+                                    onClick={function() { var inp = document.createElement("input"); inp.type = "file"; inp.onchange = function(ev) { if (ev.target.files[0]) handleCPKybUpload(ent.id, doc.id, ev.target.files[0]); }; inp.click(); }}
+                                  >
+                                    {doc.uploadStatus === "uploading" ? <span style={{ fontSize: 11, color: c.accent }}>Uploading...</span> : doc.fileName ? <span style={{ fontSize: 11, color: "#34d399" }}>{doc.fileName + " — click to replace"}</span> : <span style={{ fontSize: 11, color: c.textMuted }}>Drop file or click to upload</span>}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        <button onClick={function() {
+                          var newDoc = { id: "kd-" + Date.now(), name: "", startDate: "", renewalMonths: "", fileName: "", fileSize: 0, fileUrl: "", uploadStatus: null };
+                          updateCPEntity(ent.id, "kybDocuments", [].concat(entDocs, [newDoc]));
+                          setCpEditingField("kd-" + newDoc.id);
+                        }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600, marginTop: 8 }}>+ Add Document</button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </>)}
+
+          {/* ===== PRIVATE TAB ===== */}
+          {cpClientTab === "private" && (<>
+            {/* Name */}
+            <div style={sectionCard}>
+              <div style={sectionTitle}>Personal Details</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={labelStyle}>Full Name</label>
+                  <input value={cl.privateName || ""} onChange={function(e) { updateCPClient("privateName", e.target.value); }} placeholder="Full name..." style={Object.assign({}, inputStyle, { width: "100%", fontSize: 15 })} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={labelStyle}>Address</label>
+                  <input value={cl.privateAddress || ""} onChange={function(e) { updateCPClient("privateAddress", e.target.value); }} placeholder="Full address..." style={Object.assign({}, inputStyle, { width: "100%" })} />
+                </div>
+              </div>
+            </div>
+
+            {/* Documents */}
+            <div style={sectionCard}>
+              <div style={sectionTitle}>Documents</div>
+
+              {/* ID Document */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 8 }}>ID Document</div>
+                {(function() {
+                  var idDoc = cl.idDocument || {};
+                  return (
+                    <div
+                      onDragOver={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                      onDragLeave={function(e) { e.currentTarget.style.borderColor = c.border; }}
+                      onDrop={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.border; if (e.dataTransfer.files[0]) handleCPPrivateUpload("id_document", e.dataTransfer.files[0]); }}
+                      style={{ border: "2px dashed " + c.border, borderRadius: 8, padding: "14px 16px", textAlign: "center", cursor: "pointer", background: idDoc.fileUrl ? "#34d39908" : "transparent" }}
+                      onClick={function() { var inp = document.createElement("input"); inp.type = "file"; inp.onchange = function(ev) { if (ev.target.files[0]) handleCPPrivateUpload("id_document", ev.target.files[0]); }; inp.click(); }}
+                    >
+                      {idDoc.fileUrl ? (
+                        <div>
+                          <span style={{ fontSize: 12, color: "#34d399", fontWeight: 600 }}>{idDoc.fileName}</span>
+                          <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 8 }}>{"Uploaded " + new Date(idDoc.uploadedAt).toLocaleDateString()}</span>
+                          <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 8 }}> - click to replace</span>
+                          <div style={{ marginTop: 4 }}><a href={idDoc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, textDecoration: "none" }} onClick={function(e) { e.stopPropagation(); }}>{"↓ Download"}</a></div>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 11, color: c.textMuted }}>Drop ID document or click to upload</span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* POA Document */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 8 }}>Proof of Address (POA)</div>
+                {(function() {
+                  var poaDoc = cl.poaDocument || {};
+                  return (
+                    <div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                        <div>
+                          <label style={labelStyle}>Valid From</label>
+                          <input type="date" value={poaDoc.validFrom || ""} onChange={function(e) { updateCPClient("poaDocument", Object.assign({}, poaDoc, { validFrom: e.target.value })); }} style={Object.assign({}, inputStyle, { width: "100%" })} />
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Valid To</label>
+                          <input type="date" value={poaDoc.validTo || ""} onChange={function(e) { updateCPClient("poaDocument", Object.assign({}, poaDoc, { validTo: e.target.value })); }} style={Object.assign({}, inputStyle, { width: "100%" })} />
+                        </div>
+                      </div>
+                      <div
+                        onDragOver={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                        onDragLeave={function(e) { e.currentTarget.style.borderColor = c.border; }}
+                        onDrop={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.border; if (e.dataTransfer.files[0]) handleCPPrivateUpload("poa_document", e.dataTransfer.files[0]); }}
+                        style={{ border: "2px dashed " + c.border, borderRadius: 8, padding: "14px 16px", textAlign: "center", cursor: "pointer", background: poaDoc.fileUrl ? "#34d39908" : "transparent" }}
+                        onClick={function() { var inp = document.createElement("input"); inp.type = "file"; inp.onchange = function(ev) { if (ev.target.files[0]) handleCPPrivateUpload("poa_document", ev.target.files[0]); }; inp.click(); }}
+                      >
+                        {poaDoc.fileUrl ? (
+                          <div>
+                            <span style={{ fontSize: 12, color: "#34d399", fontWeight: 600 }}>{poaDoc.fileName}</span>
+                            <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 8 }}>{"Uploaded " + new Date(poaDoc.uploadedAt).toLocaleDateString()}</span>
+                            <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 8 }}> - click to replace</span>
+                            <div style={{ marginTop: 4 }}><a href={poaDoc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, textDecoration: "none" }} onClick={function(e) { e.stopPropagation(); }}>{"↓ Download"}</a></div>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 11, color: c.textMuted }}>Drop POA document or click to upload</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Source of Wealth Documents */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: c.text }}>Source of Wealth Documents</div>
+                  <button onClick={function() {
+                    var sowDocs = cl.sowDocuments || [];
+                    updateCPClient("sowDocuments", [].concat(sowDocs, [{ id: "sow-" + Date.now(), name: "", fileName: "", fileUrl: "", uploadedAt: "" }]));
+                  }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ Add Document</button>
+                </div>
+                {(cl.sowDocuments || []).length === 0 && <div style={{ fontSize: 11, color: c.textMuted, padding: "8px 0" }}>No Source of Wealth documents. Click "+ Add Document" to add one.</div>}
+                {(cl.sowDocuments || []).map(function(doc) {
+                  return (
+                    <div key={doc.id} style={{ background: c.surface, borderRadius: 8, border: "1px solid " + c.border, padding: 14, marginBottom: 8 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                        <input value={doc.name || ""} onChange={function(e) {
+                          updateCPClient("sowDocuments", (cl.sowDocuments || []).map(function(d) { return d.id === doc.id ? Object.assign({}, d, { name: e.target.value }) : d; }));
+                        }} placeholder="Document name..." style={Object.assign({}, inputStyle, { flex: 1 })} />
+                        <button onClick={function() {
+                          updateCPClient("sowDocuments", (cl.sowDocuments || []).filter(function(d) { return d.id !== doc.id; }));
+                        }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>{"✕"}</button>
+                      </div>
+                      <div
+                        onDragOver={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.accent; }}
+                        onDragLeave={function(e) { e.currentTarget.style.borderColor = c.border; }}
+                        onDrop={function(e) { e.preventDefault(); e.currentTarget.style.borderColor = c.border; if (e.dataTransfer.files[0]) handleCPPrivateUpload("sow_document", e.dataTransfer.files[0], doc.id); }}
+                        style={{ border: "2px dashed " + c.border, borderRadius: 6, padding: "10px 12px", textAlign: "center", cursor: "pointer", background: doc.fileUrl ? "#34d39908" : "transparent" }}
+                        onClick={function() { var inp = document.createElement("input"); inp.type = "file"; inp.onchange = function(ev) { if (ev.target.files[0]) handleCPPrivateUpload("sow_document", ev.target.files[0], doc.id); }; inp.click(); }}
+                      >
+                        {doc.fileUrl ? (
+                          <div>
+                            <span style={{ fontSize: 11, color: "#34d399", fontWeight: 600 }}>{doc.fileName}</span>
+                            <span style={{ fontSize: 10, color: c.textMuted, marginLeft: 6 }}> - click to replace</span>
+                            <div style={{ marginTop: 4 }}><a href={doc.fileUrl} target="_blank" rel="noopener" style={{ fontSize: 11, color: c.accent, textDecoration: "none" }} onClick={function(e) { e.stopPropagation(); }}>{"↓ Download"}</a></div>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 11, color: c.textMuted }}>Drop file or click to upload</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>)}
+        </div>
+      );
+    }
+
+    // ===== CLIENT LIST VIEW =====
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Cube Pay Client Onboarding</h2>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{cubePayOnboardClients.length} {cubePayOnboardClients.length === 1 ? "client" : "clients"}</p>
+          </div>
+          <button onClick={function() {
+            var newCl = {
+              id: "cpc-" + Date.now(),
+              name: "",
+              entities: [{ id: "primary", entityName: "", jurisdiction: "", companyNumber: "", registeredAddress: "", isLicensed: false, licenseJurisdiction: "", licenseNumber: "", licenseExpiry: "", uboIsEntity: false, uboEntityName: "", ubo: "", director: "", kybDocuments: [] }],
+              privateName: "",
+              privateAddress: "",
+              idDocument: { fileName: "", fileUrl: "", uploadedAt: "" },
+              poaDocument: { fileName: "", fileUrl: "", uploadedAt: "", validFrom: "", validTo: "" },
+              sowDocuments: []
+            };
+            setCubePayOnboardClients([].concat(cubePayOnboardClients, [newCl]));
+            setSelectedCPClient(newCl.id);
+            setCpClientTab("corporate");
+          }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Client</button>
+        </div>
+
+        {cubePayOnboardClients.length === 0 && (
+          <div style={{ background: c.card, borderRadius: 12, border: "1px solid " + c.border, padding: 40, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No clients yet. Click "+ Add Client" to get started.</div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+          {cubePayOnboardClients.map(function(cl) {
+            var entCount = (cl.entities || []).length;
+            var hasPrivate = !!(cl.privateName || cl.privateAddress || (cl.idDocument && cl.idDocument.fileUrl) || (cl.poaDocument && cl.poaDocument.fileUrl) || (cl.sowDocuments && cl.sowDocuments.length > 0));
+            var hasCorporate = entCount > 0 && (cl.entities || []).some(function(e) { return e.entityName; });
+            return (
+              <div key={cl.id} onClick={function() { setSelectedCPClient(cl.id); setCpEditingField(null); }}
+                style={{ background: c.card, border: "1px solid " + c.border, borderRadius: 14, padding: 22, cursor: "pointer", borderLeft: "4px solid #06b6d4", transition: "all 0.15s", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}
+                onMouseEnter={function(e) { e.currentTarget.style.background = c.cardHover; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                onMouseLeave={function(e) { e.currentTarget.style.background = c.card; e.currentTarget.style.transform = "none"; }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: c.text, marginBottom: 8 }}>{cl.name || "Unnamed Client"}</div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  {hasCorporate && <span style={{ fontSize: 10, color: "#06b6d4", background: "#06b6d415", border: "1px solid #06b6d440", padding: "3px 8px", borderRadius: 5, fontWeight: 600 }}>Corporate</span>}
+                  {hasPrivate && <span style={{ fontSize: 10, color: "#a78bfa", background: "#a78bfa15", border: "1px solid #a78bfa40", padding: "3px 8px", borderRadius: 5, fontWeight: 600 }}>Private</span>}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 12, color: c.textMuted }}>
+                  {entCount > 0 && <span>{entCount} {entCount === 1 ? "entity" : "entities"}</span>}
+                  {(cl.sowDocuments || []).length > 0 && <span>{entCount > 0 ? " · " : ""}{(cl.sowDocuments || []).length} SoW doc{(cl.sowDocuments || []).length !== 1 ? "s" : ""}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
     david: { label: "DAVID", sections: ["quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
     gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers", "bankaccounts", "contractgen"] },
+    cubepay: { label: "CUBE PAY", sections: ["cpclients"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
     settings: { label: "SETTINGS", sections: ["settings"] },
   };
@@ -7215,6 +7737,8 @@ function AviroDashboard() {
     { section: "providers", icon: "bank", label: "Providers", group: "gateway" },
     { section: "bankaccounts", icon: "bank", label: "Bank Accounts", group: "gateway" },
     { section: "contractgen", icon: "note", label: "Contract Generator", group: "gateway" },
+    { section: "cubepay_header", label: "CUBE PAY", isHeader: true, group: "cubepay" },
+    { section: "cpclients", icon: "user", label: "Client Onboarding", group: "cubepay" },
     { section: "corporate", label: "CORPORATE MATRIX", isHeader: true, group: "corporate" },
     { section: "entities", icon: "building", label: "Entity Matrix", group: "corporate" },
     { section: "moneyflow", icon: "flow", label: "Corporate Flow", group: "corporate" },
@@ -7226,7 +7750,7 @@ function AviroDashboard() {
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator };
+  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator, cpclients: renderCubePayClients };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
