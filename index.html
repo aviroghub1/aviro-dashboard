@@ -982,7 +982,7 @@ function AviroDashboard() {
       const docs = entityDocs[e.name] || [];
       docs.forEach(d => {
         const status = getDocStatusGlobal(d);
-        if (status === "expired" || status === "expiring" || status === "review_soon") {
+        if (status === "expired" || status === "expiring") {
           allDocAlerts.push({ entity: e.name, category: cat, doc: d.name, renewalDate: getDocRenewalDate(d) || "No date", status });
         }
       });
@@ -5459,7 +5459,7 @@ function AviroDashboard() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
               {entities.map(entity => {
                 const eDocs = entityDocs[entity.name] || [];
-                const ac = eDocs.filter(d => { const s = getDocStatusGlobal(d); return s === "expired" || s === "expiring" || s === "review_soon"; }).length;
+                const ac = eDocs.filter(d => { const s = getDocStatusGlobal(d); return s === "expired" || s === "expiring"; }).length;
                 return (
                   <div key={entity.name || entity.id} style={{ background: c.card, border: `1px solid ${ac > 0 ? "rgba(248,113,113,0.2)" : c.border}`, borderRadius: 10, padding: 16, cursor: "pointer", position: "relative" }}
                     onMouseEnter={e => e.currentTarget.style.background = c.cardHover} onMouseLeave={e => e.currentTarget.style.background = c.card}>
