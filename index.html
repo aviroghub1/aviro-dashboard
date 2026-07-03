@@ -196,6 +196,7 @@ function AviroDashboard() {
   const [bankAccountsList, setBankAccountsList] = useState([]); // [{ id, bankRelId, entityName, accountPurpose:[], dateOpened, feesOverride: null|{...}, collapsed }]
   const [gamingBrands, setGamingBrands] = useState([]); // [{ id, brand, domain, collapsed }]
   const [entityAlertsCollapsed, setEntityAlertsCollapsed] = useState(false);
+  const [docAlertFilter, setDocAlertFilter] = useState("all"); // "all", "expired", "expiring"
   const [editingEntityField, setEditingEntityField] = useState(null); // "fieldName" being edited
 
   // ===== AUTH STATE =====
@@ -5393,7 +5394,11 @@ function AviroDashboard() {
             </div>
           </div>
         )}
-        {allDocAlerts.length > 0 && (
+        {allDocAlerts.length > 0 && (() => {
+          const expiredCount = allDocAlerts.filter(a => a.status === "expired").length;
+          const expiringCount = allDocAlerts.filter(a => a.status === "expiring").length;
+          const filteredAlerts = docAlertFilter === "all" ? allDocAlerts : allDocAlerts.filter(a => a.status === docAlertFilter);
+          return (
           <div style={{ background: c.card, border: `1px solid rgba(248,113,113,0.15)`, borderRadius: 10, marginBottom: 20, overflow: "hidden" }}>
             <div onClick={() => setEntityAlertsCollapsed(!entityAlertsCollapsed)}
               style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", cursor: "pointer", background: "rgba(239,68,68,0.06)" }}>
@@ -5405,16 +5410,30 @@ function AviroDashboard() {
             </div>
             {!entityAlertsCollapsed && (
               <div style={{ padding: "8px 16px 12px" }}>
-                {allDocAlerts.map((a, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: i < allDocAlerts.length - 1 ? `1px solid ${c.border}` : "none" }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: a.status === "expired" ? "#f87171" : a.status === "expiring" ? "#fbbf24" : "#3b82f6" }} />
+                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                  {[
+                    { key: "all", label: "All", count: allDocAlerts.length, color: c.accent },
+                    { key: "expired", label: "Expired", count: expiredCount, color: "#f87171" },
+                    { key: "expiring", label: "Expiring Soon", count: expiringCount, color: "#fbbf24" },
+                  ].map(f => (
+                    <button key={f.key} onClick={e => { e.stopPropagation(); setDocAlertFilter(f.key); }} style={{
+                      background: docAlertFilter === f.key ? `${f.color}18` : "transparent",
+                      border: `1px solid ${docAlertFilter === f.key ? f.color : c.border}`,
+                      color: docAlertFilter === f.key ? f.color : c.textMuted,
+                      borderRadius: 6, padding: "4px 12px", cursor: "pointer", fontSize: 11, fontWeight: 600,
+                    }}>{f.label} ({f.count})</button>
+                  ))}
+                </div>
+                {filteredAlerts.map((a, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: i < filteredAlerts.length - 1 ? `1px solid ${c.border}` : "none" }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: a.status === "expired" ? "#f87171" : "#fbbf24" }} />
                     <span style={{ fontSize: 12, color: c.text, flex: 1 }}>
                       <span style={{ fontWeight: 600 }}>{a.entity}</span>
                       <span style={{ color: c.textMuted }}> — </span>
                       <span>{a.doc}</span>
                       <span style={{ color: c.textMuted }}> — </span>
-                      <span style={{ fontWeight: 500, color: a.status === "expired" ? "#f87171" : a.status === "expiring" ? "#fbbf24" : "#3b82f6" }}>
-                        {a.status === "expired" ? "Expired" : a.status === "expiring" ? "Expiring Soon" : "Review Soon"}
+                      <span style={{ fontWeight: 500, color: a.status === "expired" ? "#f87171" : "#fbbf24" }}>
+                        {a.status === "expired" ? "Expired" : "Expiring Soon"}
                       </span>
                       {a.renewalDate && a.renewalDate !== "No date" && (
                         <span style={{ color: c.textMuted }}> — renew by {a.renewalDate}</span>
@@ -5422,10 +5441,14 @@ function AviroDashboard() {
                     </span>
                   </div>
                 ))}
+                {filteredAlerts.length === 0 && (
+                  <div style={{ fontSize: 12, color: c.textMuted, textAlign: "center", padding: "10px 0" }}>No documents in this category.</div>
+                )}
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
         {/* Add Entity button + form */}
         <div style={{ marginBottom: 20 }}>
           {!showAddEntity ? (
