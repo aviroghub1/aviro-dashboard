@@ -1669,6 +1669,8 @@ function AviroDashboard() {
               </div>
             );
 
+            const KYB_STD = ["Certificate of Incorporation/Registration", "Articles of Association/Memorandum of Association", "Certificate of Incumbency", "Corporate Structure Chart", "Register of Shareholders", "Register of Directors", "ID Documents for UBOs/Directors", "Proof of Address for UBOs/Directors"];
+
             return (<>
 
             {/* ===== CLIENT HOME TAB ===== */}
@@ -2001,7 +2003,6 @@ function AviroDashboard() {
                   }
                 };
 
-                const KYB_STD = ["Certificate of Incorporation/Registration", "Articles of Association/Memorandum of Association", "Certificate of Incumbency", "Corporate Structure Chart", "Register of Shareholders", "Register of Directors", "ID Documents for UBOs/Directors", "Proof of Address for UBOs/Directors"];
                 const formatFileSize = (bytes) => { if (!bytes) return ""; if (bytes < 1024) return bytes + " B"; if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"; return (bytes / 1048576).toFixed(1) + " MB"; };
 
                 // Reusable entity fields block (used for main entity AND for UBO-owned-by-entity sub-entity)
