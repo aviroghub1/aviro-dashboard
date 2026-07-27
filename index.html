@@ -372,10 +372,106 @@ function AviroDashboard() {
 
   // Auto-save whenever state changes (debounced 2s to avoid hammering Supabase)
   useEffect(() => {
-    if (!hasLoaded) return; // Don't auto-save until data is loaded
+    if (!hasLoaded) return;
     const t = setTimeout(saveState, 2000);
     return () => clearTimeout(t);
   }, [saveState, hasLoaded]);
+
+  // Save immediately when tab is closing or going to background — prevents data loss
+  const saveStateRef = useRef(saveState);
+  const buildStateRef = useRef(buildState);
+  const hasLoadedRef = useRef(hasLoaded);
+  useEffect(() => { saveStateRef.current = saveState; }, [saveState]);
+  useEffect(() => { buildStateRef.current = buildState; }, [buildState]);
+  useEffect(() => { hasLoadedRef.current = hasLoaded; }, [hasLoaded]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!hasLoadedRef.current) return;
+      // Synchronous localStorage save — always works even during tab close
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(buildStateRef.current())); } catch (e) {}
+      // Best-effort Supabase save via sendBeacon (survives tab close)
+      try {
+        const state = buildStateRef.current();
+        const payload = JSON.stringify({ id: "shared", state: state, updated_at: new Date().toISOString(), updated_by: "dashboard" });
+        navigator.sendBeacon(
+          DB_URL + "/rest/v1/dashboard_state?on_conflict=id",
+          new Blob([payload], { type: "application/json" })
+        );
+      } catch (e) {}
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden" && hasLoadedRef.current) {
+        saveStateRef.current();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  // Poll for remote changes every 30s and merge (prevents multi-user overwrites)
+  useEffect(() => {
+    if (!hasLoaded) return;
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state,updated_at", {
+          headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+        });
+        if (!res.ok) return;
+        const rows = await res.json();
+        if (rows.length === 0 || !rows[0].state) return;
+        const remoteTime = rows[0].updated_at;
+        // Only merge if remote is newer than our last sync
+        if (lastSyncedRef.current && remoteTime <= lastSyncedRef.current) return;
+        console.log("Remote changes detected, merging...", remoteTime);
+        const remote = rows[0].state;
+        const local = buildStateRef.current();
+        // Merge arrays by ID — remote items we don't have locally get added
+        const mergeArrayById = (localArr, remoteArr) => {
+          if (!Array.isArray(localArr) || !Array.isArray(remoteArr)) return localArr;
+          const localIds = new Set(localArr.map(item => item.id).filter(Boolean));
+          const newItems = remoteArr.filter(item => item.id && !localIds.has(item.id));
+          if (newItems.length === 0) return localArr;
+          return [...localArr, ...newItems];
+        };
+        // Apply remote-only additions without overwriting local edits
+        let merged = false;
+        const arrayKeys = ["quickJobs", "delegatedTasks", "corporateEntities", "gatewayClients", "providers", "bankRelationships", "bankAccountsList", "gamingBrands", "cubePayOnboardClients", "kybProviderRequirements", "pmPipeline", "pmRoadmap", "pmClients", "cubePayDeals"];
+        arrayKeys.forEach(key => {
+          if (remote[key] && local[key]) {
+            const result = mergeArrayById(local[key], remote[key]);
+            if (result.length > local[key].length) {
+              merged = true;
+              // Apply the new items
+              if (key === "quickJobs") setQuickJobs(result);
+              else if (key === "delegatedTasks") setDelegatedTasks(result);
+              else if (key === "corporateEntities") setCorporateEntities(result);
+              else if (key === "gatewayClients") setGatewayClients(result);
+              else if (key === "providers") setProviders(result);
+              else if (key === "bankRelationships") setBankRelationships(result);
+              else if (key === "bankAccountsList") setBankAccountsList(result);
+              else if (key === "gamingBrands") setGamingBrands(result);
+              else if (key === "cubePayOnboardClients") setCubePayOnboardClients(result);
+              else if (key === "kybProviderRequirements") setKybProviderRequirements(result);
+              else if (key === "pmPipeline") setPmPipeline(result);
+              else if (key === "pmRoadmap") setPmRoadmap(result);
+              else if (key === "pmClients") setPmClients(result);
+              else if (key === "cubePayDeals") setCubePayDeals(result);
+            }
+          }
+        });
+        // For non-array fields, accept remote value if local hasn't set it
+        if (remote.contractDefaults && !local.contractDefaults) { setContractDefaults(remote.contractDefaults); merged = true; }
+        lastSyncedRef.current = remoteTime;
+        if (merged) console.log("Merged remote changes into local state");
+      } catch (e) { console.warn("Poll for remote changes failed:", e); }
+    }, 30000);
+    return () => clearInterval(poll);
+  }, [hasLoaded]);
 
   // Apply state helper
   const applyState = useCallback((s) => {
