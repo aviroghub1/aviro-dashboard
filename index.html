@@ -328,13 +328,33 @@ function AviroDashboard() {
   const [pmSelectedClient, setPmSelectedClient] = useState("");
   const [pmClickUpTasks, setPmClickUpTasks] = useState({});
 
-  // ===== SUPABASE + LOCALSTORAGE PERSISTENCE =====
+  // ===== PARTITIONED PERSISTENCE =====
+  // State is split into independent partitions, each stored as its own Supabase row.
+  // Editing clients can never overwrite bank accounts, editing providers can never
+  // overwrite corporate entities, etc. Only same-partition concurrent edits can conflict.
   const STORAGE_KEY = "aviro_dashboard_state";
   const DB_URL = "https://iosvevycvqviaonsxsnq.supabase.co";
   const DB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvc3ZldnljdnF2aWFvbnN4c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA5NDMsImV4cCI6MjA5MTc0Njk0M30.IMpyt1CqwKUbM4aW0vyC0fxgNUvyNOSzk3aP9v_Iw-Q";
-  const [saveStatus, setSaveStatus] = useState(""); // "", "saving", "saved", "error"
-  const lastSyncedRef = useRef(null); // track when we last loaded/saved — ref to avoid re-render loops
+  const [saveStatus, setSaveStatus] = useState("");
+  const lastSyncedRef = useRef(null);
 
+  const PARTITIONS = [
+    { id: "p_clients", keys: ["gatewayClients"] },
+    { id: "p_providers", keys: ["providers", "providerGroups"] },
+    { id: "p_banking", keys: ["bankRelationships", "bankAccountsList"] },
+    { id: "p_corporate", keys: ["corporateEntities", "entityOverrides", "entityDocs", "entityServiceProviders", "entitySeals", "entityFooters", "entityIntraAgreements", "entityCorpAgreements"] },
+    { id: "p_cubepay", keys: ["cubePayDeals", "cubePayMonthlyData", "cubePayOperatingCosts", "cubePayPlaceholderCostPct", "cubePayOnboardClients"] },
+    { id: "p_brands", keys: ["gamingBrands"] },
+    { id: "p_signal", keys: ["quickJobs", "delegatedTasks", "signalSlots", "signalDayStarted", "signalDayFinished", "signalSlotNotes", "signalCompleted", "personalJobs"] },
+    { id: "p_notes", keys: ["globalNotes", "dailyProgress"] },
+    { id: "p_config", keys: ["supabaseUrl", "supabaseKey", "clickupToken", "contractDefaults", "metabaseConfigs", "integrations"] },
+    { id: "p_fx", keys: ["fxRates", "fxBaseCurrency", "fxLastUpdated"] },
+    { id: "p_pm", keys: ["pmPipeline", "pmRoadmap", "pmClients"] },
+    { id: "p_kyb", keys: ["kybProviderRequirements"] },
+    { id: "p_fees", keys: ["gatewayRevFees"] },
+  ];
+
+  // Build full state (still used for localStorage and migration)
   const buildState = useCallback(() => ({
     quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
     signalSlotNotes, signalCompleted, globalNotes, personalJobs,
@@ -351,88 +371,79 @@ function AviroDashboard() {
     kybProviderRequirements,
   }), [quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished, signalSlotNotes, signalCompleted, globalNotes, personalJobs, dailyProgress, corporateEntities, entityOverrides, entityDocs, entityServiceProviders, entitySeals, entityFooters, entityIntraAgreements, entityCorpAgreements, bankRelationships, bankAccountsList, gamingBrands, gatewayClients, integrations, providers, supabaseUrl, supabaseKey, clickupToken, cubePayDeals, cubePayMonthlyData, cubePayOperatingCosts, cubePayPlaceholderCostPct, providerGroups, gatewayRevFees, metabaseConfigs, fxRates, fxBaseCurrency, fxLastUpdated, pmPipeline, pmRoadmap, pmClients, contractDefaults, cubePayOnboardClients, kybProviderRequirements]);
 
-  // Merge two arrays by ID — for each ID, keep whichever version has more data (longer JSON)
-  const mergeArraysById = (localArr, remoteArr) => {
-    if (!Array.isArray(localArr) && !Array.isArray(remoteArr)) return localArr;
-    if (!Array.isArray(localArr)) return remoteArr || [];
-    if (!Array.isArray(remoteArr)) return localArr;
-    const merged = new Map();
-    // Start with remote as base
-    remoteArr.forEach(item => { if (item && item.id) merged.set(item.id, item); });
-    // Overlay local on top — local wins for items that exist in both
-    localArr.forEach(item => {
-      if (!item || !item.id) return;
-      const remote = merged.get(item.id);
-      if (!remote) { merged.set(item.id, item); return; }
-      // Keep whichever version has more substance (more non-empty fields)
-      const localWeight = JSON.stringify(item).length;
-      const remoteWeight = JSON.stringify(remote).length;
-      // If remote has significantly more data, prefer remote (someone else added details)
-      // Otherwise keep local (we're the active editor)
-      merged.set(item.id, remoteWeight > localWeight + 20 ? remote : item);
-    });
-    return Array.from(merged.values());
+  // Snapshot of state at last save/load — used to detect which partitions actually changed
+  const lastSavedSnapshot = useRef({});
+  // Per-partition remote timestamps
+  const partitionTimestamps = useRef({});
+  // Flag to suppress auto-save while applying remote changes
+  const isApplyingRemote = useRef(false);
+
+  // Build a partition's data from current state
+  const buildPartitionData = (part, state) => {
+    const data = {};
+    part.keys.forEach(k => { if (state[k] !== undefined) data[k] = state[k]; });
+    return data;
   };
 
-  const ARRAY_STATE_KEYS = ["quickJobs", "delegatedTasks", "corporateEntities", "gatewayClients", "providers", "bankRelationships", "bankAccountsList", "gamingBrands", "cubePayOnboardClients", "kybProviderRequirements", "pmPipeline", "pmRoadmap", "pmClients", "cubePayDeals", "cubePayMonthlyData", "cubePayOperatingCosts", "providerGroups", "integrations", "personalJobs", "entityServiceProviders", "entityIntraAgreements", "entityCorpAgreements"];
+  // Check if a partition has changed since last save
+  const partitionChanged = (part, currentState) => {
+    const current = buildPartitionData(part, currentState);
+    const last = buildPartitionData(part, lastSavedSnapshot.current);
+    return JSON.stringify(current) !== JSON.stringify(last);
+  };
 
+  // Supabase helper: write one partition row
+  const writePartition = async (partId, data) => {
+    const now = new Date().toISOString();
+    const res = await fetch(DB_URL + "/rest/v1/dashboard_state", {
+      method: "POST",
+      headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ id: partId, state: data, updated_at: now, updated_by: "dashboard" }),
+    });
+    if (res.ok) partitionTimestamps.current[partId] = now;
+    return res.ok;
+  };
+
+  // Save: only write partitions that actually changed
   const saveState = useCallback(async () => {
-    if (!hasLoaded) return; // NEVER save before data has loaded
-    const localState = buildState();
-    // Always save to localStorage as fast cache
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(localState)); } catch (e) { console.warn("localStorage save failed:", e); }
-    // Fetch-then-merge-then-write to Supabase (prevents overwriting other users' changes)
+    if (!hasLoaded || isApplyingRemote.current) return;
+    const currentState = buildState();
+    // Always save full state to localStorage as fast cache
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(currentState)); } catch (e) {}
+
+    const dirtyParts = PARTITIONS.filter(p => partitionChanged(p, currentState));
+    if (dirtyParts.length === 0) return;
+
     try {
       setSaveStatus("saving");
-      let stateToSave = localState;
-      // Fetch current remote state to merge with
-      try {
-        const fetchRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state", {
-          headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
-        });
-        if (fetchRes.ok) {
-          const rows = await fetchRes.json();
-          if (rows.length > 0 && rows[0].state) {
-            const remoteState = rows[0].state;
-            // Deep merge: for array fields, merge by ID; for scalars, keep local
-            const merged = { ...localState };
-            ARRAY_STATE_KEYS.forEach(key => {
-              if (remoteState[key] && localState[key]) {
-                merged[key] = mergeArraysById(localState[key], remoteState[key]);
-              } else if (remoteState[key] && !localState[key]) {
-                merged[key] = remoteState[key];
-              }
-            });
-            // For object fields (entityDocs, entityOverrides, etc.), merge keys
-            ["entityDocs", "entityOverrides", "entitySeals", "entityFooters", "metabaseConfigs", "signalSlotNotes", "contractDefaults", "fxRates"].forEach(key => {
-              if (remoteState[key] && typeof remoteState[key] === "object" && !Array.isArray(remoteState[key])) {
-                merged[key] = { ...remoteState[key], ...localState[key] };
-              }
-            });
-            stateToSave = merged;
-          }
-        }
-      } catch (e) { console.warn("Remote fetch for merge failed, saving local only:", e); }
-
+      let allOk = true;
+      for (const part of dirtyParts) {
+        const data = buildPartitionData(part, currentState);
+        const ok = await writePartition(part.id, data);
+        if (!ok) allOk = false;
+      }
+      // Also write the full "shared" row as a backup/migration bridge
       const now = new Date().toISOString();
-      const res = await fetch(DB_URL + "/rest/v1/dashboard_state", {
+      await fetch(DB_URL + "/rest/v1/dashboard_state", {
         method: "POST",
         headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ id: "shared", state: stateToSave, updated_at: now, updated_by: "dashboard" }),
+        body: JSON.stringify({ id: "shared", state: currentState, updated_at: now, updated_by: "dashboard" }),
       });
-      if (res.ok) { lastSyncedRef.current = now; setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
-      else { console.warn("Supabase save failed:", res.status); setSaveStatus("error"); }
-    } catch (e) { console.warn("Supabase save failed:", e); setSaveStatus("error"); }
+      lastSyncedRef.current = now;
+      lastSavedSnapshot.current = JSON.parse(JSON.stringify(currentState));
+      if (allOk) { setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
+      else { setSaveStatus("error"); }
+    } catch (e) { console.warn("Save failed:", e); setSaveStatus("error"); }
   }, [buildState, hasLoaded]);
 
-  // Auto-save whenever state changes (debounced 2s to avoid hammering Supabase)
+  // Auto-save on state changes (debounced 1.5s)
   useEffect(() => {
-    if (!hasLoaded) return;
-    const t = setTimeout(saveState, 2000);
+    if (!hasLoaded || isApplyingRemote.current) return;
+    const t = setTimeout(saveState, 1500);
     return () => clearTimeout(t);
   }, [saveState, hasLoaded]);
 
-  // Save immediately when tab is closing or going to background — prevents data loss
+  // Refs for event handlers
   const saveStateRef = useRef(saveState);
   const buildStateRef = useRef(buildState);
   const hasLoadedRef = useRef(hasLoaded);
@@ -440,25 +451,32 @@ function AviroDashboard() {
   useEffect(() => { buildStateRef.current = buildState; }, [buildState]);
   useEffect(() => { hasLoadedRef.current = hasLoaded; }, [hasLoaded]);
 
+  // Save on tab close / background
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (!hasLoadedRef.current) return;
-      // Synchronous localStorage save — always works even during tab close
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(buildStateRef.current())); } catch (e) {}
-      // Best-effort Supabase save via sendBeacon (survives tab close)
+      // Best-effort per-partition saves via sendBeacon
       try {
         const state = buildStateRef.current();
+        PARTITIONS.forEach(part => {
+          if (partitionChanged(part, state)) {
+            const data = buildPartitionData(part, state);
+            const now = new Date().toISOString();
+            const payload = JSON.stringify({ id: part.id, state: data, updated_at: now, updated_by: "dashboard" });
+            navigator.sendBeacon(
+              DB_URL + "/rest/v1/dashboard_state?on_conflict=id",
+              new Blob([payload], { type: "application/json" })
+            );
+          }
+        });
+        // Also save the full shared row
         const payload = JSON.stringify({ id: "shared", state: state, updated_at: new Date().toISOString(), updated_by: "dashboard" });
-        navigator.sendBeacon(
-          DB_URL + "/rest/v1/dashboard_state?on_conflict=id",
-          new Blob([payload], { type: "application/json" })
-        );
+        navigator.sendBeacon(DB_URL + "/rest/v1/dashboard_state?on_conflict=id", new Blob([payload], { type: "application/json" }));
       } catch (e) {}
     };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden" && hasLoadedRef.current) {
-        saveStateRef.current();
-      }
+      if (document.visibilityState === "hidden" && hasLoadedRef.current) saveStateRef.current();
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -468,62 +486,94 @@ function AviroDashboard() {
     };
   }, []);
 
-  // Poll for remote changes every 30s and merge (prevents multi-user overwrites)
-  const setterMap = useRef({
-    quickJobs: setQuickJobs, delegatedTasks: setDelegatedTasks, corporateEntities: setCorporateEntities,
-    gatewayClients: setGatewayClients, providers: setProviders, bankRelationships: setBankRelationships,
-    bankAccountsList: setBankAccountsList, gamingBrands: setGamingBrands, cubePayOnboardClients: setCubePayOnboardClients,
-    kybProviderRequirements: setKybProviderRequirements, pmPipeline: setPmPipeline, pmRoadmap: setPmRoadmap,
-    pmClients: setPmClients, cubePayDeals: setCubePayDeals, cubePayMonthlyData: setCubePayMonthlyData,
-    cubePayOperatingCosts: setCubePayOperatingCosts, providerGroups: setProviderGroups,
-    integrations: setIntegrations, personalJobs: setPersonalJobs,
-  });
+  // Poll for remote partition changes every 15s
   useEffect(() => {
     if (!hasLoaded) return;
     const poll = setInterval(async () => {
       try {
-        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state,updated_at", {
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?or=(id.like.p_%25)&select=id,state,updated_at", {
           headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
         });
         if (!res.ok) return;
         const rows = await res.json();
-        if (rows.length === 0 || !rows[0].state) return;
-        const remoteTime = rows[0].updated_at;
-        if (lastSyncedRef.current && remoteTime <= lastSyncedRef.current) return;
-        console.log("Remote changes detected, merging...", remoteTime);
-        const remote = rows[0].state;
-        const local = buildStateRef.current();
-        let changed = false;
-        // Merge array fields by ID — picks up both new items AND edits to existing items
-        ARRAY_STATE_KEYS.forEach(key => {
-          if (!remote[key]) return;
-          const result = mergeArraysById(local[key] || [], remote[key]);
-          const localJson = JSON.stringify(local[key] || []);
-          const resultJson = JSON.stringify(result);
-          if (localJson !== resultJson && setterMap.current[key]) {
-            setterMap.current[key](result);
-            changed = true;
-          }
-        });
-        // Merge object fields — remote keys we don't have get added
-        ["entityDocs", "entityOverrides", "entitySeals", "entityFooters", "signalSlotNotes"].forEach(key => {
-          if (remote[key] && typeof remote[key] === "object" && !Array.isArray(remote[key])) {
-            const localObj = local[key] || {};
-            const remoteKeys = Object.keys(remote[key]);
-            const newKeys = remoteKeys.filter(k => !localObj[k]);
-            if (newKeys.length > 0) {
-              const merged = { ...localObj };
-              newKeys.forEach(k => { merged[k] = remote[key][k]; });
-              if (key === "entityDocs") setEntityDocs(merged);
-              else if (key === "entityOverrides") setEntityOverrides(merged);
+        if (rows.length === 0) return;
+        const currentState = buildStateRef.current();
+        let anyChange = false;
+
+        isApplyingRemote.current = true;
+        rows.forEach(row => {
+          const lastTs = partitionTimestamps.current[row.id];
+          if (lastTs && row.updated_at <= lastTs) return; // Not newer
+          const part = PARTITIONS.find(p => p.id === row.id);
+          if (!part || !row.state) return;
+
+          // Only apply remote if this partition is NOT dirty locally
+          const isDirty = partitionChanged(part, currentState);
+          if (isDirty) return; // Local edits pending — don't overwrite, our save will handle it
+
+          // Apply remote changes
+          let changed = false;
+          Object.entries(row.state).forEach(([key, value]) => {
+            if (value === undefined) return;
+            const currentVal = JSON.stringify(currentState[key]);
+            const remoteVal = JSON.stringify(value);
+            if (currentVal !== remoteVal) {
+              // Apply via setter
+              if (key === "gatewayClients") setGatewayClients(value);
+              else if (key === "providers") setProviders(value);
+              else if (key === "providerGroups") setProviderGroups(value);
+              else if (key === "bankRelationships") setBankRelationships(value);
+              else if (key === "bankAccountsList") setBankAccountsList(value);
+              else if (key === "corporateEntities") setCorporateEntities(value);
+              else if (key === "entityOverrides") setEntityOverrides(value);
+              else if (key === "entityDocs") setEntityDocs(value);
+              else if (key === "entityServiceProviders") setEntityServiceProviders(value);
+              else if (key === "entitySeals") setEntitySeals(value);
+              else if (key === "entityFooters") setEntityFooters(value);
+              else if (key === "entityIntraAgreements") setEntityIntraAgreements(value);
+              else if (key === "entityCorpAgreements") setEntityCorpAgreements(value);
+              else if (key === "cubePayDeals") setCubePayDeals(value);
+              else if (key === "cubePayMonthlyData") setCubePayMonthlyData(value);
+              else if (key === "cubePayOperatingCosts") setCubePayOperatingCosts(value);
+              else if (key === "cubePayPlaceholderCostPct") setCubePayPlaceholderCostPct(value);
+              else if (key === "cubePayOnboardClients") setCubePayOnboardClients(value);
+              else if (key === "gamingBrands") setGamingBrands(value);
+              else if (key === "quickJobs") setQuickJobs(value);
+              else if (key === "delegatedTasks") setDelegatedTasks(value);
+              else if (key === "signalSlots") setSignalSlots(value);
+              else if (key === "signalDayStarted") setSignalDayStarted(value);
+              else if (key === "signalDayFinished") setSignalDayFinished(value);
+              else if (key === "signalSlotNotes") setSignalSlotNotes(value);
+              else if (key === "signalCompleted") setSignalCompleted(value);
+              else if (key === "personalJobs") setPersonalJobs(value);
+              else if (key === "globalNotes") setGlobalNotes(value);
+              else if (key === "dailyProgress") setDailyProgress(value);
+              else if (key === "integrations") setIntegrations(value);
+              else if (key === "contractDefaults") setContractDefaults(value);
+              else if (key === "metabaseConfigs") setMetabaseConfigs(value);
+              else if (key === "fxRates") setFxRates(value);
+              else if (key === "fxBaseCurrency") setFxBaseCurrency(value);
+              else if (key === "fxLastUpdated") setFxLastUpdated(value);
+              else if (key === "pmPipeline") setPmPipeline(value);
+              else if (key === "pmRoadmap") setPmRoadmap(value);
+              else if (key === "pmClients") setPmClients(value);
+              else if (key === "kybProviderRequirements") setKybProviderRequirements(value);
+              else if (key === "gatewayRevFees") setGatewayRevFees(value);
               changed = true;
             }
+          });
+          if (changed) {
+            // Update snapshot so this partition isn't seen as dirty
+            part.keys.forEach(k => { if (row.state[k] !== undefined) lastSavedSnapshot.current[k] = JSON.parse(JSON.stringify(row.state[k])); });
+            anyChange = true;
           }
+          partitionTimestamps.current[row.id] = row.updated_at;
         });
-        lastSyncedRef.current = remoteTime;
-        if (changed) console.log("Merged remote changes into local state");
-      } catch (e) { console.warn("Poll for remote changes failed:", e); }
-    }, 30000);
+        // Allow one tick for state to settle before re-enabling save
+        setTimeout(() => { isApplyingRemote.current = false; }, 200);
+        if (anyChange) console.log("Applied remote changes from other users");
+      } catch (e) { isApplyingRemote.current = false; console.warn("Poll failed:", e); }
+    }, 15000);
     return () => clearInterval(poll);
   }, [hasLoaded]);
 
@@ -586,37 +636,66 @@ function AviroDashboard() {
     if (s.cubePayOnboardClients) setCubePayOnboardClients(s.cubePayOnboardClients);
   }, []);
 
-  // Load state on mount — try Supabase first, fall back to localStorage
+  // Load state on mount — try partition rows first, fall back to shared row, then localStorage
   const [hasLoaded, setHasLoaded] = useState(false);
   useEffect(() => {
     if (hasLoaded) return;
     const load = async () => {
       let loaded = false;
-      // Try Supabase first (shared, authoritative)
+      // 1. Try loading from partition rows (new system)
       try {
-        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state,updated_at", {
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?or=(id.like.p_%25)&select=id,state,updated_at", {
           headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
         });
         if (res.ok) {
           const rows = await res.json();
-          if (rows.length > 0 && rows[0].state && Object.keys(rows[0].state).length > 0) {
-            console.log("Loaded state from Supabase, updated:", rows[0].updated_at);
-            applyState(rows[0].state);
-            lastSyncedRef.current = rows[0].updated_at;
-            loaded = true;
+          if (rows.length > 0) {
+            const assembled = {};
+            rows.forEach(row => {
+              if (row.state) {
+                Object.assign(assembled, row.state);
+                partitionTimestamps.current[row.id] = row.updated_at;
+              }
+            });
+            if (Object.keys(assembled).length > 0) {
+              console.log("Loaded state from", rows.length, "partition rows");
+              applyState(assembled);
+              lastSavedSnapshot.current = JSON.parse(JSON.stringify(assembled));
+              loaded = true;
+            }
           }
         }
-      } catch (e) { console.warn("Supabase load failed, trying localStorage:", e); }
-      // Fall back to localStorage
+      } catch (e) { console.warn("Partition load failed:", e); }
+      // 2. Fall back to old "shared" row (migration path)
+      if (!loaded) {
+        try {
+          const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state,updated_at", {
+            headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+          });
+          if (res.ok) {
+            const rows = await res.json();
+            if (rows.length > 0 && rows[0].state && Object.keys(rows[0].state).length > 0) {
+              console.log("Loaded from shared row (will migrate to partitions on next save)");
+              applyState(rows[0].state);
+              lastSyncedRef.current = rows[0].updated_at;
+              // Set snapshot so ALL partitions are seen as dirty → triggers migration write
+              lastSavedSnapshot.current = {};
+              loaded = true;
+            }
+          }
+        } catch (e) { console.warn("Shared row load failed:", e); }
+      }
+      // 3. Fall back to localStorage
       if (!loaded) {
         try {
           const saved = localStorage.getItem(STORAGE_KEY);
           if (saved) {
             const s = JSON.parse(saved);
-            console.log("Loaded state from localStorage (Supabase was empty or unavailable)");
+            console.log("Loaded from localStorage");
             applyState(s);
+            lastSavedSnapshot.current = {};
           }
-        } catch (e) { console.warn("localStorage load also failed:", e); }
+        } catch (e) { console.warn("localStorage load failed:", e); }
       }
       // Load cached ClickUp tasks from Supabase (live fetch will overlay later if token is set)
       try {
