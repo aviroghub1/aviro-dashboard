@@ -375,9 +375,6 @@ function AviroDashboard() {
   const lastSavedSnapshot = useRef({});
   // Per-partition remote timestamps
   const partitionTimestamps = useRef({});
-  // Flag to suppress auto-save while applying remote changes
-  const isApplyingRemote = useRef(false);
-
   // Build a partition's data from current state
   const buildPartitionData = (part, state) => {
     const data = {};
@@ -406,7 +403,7 @@ function AviroDashboard() {
 
   // Save: only write partitions that actually changed
   const saveState = useCallback(async () => {
-    if (!hasLoaded || isApplyingRemote.current) return;
+    if (!hasLoaded) return;
     const currentState = buildState();
     // Always save full state to localStorage as fast cache
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(currentState)); } catch (e) {}
@@ -438,7 +435,7 @@ function AviroDashboard() {
 
   // Auto-save on state changes (debounced 1.5s)
   useEffect(() => {
-    if (!hasLoaded || isApplyingRemote.current) return;
+    if (!hasLoaded) return;
     const t = setTimeout(saveState, 1500);
     return () => clearTimeout(t);
   }, [saveState, hasLoaded]);
@@ -486,93 +483,112 @@ function AviroDashboard() {
     };
   }, []);
 
-  // Poll for remote partition changes every 15s
+  // Apply a single key's value from remote, updating snapshot to prevent re-save
+  const applyRemoteKey = (key, value) => {
+    if (value === undefined) return;
+    if (key === "gatewayClients") setGatewayClients(value);
+    else if (key === "providers") setProviders(value);
+    else if (key === "providerGroups") setProviderGroups(value);
+    else if (key === "bankRelationships") setBankRelationships(value);
+    else if (key === "bankAccountsList") setBankAccountsList(value);
+    else if (key === "corporateEntities") setCorporateEntities(value);
+    else if (key === "entityOverrides") setEntityOverrides(value);
+    else if (key === "entityDocs") setEntityDocs(value);
+    else if (key === "entityServiceProviders") setEntityServiceProviders(value);
+    else if (key === "entitySeals") setEntitySeals(value);
+    else if (key === "entityFooters") setEntityFooters(value);
+    else if (key === "entityIntraAgreements") setEntityIntraAgreements(value);
+    else if (key === "entityCorpAgreements") setEntityCorpAgreements(value);
+    else if (key === "cubePayDeals") setCubePayDeals(value);
+    else if (key === "cubePayMonthlyData") setCubePayMonthlyData(value);
+    else if (key === "cubePayOperatingCosts") setCubePayOperatingCosts(value);
+    else if (key === "cubePayPlaceholderCostPct") setCubePayPlaceholderCostPct(value);
+    else if (key === "cubePayOnboardClients") setCubePayOnboardClients(value);
+    else if (key === "gamingBrands") setGamingBrands(value);
+    else if (key === "quickJobs") setQuickJobs(value);
+    else if (key === "delegatedTasks") setDelegatedTasks(value);
+    else if (key === "signalSlots") setSignalSlots(value);
+    else if (key === "signalDayStarted") setSignalDayStarted(value);
+    else if (key === "signalDayFinished") setSignalDayFinished(value);
+    else if (key === "signalSlotNotes") setSignalSlotNotes(value);
+    else if (key === "signalCompleted") setSignalCompleted(value);
+    else if (key === "personalJobs") setPersonalJobs(value);
+    else if (key === "globalNotes") setGlobalNotes(value);
+    else if (key === "dailyProgress") setDailyProgress(value);
+    else if (key === "integrations") setIntegrations(value);
+    else if (key === "contractDefaults") setContractDefaults(value);
+    else if (key === "metabaseConfigs") setMetabaseConfigs(value);
+    else if (key === "fxRates") setFxRates(value);
+    else if (key === "fxBaseCurrency") setFxBaseCurrency(value);
+    else if (key === "fxLastUpdated") setFxLastUpdated(value);
+    else if (key === "pmPipeline") setPmPipeline(value);
+    else if (key === "pmRoadmap") setPmRoadmap(value);
+    else if (key === "pmClients") setPmClients(value);
+    else if (key === "kybProviderRequirements") setKybProviderRequirements(value);
+    else if (key === "gatewayRevFees") setGatewayRevFees(value);
+    // Update snapshot so this key isn't seen as dirty on next save
+    lastSavedSnapshot.current[key] = JSON.parse(JSON.stringify(value));
+  };
+
+  // Poll for remote changes every 15s — checks both partitions AND shared row
   useEffect(() => {
     if (!hasLoaded) return;
     const poll = setInterval(async () => {
       try {
-        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?or=(id.like.p_%25)&select=id,state,updated_at", {
+        // Fetch partition rows AND the shared row in one query
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?or=(id.like.p_%25,id.eq.shared)&select=id,state,updated_at&order=updated_at.desc", {
           headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
         });
         if (!res.ok) return;
         const rows = await res.json();
         if (rows.length === 0) return;
+
+        const sharedRow = rows.find(r => r.id === "shared");
+        const partRows = rows.filter(r => r.id !== "shared");
         const currentState = buildStateRef.current();
         let anyChange = false;
 
-        isApplyingRemote.current = true;
-        rows.forEach(row => {
-          const lastTs = partitionTimestamps.current[row.id];
-          if (lastTs && row.updated_at <= lastTs) return; // Not newer
-          const part = PARTITIONS.find(p => p.id === row.id);
-          if (!part || !row.state) return;
+        // For each partition, figure out the best source: partition row or shared row
+        PARTITIONS.forEach(part => {
+          const partRow = partRows.find(r => r.id === part.id);
+          const lastTs = partitionTimestamps.current[part.id];
 
-          // Only apply remote if this partition is NOT dirty locally
+          // Determine which source is newest for this partition
+          let bestSource = null;
+          let bestTs = lastTs || "";
+          if (partRow && partRow.state && partRow.updated_at > bestTs) {
+            bestSource = partRow.state;
+            bestTs = partRow.updated_at;
+          }
+          // Check if shared row is even newer (covers old-code users writing to shared)
+          if (sharedRow && sharedRow.state && sharedRow.updated_at > bestTs) {
+            const sharedData = {};
+            part.keys.forEach(k => { if (sharedRow.state[k] !== undefined) sharedData[k] = sharedRow.state[k]; });
+            if (Object.keys(sharedData).length > 0) {
+              bestSource = sharedData;
+              bestTs = sharedRow.updated_at;
+            }
+          }
+          if (!bestSource || bestTs === (lastTs || "")) return; // Nothing newer
+
+          // Only apply if this partition is NOT dirty locally
           const isDirty = partitionChanged(part, currentState);
-          if (isDirty) return; // Local edits pending — don't overwrite, our save will handle it
+          if (isDirty) return;
 
-          // Apply remote changes
+          // Apply each key from the best source
           let changed = false;
-          Object.entries(row.state).forEach(([key, value]) => {
+          Object.entries(bestSource).forEach(([key, value]) => {
             if (value === undefined) return;
-            const currentVal = JSON.stringify(currentState[key]);
-            const remoteVal = JSON.stringify(value);
-            if (currentVal !== remoteVal) {
-              // Apply via setter
-              if (key === "gatewayClients") setGatewayClients(value);
-              else if (key === "providers") setProviders(value);
-              else if (key === "providerGroups") setProviderGroups(value);
-              else if (key === "bankRelationships") setBankRelationships(value);
-              else if (key === "bankAccountsList") setBankAccountsList(value);
-              else if (key === "corporateEntities") setCorporateEntities(value);
-              else if (key === "entityOverrides") setEntityOverrides(value);
-              else if (key === "entityDocs") setEntityDocs(value);
-              else if (key === "entityServiceProviders") setEntityServiceProviders(value);
-              else if (key === "entitySeals") setEntitySeals(value);
-              else if (key === "entityFooters") setEntityFooters(value);
-              else if (key === "entityIntraAgreements") setEntityIntraAgreements(value);
-              else if (key === "entityCorpAgreements") setEntityCorpAgreements(value);
-              else if (key === "cubePayDeals") setCubePayDeals(value);
-              else if (key === "cubePayMonthlyData") setCubePayMonthlyData(value);
-              else if (key === "cubePayOperatingCosts") setCubePayOperatingCosts(value);
-              else if (key === "cubePayPlaceholderCostPct") setCubePayPlaceholderCostPct(value);
-              else if (key === "cubePayOnboardClients") setCubePayOnboardClients(value);
-              else if (key === "gamingBrands") setGamingBrands(value);
-              else if (key === "quickJobs") setQuickJobs(value);
-              else if (key === "delegatedTasks") setDelegatedTasks(value);
-              else if (key === "signalSlots") setSignalSlots(value);
-              else if (key === "signalDayStarted") setSignalDayStarted(value);
-              else if (key === "signalDayFinished") setSignalDayFinished(value);
-              else if (key === "signalSlotNotes") setSignalSlotNotes(value);
-              else if (key === "signalCompleted") setSignalCompleted(value);
-              else if (key === "personalJobs") setPersonalJobs(value);
-              else if (key === "globalNotes") setGlobalNotes(value);
-              else if (key === "dailyProgress") setDailyProgress(value);
-              else if (key === "integrations") setIntegrations(value);
-              else if (key === "contractDefaults") setContractDefaults(value);
-              else if (key === "metabaseConfigs") setMetabaseConfigs(value);
-              else if (key === "fxRates") setFxRates(value);
-              else if (key === "fxBaseCurrency") setFxBaseCurrency(value);
-              else if (key === "fxLastUpdated") setFxLastUpdated(value);
-              else if (key === "pmPipeline") setPmPipeline(value);
-              else if (key === "pmRoadmap") setPmRoadmap(value);
-              else if (key === "pmClients") setPmClients(value);
-              else if (key === "kybProviderRequirements") setKybProviderRequirements(value);
-              else if (key === "gatewayRevFees") setGatewayRevFees(value);
+            if (JSON.stringify(currentState[key]) !== JSON.stringify(value)) {
+              applyRemoteKey(key, value);
               changed = true;
             }
           });
-          if (changed) {
-            // Update snapshot so this partition isn't seen as dirty
-            part.keys.forEach(k => { if (row.state[k] !== undefined) lastSavedSnapshot.current[k] = JSON.parse(JSON.stringify(row.state[k])); });
-            anyChange = true;
-          }
-          partitionTimestamps.current[row.id] = row.updated_at;
+          if (changed) anyChange = true;
+          partitionTimestamps.current[part.id] = bestTs;
         });
-        // Allow one tick for state to settle before re-enabling save
-        setTimeout(() => { isApplyingRemote.current = false; }, 200);
         if (anyChange) console.log("Applied remote changes from other users");
-      } catch (e) { isApplyingRemote.current = false; console.warn("Poll failed:", e); }
+      } catch (e) { console.warn("Poll failed:", e); }
     }, 15000);
     return () => clearInterval(poll);
   }, [hasLoaded]);
@@ -642,50 +658,45 @@ function AviroDashboard() {
     if (hasLoaded) return;
     const load = async () => {
       let loaded = false;
-      // 1. Try loading from partition rows (new system)
+      // 1. Fetch BOTH partition rows AND shared row — use newest data per partition
       try {
-        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?or=(id.like.p_%25)&select=id,state,updated_at", {
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?or=(id.like.p_%25,id.eq.shared)&select=id,state,updated_at", {
           headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
         });
         if (res.ok) {
           const rows = await res.json();
-          if (rows.length > 0) {
+          const sharedRow = rows.find(r => r.id === "shared");
+          const partRows = rows.filter(r => r.id !== "shared" && r.state);
+
+          if (partRows.length > 0 || (sharedRow && sharedRow.state)) {
             const assembled = {};
-            rows.forEach(row => {
-              if (row.state) {
-                Object.assign(assembled, row.state);
-                partitionTimestamps.current[row.id] = row.updated_at;
+            // For each partition, use partition row or shared row — whichever is newer
+            PARTITIONS.forEach(part => {
+              const pRow = partRows.find(r => r.id === part.id);
+              const pTs = pRow ? pRow.updated_at : "";
+              const sTs = sharedRow ? sharedRow.updated_at : "";
+
+              if (pRow && pRow.state && pTs >= sTs) {
+                // Partition row is newer or same age — use it
+                Object.assign(assembled, pRow.state);
+                partitionTimestamps.current[part.id] = pTs;
+              } else if (sharedRow && sharedRow.state) {
+                // Shared row is newer — extract this partition's keys from it
+                part.keys.forEach(k => { if (sharedRow.state[k] !== undefined) assembled[k] = sharedRow.state[k]; });
+                partitionTimestamps.current[part.id] = sTs;
               }
             });
             if (Object.keys(assembled).length > 0) {
-              console.log("Loaded state from", rows.length, "partition rows");
+              console.log("Loaded state from Supabase (" + partRows.length + " partitions, shared row " + (sharedRow ? "present" : "absent") + ")");
               applyState(assembled);
               lastSavedSnapshot.current = JSON.parse(JSON.stringify(assembled));
+              lastSyncedRef.current = sharedRow ? sharedRow.updated_at : partRows[0].updated_at;
               loaded = true;
             }
           }
         }
-      } catch (e) { console.warn("Partition load failed:", e); }
-      // 2. Fall back to old "shared" row (migration path)
-      if (!loaded) {
-        try {
-          const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.shared&select=state,updated_at", {
-            headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
-          });
-          if (res.ok) {
-            const rows = await res.json();
-            if (rows.length > 0 && rows[0].state && Object.keys(rows[0].state).length > 0) {
-              console.log("Loaded from shared row (will migrate to partitions on next save)");
-              applyState(rows[0].state);
-              lastSyncedRef.current = rows[0].updated_at;
-              // Set snapshot so ALL partitions are seen as dirty → triggers migration write
-              lastSavedSnapshot.current = {};
-              loaded = true;
-            }
-          }
-        } catch (e) { console.warn("Shared row load failed:", e); }
-      }
-      // 3. Fall back to localStorage
+      } catch (e) { console.warn("Supabase load failed:", e); }
+      // 2. Fall back to localStorage
       if (!loaded) {
         try {
           const saved = localStorage.getItem(STORAGE_KEY);
