@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-08-05.1";
+const APP_VERSION = "2026-08-05.2";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -487,6 +487,45 @@ function AviroDashboard() {
   const saveQueuedRef = useRef(false);
   const retryTimerRef = useRef(null);
 
+  // ===== DIAGNOSTICS: identity + sync audit log =====
+  // Every save is attributed (who + which device) and logged to a per-device
+  // ring buffer in Supabase, so future "it didn't save" reports can be
+  // diagnosed with facts instead of guesses.
+  const deviceIdRef = useRef((() => {
+    try {
+      let d = localStorage.getItem("aviro_device_id");
+      if (!d) { d = "dev-" + Math.random().toString(36).slice(2, 8); localStorage.setItem("aviro_device_id", d); }
+      return d;
+    } catch (e) { return "dev-unknown"; }
+  })());
+  const authUserRef = useRef(null);
+  useEffect(() => { authUserRef.current = authUser; }, [authUser]);
+  const getIdentity = () => {
+    const email = authUserRef.current && authUserRef.current.email ? authUserRef.current.email : "anon";
+    return email + "@" + deviceIdRef.current + "@v" + APP_VERSION;
+  };
+  const syncLogRef = useRef([]);
+  const syncLogDirtyRef = useRef(false);
+  const logSync = (action, detail, ok) => {
+    syncLogRef.current.push({ t: new Date().toISOString(), action, detail, ok, v: APP_VERSION });
+    if (syncLogRef.current.length > 150) syncLogRef.current = syncLogRef.current.slice(-150);
+    syncLogDirtyRef.current = true;
+  };
+  // Flush sync log to Supabase every 60s (only if new entries)
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (!syncLogDirtyRef.current) return;
+      syncLogDirtyRef.current = false;
+      const email = authUserRef.current && authUserRef.current.email ? authUserRef.current.email : "anon";
+      fetch(DB_URL + "/rest/v1/dashboard_state", {
+        method: "POST",
+        headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({ id: "log_" + deviceIdRef.current, state: { email, device: deviceIdRef.current, version: APP_VERSION, events: syncLogRef.current }, updated_at: new Date().toISOString(), updated_by: email }),
+      }).catch(() => {});
+    }, 60000);
+    return () => clearInterval(t);
+  }, []);
+
   const partitionChanged = (part, currentState) => pPartitionChanged(part, currentState, lastSavedSnapshot.current);
 
   // Save: fetch-merge-write each dirty partition
@@ -522,16 +561,17 @@ function AviroDashboard() {
           const res = await fetch(DB_URL + "/rest/v1/dashboard_state", {
             method: "POST",
             headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
-            body: JSON.stringify({ id: part.id, state: data, updated_at: nowIso, updated_by: "dashboard" }),
+            body: JSON.stringify({ id: part.id, state: data, updated_at: nowIso, updated_by: getIdentity() }),
           });
-          if (!res.ok) { allOk = false; continue; }
+          if (!res.ok) { allOk = false; logSync("save", part.id + " HTTP " + res.status, false); continue; }
           partitionTimestamps.current[part.id] = nowIso;
+          logSync("save", part.id + " (" + (JSON.stringify(data).length / 1024).toFixed(0) + "KB)", true);
           // 4. Apply merged result back to local state + snapshot
           //    (picks up other users' items that the merge brought in)
           part.keys.forEach(k => {
             if (data[k] !== undefined) applyRemoteKey(k, data[k]);
           });
-        } catch (e) { console.warn("Partition save failed:", part.id, e); allOk = false; }
+        } catch (e) { console.warn("Partition save failed:", part.id, e); logSync("save", part.id + " " + (e.message || "network error"), false); allOk = false; }
       }
       lastSyncedRef.current = new Date().toISOString();
       if (allOk) {
@@ -650,35 +690,49 @@ function AviroDashboard() {
     lastSavedSnapshot.current[key] = JSON.parse(JSON.stringify(value));
   };
 
-  // Poll for remote partition changes every 15s
+  // Poll for remote partition changes every 15s — two-phase:
+  // Phase 1 fetches only timestamps (~1KB); Phase 2 fetches state ONLY for
+  // partitions that actually changed. Never downloads unchanged data.
   useEffect(() => {
     if (!hasLoaded) return;
     const poll = setInterval(async () => {
       if (isSavingRef.current) return; // Never poll-apply mid-save
       try {
-        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=like.p_%25&select=id,state,updated_at", {
+        // Phase 1: timestamps only
+        const tsRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=like.p_%25&select=id,updated_at", {
+          headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+        });
+        if (!tsRes.ok) return;
+        const tsRows = await tsRes.json();
+        const currentState = buildStateRef.current();
+        const staleIds = tsRows.filter(row => {
+          const part = PARTITIONS.find(p => p.id === row.id);
+          if (!part) return false;
+          const lastTs = partitionTimestamps.current[row.id];
+          if (lastTs && row.updated_at <= lastTs) return false; // Nothing newer
+          // Skip partitions with unsaved local edits — our merge-on-write save reconciles
+          if (pPartitionChanged(part, currentState, lastSavedSnapshot.current)) return false;
+          return true;
+        }).map(r => r.id);
+        if (staleIds.length === 0) return;
+
+        // Phase 2: fetch state only for changed partitions
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=in.(" + staleIds.join(",") + ")&select=id,state,updated_at", {
           headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
         });
         if (!res.ok) return;
         const rows = await res.json();
-        if (rows.length === 0) return;
-        const currentState = buildStateRef.current();
         let anyChange = false;
-
         rows.forEach(row => {
           const part = PARTITIONS.find(p => p.id === row.id);
           if (!part || !row.state) return;
-          const lastTs = partitionTimestamps.current[row.id];
-          if (lastTs && row.updated_at <= lastTs) return; // Nothing newer
-
-          // If this partition has unsaved local edits, skip — our own
-          // merge-on-write save will reconcile both sides shortly.
-          if (pPartitionChanged(part, currentState, lastSavedSnapshot.current)) return;
-
+          // Re-check dirty (state may have changed during fetch)
+          const freshState = buildStateRef.current();
+          if (pPartitionChanged(part, freshState, lastSavedSnapshot.current)) return;
           let changed = false;
           Object.entries(row.state).forEach(([key, value]) => {
             if (key === "_tombstones" || value === undefined) return;
-            if (JSON.stringify(currentState[key]) !== JSON.stringify(value)) {
+            if (JSON.stringify(freshState[key]) !== JSON.stringify(value)) {
               applyRemoteKey(key, value);
               changed = true;
             }
@@ -686,8 +740,8 @@ function AviroDashboard() {
           if (changed) anyChange = true;
           partitionTimestamps.current[row.id] = row.updated_at;
         });
-        if (anyChange) console.log("Applied remote changes from other users");
-      } catch (e) { console.warn("Poll failed:", e); }
+        if (anyChange) { console.log("Applied remote changes from other users"); logSync("poll-apply", staleIds.join(","), true); }
+      } catch (e) { console.warn("Poll failed:", e); logSync("poll", e.message || "network error", false); }
     }, 15000);
     return () => clearInterval(poll);
   }, [hasLoaded]);
@@ -4052,6 +4106,25 @@ function AviroDashboard() {
       const deleteProvAgreement = (agrId) => {
         updateProvider(prov.id, "agreements", provAgreements.filter(a => a.id !== agrId));
       };
+      // Upload agreement file to Supabase Storage — NEVER store base64 in state
+      // (inline base64 PDFs made the providers partition 7.5MB and broke sync)
+      const handleProvAgrFileUpload = async (agrId, file) => {
+        if (!file) return;
+        const base = supabaseUrl || DB_URL; const key = supabaseKey || DB_KEY;
+        const safeProv = (prov.name || prov.id).replace(/[^a-zA-Z0-9]/g, "_");
+        const safeFile = file.name.replace(/[^a-zA-Z0-9_.\-]/g, "_");
+        const path = "providers/" + safeProv + "/agreements/" + agrId + "_" + Date.now() + "_" + safeFile;
+        try {
+          const resp = await fetch(base + "/storage/v1/object/documents/" + path, {
+            method: "POST",
+            headers: { "apikey": key, "Authorization": "Bearer " + key, "Content-Type": file.type || "application/octet-stream", "x-upsert": "true" },
+            body: file,
+          });
+          if (!resp.ok) throw new Error("Upload failed: " + resp.status);
+          const publicUrl = base + "/storage/v1/object/public/documents/" + path;
+          updateProvider(prov.id, "agreements", provAgreements.map(a => a.id === agrId ? { ...a, fileName: file.name, fileUrl: publicUrl, fileData: "" } : a));
+        } catch (e) { alert("Upload error: " + e.message); }
+      };
 
       return (
         <div>
@@ -4114,11 +4187,13 @@ function AviroDashboard() {
                   {/* File upload */}
                   <div style={{ marginTop: 10 }}>
                     <label style={labelStyle3}>Agreement File</label>
-                    {agr.fileData ? (
+                    {(agr.fileUrl || agr.fileData) ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: 12, color: c.text }}>{agr.fileName}</span>
-                        <button onClick={() => { const a = document.createElement("a"); a.href = agr.fileData; a.download = agr.fileName; a.click(); }} style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 5, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Download</button>
-                        <button onClick={() => { updateProvAgreement(agr.id, "fileName", ""); updateProvAgreement(agr.id, "fileData", ""); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>Remove</button>
+                        {agr.fileUrl
+                          ? <a href={agr.fileUrl} target="_blank" rel="noopener" style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 5, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600, textDecoration: "none" }}>Download</a>
+                          : <button onClick={() => { const a = document.createElement("a"); a.href = agr.fileData; a.download = agr.fileName; a.click(); }} style={{ background: c.accentBg, border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 5, padding: "3px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Download</button>}
+                        <button onClick={() => { updateProvider(prov.id, "agreements", provAgreements.map(a => a.id === agr.id ? { ...a, fileName: "", fileUrl: "", fileData: "" } : a)); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>Remove</button>
                       </div>
                     ) : (
                       <div
@@ -4128,21 +4203,12 @@ function AviroDashboard() {
                           e.preventDefault();
                           e.currentTarget.style.borderColor = c.border;
                           const file = e.dataTransfer.files[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = ev => { updateProvAgreement(agr.id, "fileName", file.name); updateProvAgreement(agr.id, "fileData", ev.target.result); };
-                          reader.readAsDataURL(file);
+                          if (file) handleProvAgrFileUpload(agr.id, file);
                         }}
                         onClick={() => {
                           const input = document.createElement("input");
                           input.type = "file";
-                          input.onchange = ev => {
-                            const file = ev.target.files[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = e2 => { updateProvAgreement(agr.id, "fileName", file.name); updateProvAgreement(agr.id, "fileData", e2.target.result); };
-                            reader.readAsDataURL(file);
-                          };
+                          input.onchange = ev => { const file = ev.target.files[0]; if (file) handleProvAgrFileUpload(agr.id, file); };
                           input.click();
                         }}
                         style={{ border: `2px dashed ${c.border}`, borderRadius: 8, padding: "16px 20px", textAlign: "center", cursor: "pointer", fontSize: 12, color: c.textMuted, transition: "border-color 0.15s" }}
