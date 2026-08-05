@@ -146,6 +146,127 @@ const DocStatusBadge = ({ status }) => {
   return <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 3, background: s.bg, color: s.co }}>{s.l}</span>;
 };
 
+// ===== APP VERSION — bump on every deploy, must match version.json =====
+const APP_VERSION = "2026-08-05.1";
+
+// ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
+const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
+const pJeq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const pStripMts = (item) => {
+  if (!item || typeof item !== "object") return item;
+  const rest = Object.assign({}, item); delete rest._mts; return rest;
+};
+const pIsIdArray = (arr) => Array.isArray(arr) && arr.every(i => i && typeof i === "object" && i.id !== undefined && i.id !== null && i.id !== "");
+const pIsPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const pPickNewer = (l, r) => { if (!l) return r; if (!r) return l; return (l._mts || 0) >= (r._mts || 0) ? l : r; };
+
+function pStampModified(localArr, snapArr, now) {
+  const snapById = new Map();
+  (Array.isArray(snapArr) ? snapArr : []).forEach(i => { if (i && i.id !== undefined) snapById.set(i.id, i); });
+  return localArr.map(item => {
+    if (!item || item.id === undefined) return item;
+    const snap = snapById.get(item.id);
+    if (!snap) return item._mts ? item : Object.assign({}, item, { _mts: now });
+    if (!pJeq(pStripMts(item), pStripMts(snap))) return Object.assign({}, item, { _mts: now });
+    return item;
+  });
+}
+
+// Merge one partition: local + snapshot + remote → what to write.
+// Per-item newest-wins for ID arrays, per-key merge for object maps,
+// local-wins-if-changed for scalars. Tombstones handle deletions.
+function pMergePartition(part, localState, snapshot, remoteState, now) {
+  const data = {};
+  const tombstones = Object.assign({}, remoteState && remoteState._tombstones);
+
+  part.keys.forEach(key => {
+    const localVal = localState[key];
+    const snapVal = snapshot[key];
+    if (pIsIdArray(localVal) && Array.isArray(snapVal)) {
+      const localIds = new Set(localVal.map(i => i.id));
+      snapVal.forEach(i => { if (i && i.id !== undefined && !localIds.has(i.id)) tombstones[i.id] = now; });
+    }
+  });
+  Object.keys(tombstones).forEach(id => { if (now - tombstones[id] > P_TOMBSTONE_TTL) delete tombstones[id]; });
+
+  let changedVsLocal = false;
+  part.keys.forEach(key => {
+    const localVal = localState[key];
+    const remoteVal = remoteState ? remoteState[key] : undefined;
+    const snapVal = snapshot[key];
+    const localChanged = !pJeq(localVal, snapVal);
+
+    if (pIsIdArray(localVal) || (localVal === undefined && pIsIdArray(remoteVal)) || (Array.isArray(localVal) && localVal.length === 0 && pIsIdArray(remoteVal))) {
+      const lArr = pStampModified(Array.isArray(localVal) ? localVal : [], snapVal, now);
+      const rArr = Array.isArray(remoteVal) ? remoteVal : [];
+      const lById = new Map(lArr.map(i => [i.id, i]));
+      const allIds = [];
+      lArr.forEach(i => allIds.push(i.id));
+      rArr.forEach(i => { if (i && i.id !== undefined && !lById.has(i.id)) allIds.push(i.id); });
+      const rById = new Map(rArr.filter(i => i && i.id !== undefined).map(i => [i.id, i]));
+
+      const merged = [];
+      allIds.forEach(id => {
+        const l = lById.get(id), r = rById.get(id);
+        if (tombstones[id] !== undefined) {
+          const best = pPickNewer(l, r);
+          if (best && (best._mts || 0) > tombstones[id]) { delete tombstones[id]; merged.push(best); }
+          return;
+        }
+        merged.push(pPickNewer(l, r));
+      });
+      data[key] = merged;
+      if (!pJeq(merged, localVal)) changedVsLocal = true;
+    } else if (pIsPlainObject(localVal) && pIsPlainObject(remoteVal)) {
+      const out = Object.assign({}, remoteVal);
+      Object.keys(localVal).forEach(k => {
+        const changed = !pJeq(localVal[k], snapVal ? snapVal[k] : undefined);
+        if (changed || out[k] === undefined) out[k] = localVal[k];
+      });
+      if (pIsPlainObject(snapVal)) {
+        Object.keys(snapVal).forEach(k => {
+          if (!(k in localVal) && k in out && pJeq(out[k], snapVal[k])) delete out[k];
+        });
+      }
+      data[key] = out;
+      if (!pJeq(out, localVal)) changedVsLocal = true;
+    } else {
+      if (localChanged) data[key] = localVal;
+      else if (remoteVal !== undefined) { data[key] = remoteVal; if (!pJeq(remoteVal, localVal)) changedVsLocal = true; }
+      else data[key] = localVal;
+    }
+  });
+
+  data._tombstones = tombstones;
+  return { data, changedVsLocal };
+}
+
+function pBuildPartitionData(part, state) {
+  const data = {};
+  part.keys.forEach(k => { if (state[k] !== undefined) data[k] = state[k]; });
+  return data;
+}
+
+function pPartitionChanged(part, currentState, snapshot) {
+  return part.keys.some(k => !pJeq(currentState[k], snapshot[k]));
+}
+
+const P_PARTITIONS = [
+  { id: "p_clients", keys: ["gatewayClients"] },
+  { id: "p_providers", keys: ["providers", "providerGroups"] },
+  { id: "p_banking", keys: ["bankRelationships", "bankAccountsList"] },
+  { id: "p_corporate", keys: ["corporateEntities", "entityOverrides", "entityDocs", "entityServiceProviders", "entitySeals", "entityFooters", "entityIntraAgreements", "entityCorpAgreements"] },
+  { id: "p_cubepay", keys: ["cubePayDeals", "cubePayMonthlyData", "cubePayOperatingCosts", "cubePayPlaceholderCostPct", "cubePayOnboardClients"] },
+  { id: "p_brands", keys: ["gamingBrands"] },
+  { id: "p_signal", keys: ["quickJobs", "delegatedTasks", "signalSlots", "signalDayStarted", "signalDayFinished", "signalSlotNotes", "signalCompleted", "personalJobs"] },
+  { id: "p_notes", keys: ["globalNotes", "dailyProgress"] },
+  { id: "p_config", keys: ["supabaseUrl", "supabaseKey", "clickupToken", "contractDefaults", "metabaseConfigs", "integrations"] },
+  { id: "p_fx", keys: ["fxRates", "fxBaseCurrency", "fxLastUpdated"] },
+  { id: "p_pm", keys: ["pmPipeline", "pmRoadmap", "pmClients"] },
+  { id: "p_kyb", keys: ["kybProviderRequirements"] },
+  { id: "p_fees", keys: ["gatewayRevFees"] },
+];
+
 
 function AviroDashboard() {
   const [section, setSection] = useState("home");
@@ -328,33 +449,19 @@ function AviroDashboard() {
   const [pmSelectedClient, setPmSelectedClient] = useState("");
   const [pmClickUpTasks, setPmClickUpTasks] = useState({});
 
-  // ===== PARTITIONED PERSISTENCE =====
-  // State is split into independent partitions, each stored as its own Supabase row.
-  // Editing clients can never overwrite bank accounts, editing providers can never
-  // overwrite corporate entities, etc. Only same-partition concurrent edits can conflict.
+  // ===== PARTITIONED PERSISTENCE v2 (merge-on-write engine) =====
+  // Each data group is its own Supabase row. Saves fetch the remote row first
+  // and merge per-item (newest edit wins via _mts timestamps, deletions tracked
+  // via tombstones), so concurrent users cannot overwrite each other's work.
   const STORAGE_KEY = "aviro_dashboard_state";
   const DB_URL = "https://iosvevycvqviaonsxsnq.supabase.co";
   const DB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvc3ZldnljdnF2aWFvbnN4c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA5NDMsImV4cCI6MjA5MTc0Njk0M30.IMpyt1CqwKUbM4aW0vyC0fxgNUvyNOSzk3aP9v_Iw-Q";
   const [saveStatus, setSaveStatus] = useState("");
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const lastSyncedRef = useRef(null);
+  const PARTITIONS = P_PARTITIONS;
 
-  const PARTITIONS = [
-    { id: "p_clients", keys: ["gatewayClients"] },
-    { id: "p_providers", keys: ["providers", "providerGroups"] },
-    { id: "p_banking", keys: ["bankRelationships", "bankAccountsList"] },
-    { id: "p_corporate", keys: ["corporateEntities", "entityOverrides", "entityDocs", "entityServiceProviders", "entitySeals", "entityFooters", "entityIntraAgreements", "entityCorpAgreements"] },
-    { id: "p_cubepay", keys: ["cubePayDeals", "cubePayMonthlyData", "cubePayOperatingCosts", "cubePayPlaceholderCostPct", "cubePayOnboardClients"] },
-    { id: "p_brands", keys: ["gamingBrands"] },
-    { id: "p_signal", keys: ["quickJobs", "delegatedTasks", "signalSlots", "signalDayStarted", "signalDayFinished", "signalSlotNotes", "signalCompleted", "personalJobs"] },
-    { id: "p_notes", keys: ["globalNotes", "dailyProgress"] },
-    { id: "p_config", keys: ["supabaseUrl", "supabaseKey", "clickupToken", "contractDefaults", "metabaseConfigs", "integrations"] },
-    { id: "p_fx", keys: ["fxRates", "fxBaseCurrency", "fxLastUpdated"] },
-    { id: "p_pm", keys: ["pmPipeline", "pmRoadmap", "pmClients"] },
-    { id: "p_kyb", keys: ["kybProviderRequirements"] },
-    { id: "p_fees", keys: ["gatewayRevFees"] },
-  ];
-
-  // Build full state (still used for localStorage and migration)
+  // Build full state (used for localStorage cache and partition slicing)
   const buildState = useCallback(() => ({
     quickJobs, delegatedTasks, signalSlots, signalDayStarted, signalDayFinished,
     signalSlotNotes, signalCompleted, globalNotes, personalJobs,
@@ -375,62 +482,75 @@ function AviroDashboard() {
   const lastSavedSnapshot = useRef({});
   // Per-partition remote timestamps
   const partitionTimestamps = useRef({});
-  // Build a partition's data from current state
-  const buildPartitionData = (part, state) => {
-    const data = {};
-    part.keys.forEach(k => { if (state[k] !== undefined) data[k] = state[k]; });
-    return data;
-  };
+  // Concurrency guards
+  const isSavingRef = useRef(false);
+  const saveQueuedRef = useRef(false);
+  const retryTimerRef = useRef(null);
 
-  // Check if a partition has changed since last save
-  const partitionChanged = (part, currentState) => {
-    const current = buildPartitionData(part, currentState);
-    const last = buildPartitionData(part, lastSavedSnapshot.current);
-    return JSON.stringify(current) !== JSON.stringify(last);
-  };
+  const partitionChanged = (part, currentState) => pPartitionChanged(part, currentState, lastSavedSnapshot.current);
 
-  // Supabase helper: write one partition row
-  const writePartition = async (partId, data) => {
-    const now = new Date().toISOString();
-    const res = await fetch(DB_URL + "/rest/v1/dashboard_state", {
-      method: "POST",
-      headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify({ id: partId, state: data, updated_at: now, updated_by: "dashboard" }),
-    });
-    if (res.ok) partitionTimestamps.current[partId] = now;
-    return res.ok;
-  };
-
-  // Save: only write partitions that actually changed
+  // Save: fetch-merge-write each dirty partition
   const saveState = useCallback(async () => {
     if (!hasLoaded) return;
+    if (isSavingRef.current) { saveQueuedRef.current = true; return; }
     const currentState = buildState();
-    // Always save full state to localStorage as fast cache
+    // Always cache full state locally first (synchronous, never lost)
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(currentState)); } catch (e) {}
 
     const dirtyParts = PARTITIONS.filter(p => partitionChanged(p, currentState));
     if (dirtyParts.length === 0) return;
 
+    isSavingRef.current = true;
     try {
       setSaveStatus("saving");
       let allOk = true;
+      const now = Date.now();
       for (const part of dirtyParts) {
-        const data = buildPartitionData(part, currentState);
-        const ok = await writePartition(part.id, data);
-        if (!ok) allOk = false;
+        try {
+          // 1. Fetch current remote row
+          let remoteState = null;
+          try {
+            const fres = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq." + part.id + "&select=state", {
+              headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+            });
+            if (fres.ok) { const rows = await fres.json(); if (rows.length > 0) remoteState = rows[0].state; }
+          } catch (e) {}
+          // 2. Merge local + snapshot + remote
+          const { data } = pMergePartition(part, currentState, lastSavedSnapshot.current, remoteState, now);
+          // 3. Write merged result
+          const nowIso = new Date().toISOString();
+          const res = await fetch(DB_URL + "/rest/v1/dashboard_state", {
+            method: "POST",
+            headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify({ id: part.id, state: data, updated_at: nowIso, updated_by: "dashboard" }),
+          });
+          if (!res.ok) { allOk = false; continue; }
+          partitionTimestamps.current[part.id] = nowIso;
+          // 4. Apply merged result back to local state + snapshot
+          //    (picks up other users' items that the merge brought in)
+          part.keys.forEach(k => {
+            if (data[k] !== undefined) applyRemoteKey(k, data[k]);
+          });
+        } catch (e) { console.warn("Partition save failed:", part.id, e); allOk = false; }
       }
-      // Also write the full "shared" row as a backup/migration bridge
-      const now = new Date().toISOString();
-      await fetch(DB_URL + "/rest/v1/dashboard_state", {
-        method: "POST",
-        headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ id: "shared", state: currentState, updated_at: now, updated_by: "dashboard" }),
-      });
-      lastSyncedRef.current = now;
-      lastSavedSnapshot.current = JSON.parse(JSON.stringify(currentState));
-      if (allOk) { setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000); }
-      else { setSaveStatus("error"); }
-    } catch (e) { console.warn("Save failed:", e); setSaveStatus("error"); }
+      lastSyncedRef.current = new Date().toISOString();
+      if (allOk) {
+        setSaveStatus("saved"); setTimeout(() => setSaveStatus(""), 2000);
+        if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+      } else {
+        setSaveStatus("error");
+        // Retry failed saves in 5s — data stays dirty so it re-saves
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = setTimeout(() => { retryTimerRef.current = null; saveStateRef.current(); }, 5000);
+      }
+    } catch (e) {
+      console.warn("Save failed:", e); setSaveStatus("error");
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = setTimeout(() => { retryTimerRef.current = null; saveStateRef.current(); }, 5000);
+    } finally {
+      isSavingRef.current = false;
+      if (saveQueuedRef.current) { saveQueuedRef.current = false; setTimeout(() => saveStateRef.current(), 100); }
+    }
   }, [buildState, hasLoaded]);
 
   // Auto-save on state changes (debounced 1.5s)
@@ -448,31 +568,31 @@ function AviroDashboard() {
   useEffect(() => { buildStateRef.current = buildState; }, [buildState]);
   useEffect(() => { hasLoadedRef.current = hasLoaded; }, [hasLoaded]);
 
-  // Save on tab close / background
+  // Save on tab close / background.
+  // NOTE: sendBeacon CANNOT be used with Supabase — it can't send auth headers
+  // and application/json blobs are blocked cross-origin. fetch keepalive works.
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (!hasLoadedRef.current) return;
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(buildStateRef.current())); } catch (e) {}
-      // Best-effort per-partition saves via sendBeacon
+      const state = buildStateRef.current();
+      // Synchronous localStorage save — always succeeds
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+      // Last-resort direct writes of dirty partitions via fetch keepalive
       try {
-        const state = buildStateRef.current();
         PARTITIONS.forEach(part => {
-          if (partitionChanged(part, state)) {
-            const data = buildPartitionData(part, state);
-            const now = new Date().toISOString();
-            const payload = JSON.stringify({ id: part.id, state: data, updated_at: now, updated_by: "dashboard" });
-            navigator.sendBeacon(
-              DB_URL + "/rest/v1/dashboard_state?on_conflict=id",
-              new Blob([payload], { type: "application/json" })
-            );
-          }
+          if (!pPartitionChanged(part, state, lastSavedSnapshot.current)) return;
+          const now = Date.now();
+          const { data } = pMergePartition(part, state, lastSavedSnapshot.current, null, now);
+          fetch(DB_URL + "/rest/v1/dashboard_state", {
+            method: "POST", keepalive: true,
+            headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify({ id: part.id, state: data, updated_at: new Date(now).toISOString(), updated_by: "dashboard" }),
+          }).catch(() => {});
         });
-        // Also save the full shared row
-        const payload = JSON.stringify({ id: "shared", state: state, updated_at: new Date().toISOString(), updated_by: "dashboard" });
-        navigator.sendBeacon(DB_URL + "/rest/v1/dashboard_state?on_conflict=id", new Blob([payload], { type: "application/json" }));
       } catch (e) {}
     };
     const handleVisibilityChange = () => {
+      // Full merge-save while the tab is still alive (fires before close/switch)
       if (document.visibilityState === "hidden" && hasLoadedRef.current) saveStateRef.current();
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -530,68 +650,63 @@ function AviroDashboard() {
     lastSavedSnapshot.current[key] = JSON.parse(JSON.stringify(value));
   };
 
-  // Poll for remote changes every 15s — checks both partitions AND shared row
+  // Poll for remote partition changes every 15s
   useEffect(() => {
     if (!hasLoaded) return;
     const poll = setInterval(async () => {
+      if (isSavingRef.current) return; // Never poll-apply mid-save
       try {
-        // Fetch partition rows AND the shared row in one query
-        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?or=(id.like.p_%25,id.eq.shared)&select=id,state,updated_at&order=updated_at.desc", {
+        const res = await fetch(DB_URL + "/rest/v1/dashboard_state?id=like.p_%25&select=id,state,updated_at", {
           headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
         });
         if (!res.ok) return;
         const rows = await res.json();
         if (rows.length === 0) return;
-
-        const sharedRow = rows.find(r => r.id === "shared");
-        const partRows = rows.filter(r => r.id !== "shared");
         const currentState = buildStateRef.current();
         let anyChange = false;
 
-        // For each partition, figure out the best source: partition row or shared row
-        PARTITIONS.forEach(part => {
-          const partRow = partRows.find(r => r.id === part.id);
-          const lastTs = partitionTimestamps.current[part.id];
+        rows.forEach(row => {
+          const part = PARTITIONS.find(p => p.id === row.id);
+          if (!part || !row.state) return;
+          const lastTs = partitionTimestamps.current[row.id];
+          if (lastTs && row.updated_at <= lastTs) return; // Nothing newer
 
-          // Determine which source is newest for this partition
-          let bestSource = null;
-          let bestTs = lastTs || "";
-          if (partRow && partRow.state && partRow.updated_at > bestTs) {
-            bestSource = partRow.state;
-            bestTs = partRow.updated_at;
-          }
-          // Check if shared row is even newer (covers old-code users writing to shared)
-          if (sharedRow && sharedRow.state && sharedRow.updated_at > bestTs) {
-            const sharedData = {};
-            part.keys.forEach(k => { if (sharedRow.state[k] !== undefined) sharedData[k] = sharedRow.state[k]; });
-            if (Object.keys(sharedData).length > 0) {
-              bestSource = sharedData;
-              bestTs = sharedRow.updated_at;
-            }
-          }
-          if (!bestSource || bestTs === (lastTs || "")) return; // Nothing newer
+          // If this partition has unsaved local edits, skip — our own
+          // merge-on-write save will reconcile both sides shortly.
+          if (pPartitionChanged(part, currentState, lastSavedSnapshot.current)) return;
 
-          // Only apply if this partition is NOT dirty locally
-          const isDirty = partitionChanged(part, currentState);
-          if (isDirty) return;
-
-          // Apply each key from the best source
           let changed = false;
-          Object.entries(bestSource).forEach(([key, value]) => {
-            if (value === undefined) return;
+          Object.entries(row.state).forEach(([key, value]) => {
+            if (key === "_tombstones" || value === undefined) return;
             if (JSON.stringify(currentState[key]) !== JSON.stringify(value)) {
               applyRemoteKey(key, value);
               changed = true;
             }
           });
           if (changed) anyChange = true;
-          partitionTimestamps.current[part.id] = bestTs;
+          partitionTimestamps.current[row.id] = row.updated_at;
         });
         if (anyChange) console.log("Applied remote changes from other users");
       } catch (e) { console.warn("Poll failed:", e); }
     }, 15000);
     return () => clearInterval(poll);
   }, [hasLoaded]);
+
+  // Check for new app version every 3 minutes — stale open tabs are a major
+  // cause of "my changes don't save" (they run old buggy code for days)
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const res = await fetch("/version.json?cb=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) return;
+        const v = await res.json();
+        if (v.version && v.version !== APP_VERSION) setUpdateAvailable(true);
+      } catch (e) {}
+    };
+    const t = setInterval(checkVersion, 180000);
+    checkVersion();
+    return () => clearInterval(t);
+  }, []);
 
   // Apply state helper
   const applyState = useCallback((s) => {
@@ -658,7 +773,7 @@ function AviroDashboard() {
     if (hasLoaded) return;
     const load = async () => {
       let loaded = false;
-      // 1. Fetch BOTH partition rows AND shared row — use newest data per partition
+      // 1. Load from partition rows (authoritative)
       try {
         const res = await fetch(DB_URL + "/rest/v1/dashboard_state?or=(id.like.p_%25,id.eq.shared)&select=id,state,updated_at", {
           headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
@@ -668,31 +783,25 @@ function AviroDashboard() {
           const sharedRow = rows.find(r => r.id === "shared");
           const partRows = rows.filter(r => r.id !== "shared" && r.state);
 
-          if (partRows.length > 0 || (sharedRow && sharedRow.state)) {
+          if (partRows.length > 0) {
             const assembled = {};
-            // For each partition, use partition row or shared row — whichever is newer
-            PARTITIONS.forEach(part => {
-              const pRow = partRows.find(r => r.id === part.id);
-              const pTs = pRow ? pRow.updated_at : "";
-              const sTs = sharedRow ? sharedRow.updated_at : "";
-
-              if (pRow && pRow.state && pTs >= sTs) {
-                // Partition row is newer or same age — use it
-                Object.assign(assembled, pRow.state);
-                partitionTimestamps.current[part.id] = pTs;
-              } else if (sharedRow && sharedRow.state) {
-                // Shared row is newer — extract this partition's keys from it
-                part.keys.forEach(k => { if (sharedRow.state[k] !== undefined) assembled[k] = sharedRow.state[k]; });
-                partitionTimestamps.current[part.id] = sTs;
-              }
+            partRows.forEach(row => {
+              Object.entries(row.state).forEach(([k, v]) => {
+                if (k !== "_tombstones") assembled[k] = v;
+              });
+              partitionTimestamps.current[row.id] = row.updated_at;
             });
-            if (Object.keys(assembled).length > 0) {
-              console.log("Loaded state from Supabase (" + partRows.length + " partitions, shared row " + (sharedRow ? "present" : "absent") + ")");
-              applyState(assembled);
-              lastSavedSnapshot.current = JSON.parse(JSON.stringify(assembled));
-              lastSyncedRef.current = sharedRow ? sharedRow.updated_at : partRows[0].updated_at;
-              loaded = true;
-            }
+            console.log("Loaded state from " + partRows.length + " partition rows");
+            applyState(assembled);
+            lastSavedSnapshot.current = JSON.parse(JSON.stringify(assembled));
+            lastSyncedRef.current = new Date().toISOString();
+            loaded = true;
+          } else if (sharedRow && sharedRow.state && Object.keys(sharedRow.state).length > 0) {
+            // Legacy migration: no partitions yet, load from shared once
+            console.log("Loaded from legacy shared row (migrating to partitions on next save)");
+            applyState(sharedRow.state);
+            lastSavedSnapshot.current = {}; // all partitions dirty → migration write
+            loaded = true;
           }
         }
       } catch (e) { console.warn("Supabase load failed:", e); }
@@ -8690,6 +8799,20 @@ function AviroDashboard() {
   // ===== MAIN AUTHENTICATED APP =====
   return (
     <div style={{ display: "flex", height: "100vh", background: c.bg, fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: c.text, overflow: "hidden" }}>
+      {/* New version banner — stale open tabs run old code and cause save bugs */}
+      {updateAvailable && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999, background: "linear-gradient(135deg, #b45309, #d97706)", color: "#fff", padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 14, fontSize: 13, fontWeight: 600, boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }}>
+          <span>A new version of the dashboard is available. Please refresh to avoid sync issues.</span>
+          <button onClick={() => window.location.reload()} style={{ background: "#fff", border: "none", color: "#b45309", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Refresh Now</button>
+        </div>
+      )}
+      {/* Global save status indicator — always visible in bottom-right */}
+      {saveStatus && (
+        <div style={{ position: "fixed", bottom: 16, right: 16, zIndex: 9998, background: c.card, border: `1px solid ${saveStatus === "saved" ? "rgba(52,211,153,0.4)" : saveStatus === "saving" ? "rgba(251,191,36,0.4)" : "rgba(248,113,113,0.5)"}`, borderRadius: 8, padding: "8px 14px", fontSize: 11, fontWeight: 600, color: saveStatus === "saved" ? "#34d399" : saveStatus === "saving" ? "#fbbf24" : "#f87171", boxShadow: "0 4px 16px rgba(0,0,0,0.3)", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "currentColor", animation: saveStatus === "saving" ? "pulse 1s infinite" : "none" }} />
+          {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "All changes saved" : "Save failed — retrying in 5s"}
+        </div>
+      )}
       {section !== "home" && (
       <div style={{ width: collapsed ? 60 : 240, background: c.surface, borderRight: `1px solid ${c.border}`, display: "flex", flexDirection: "column", transition: "width 0.25s ease", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ padding: collapsed ? "20px 10px" : "20px 18px", borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }} onClick={() => setCollapsed(!collapsed)}>
