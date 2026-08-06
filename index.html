@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-08-05.3";
+const APP_VERSION = "2026-08-05.4";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -178,6 +178,17 @@ function pStampModified(localArr, snapArr, now) {
 function pMergePartition(part, localState, snapshot, remoteState, now) {
   const data = {};
   const tombstones = Object.assign({}, remoteState && remoteState._tombstones);
+
+  // Clock-skew guard: never stamp below the max _mts already present.
+  // A user with a slow clock must still win conflicts for their newest edits.
+  let maxMts = 0;
+  part.keys.forEach(key => {
+    [remoteState && remoteState[key], snapshot[key]].forEach(arr => {
+      if (Array.isArray(arr)) arr.forEach(i => { if (i && i._mts && i._mts > maxMts) maxMts = i._mts; });
+    });
+  });
+  Object.values(tombstones).forEach(ts => { if (ts > maxMts) maxMts = ts; });
+  now = Math.max(now, maxMts + 1);
 
   part.keys.forEach(key => {
     const localVal = localState[key];
@@ -686,6 +697,9 @@ function AviroDashboard() {
     else if (key === "pmClients") setPmClients(value);
     else if (key === "kybProviderRequirements") setKybProviderRequirements(value);
     else if (key === "gatewayRevFees") setGatewayRevFees(value);
+    else if (key === "supabaseUrl") setSupabaseUrl(value);
+    else if (key === "supabaseKey") setSupabaseKey(value);
+    else if (key === "clickupToken") setClickupToken(value);
     // Update snapshot so this key isn't seen as dirty on next save
     lastSavedSnapshot.current[key] = JSON.parse(JSON.stringify(value));
   };
