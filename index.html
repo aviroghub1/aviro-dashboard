@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-08-05.2";
+const APP_VERSION = "2026-08-05.3";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -761,6 +761,59 @@ function AviroDashboard() {
     checkVersion();
     return () => clearInterval(t);
   }, []);
+
+  // Automated daily backup — one snapshot row per day, 14-day retention.
+  // If anything is ever lost or corrupted, we can restore from any day.
+  useEffect(() => {
+    if (!hasLoaded) return;
+    const runBackup = async () => {
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        // Skip if today's backup already exists (first tab of the day does it)
+        const check = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.backup_" + today + "&select=id", {
+          headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+        });
+        if (check.ok) { const rows = await check.json(); if (rows.length > 0) return; }
+        // Assemble current server-side state from partitions (not local state —
+        // backup what's actually persisted)
+        const pres = await fetch(DB_URL + "/rest/v1/dashboard_state?id=like.p_%25&select=id,state", {
+          headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+        });
+        if (!pres.ok) return;
+        const parts = await pres.json();
+        const assembled = {};
+        parts.forEach(row => { Object.entries(row.state || {}).forEach(([k, v]) => { if (k !== "_tombstones") assembled[k] = v; }); });
+        if (Object.keys(assembled).length === 0) return;
+        await fetch(DB_URL + "/rest/v1/dashboard_state", {
+          method: "POST",
+          headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify({ id: "backup_" + today, state: assembled, updated_at: new Date().toISOString(), updated_by: getIdentity() }),
+        });
+        logSync("backup", "backup_" + today, true);
+        // Prune backups older than 14 days
+        const cutoff = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+        const list = await fetch(DB_URL + "/rest/v1/dashboard_state?id=like.backup_%25&select=id", {
+          headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+        });
+        if (list.ok) {
+          const backups = await list.json();
+          for (const b of backups) {
+            const date = b.id.replace("backup_", "");
+            if (date < cutoff) {
+              await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq." + b.id, {
+                method: "DELETE",
+                headers: { "apikey": DB_KEY, "Authorization": "Bearer " + DB_KEY },
+              });
+            }
+          }
+        }
+      } catch (e) { console.warn("Backup failed:", e); logSync("backup", e.message || "error", false); }
+    };
+    // Run 30s after load (let things settle), then check every 6 hours
+    const initial = setTimeout(runBackup, 30000);
+    const recurring = setInterval(runBackup, 6 * 3600000);
+    return () => { clearTimeout(initial); clearInterval(recurring); };
+  }, [hasLoaded]);
 
   // Apply state helper
   const applyState = useCallback((s) => {
