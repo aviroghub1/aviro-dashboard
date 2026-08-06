@@ -18,7 +18,9 @@ const CORS_HEADERS = {
 };
 
 async function fetchDashboardState() {
-  const res = await fetch(`${DB_URL}/rest/v1/dashboard_state?id=eq.shared&select=state,updated_at`, {
+  // Assemble state from partition rows (p_*) — the authoritative store.
+  // The legacy "shared" row is no longer kept up to date.
+  const res = await fetch(`${DB_URL}/rest/v1/dashboard_state?id=like.p_%25&select=id,state,updated_at`, {
     headers: {
       apikey: DB_KEY,
       Authorization: `Bearer ${DB_KEY}`,
@@ -27,7 +29,17 @@ async function fetchDashboardState() {
   if (!res.ok) throw new Error(`Supabase error: ${res.status}`);
   const rows = await res.json();
   if (!rows || rows.length === 0) throw new Error("No dashboard state found");
-  return { state: rows[0].state, updatedAt: rows[0].updated_at };
+  const state = {};
+  let updatedAt = "";
+  rows.forEach(row => {
+    if (row.state) {
+      Object.entries(row.state).forEach(([k, v]) => {
+        if (k !== "_tombstones") state[k] = v;
+      });
+    }
+    if (row.updated_at > updatedAt) updatedAt = row.updated_at;
+  });
+  return { state, updatedAt };
 }
 
 function extractSection(state, section, query) {
