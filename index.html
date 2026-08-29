@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-08-05.5";
+const APP_VERSION = "2026-08-29.1";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -4508,6 +4508,55 @@ function AviroDashboard() {
                           {renderSvcTiers(svc.payoutTiers, "payoutTiers", "payoutTierType")}
                         </div>
                       )}
+
+                      {/* Per-currency rate overrides */}
+                      {svc.serviceType1 && (() => {
+                        const cfEnabled = !!svc.currencyFeesEnabled;
+                        const cFees = svc.currencyFees || [];
+                        // Currencies available: the service's processing currencies, or all if none set
+                        const availCurs = (svc.processingCurrencies || []).length > 0 ? svc.processingCurrencies : FEE_CURRENCIES;
+                        const unusedCurs = availCurs.filter(cur => !cFees.some(f => f.currency === cur));
+                        return (
+                          <div style={{ marginTop: 12, borderTop: `1px solid ${c.border}`, paddingTop: 10 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <label style={{ ...labelStyle3, margin: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                                <input type="checkbox" checked={cfEnabled} onChange={e => updateService(prov.id, svc.id, "currencyFeesEnabled", e.target.checked)} style={{ accentColor: c.accent }} />
+                                Different rates per currency
+                              </label>
+                              {cfEnabled && unusedCurs.length > 0 && (
+                                <select value="" onChange={e => {
+                                  if (!e.target.value) return;
+                                  updateService(prov.id, svc.id, "currencyFees", [...cFees, { id: "cf-" + Date.now(), currency: e.target.value, payinPct: "", payinTxFee: "", payoutPct: "", payoutTxFee: "" }]);
+                                }} style={{ ...inputStyle3, fontSize: 10, padding: "3px 8px", width: "auto" }}>
+                                  <option value="">+ Add Currency</option>
+                                  {unusedCurs.map(cur => <option key={cur} value={cur}>{cur}</option>)}
+                                </select>
+                              )}
+                            </div>
+                            {cfEnabled && cFees.length === 0 && (
+                              <div style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic", marginTop: 6 }}>Add a currency to set specific rates. Currencies without overrides use the standard rates above.</div>
+                            )}
+                            {cfEnabled && cFees.map(cf => (
+                              <div key={cf.id} style={{ background: c.card, borderRadius: 6, border: `1px solid ${c.border}`, padding: "8px 10px", marginTop: 6 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: "#34d399" }}>{cf.currency}</span>
+                                  <button onClick={() => updateService(prov.id, svc.id, "currencyFees", cFees.filter(f => f.id !== cf.id))} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>✕</button>
+                                </div>
+                                <div style={{ display: "grid", gridTemplateColumns: showPayin && showPayout ? "1fr 1fr 1fr 1fr" : "1fr 1fr", gap: 6 }}>
+                                  {showPayin && (<>
+                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payin Rate (%)</label><input value={cf.payinPct || ""} onChange={e => updateService(prov.id, svc.id, "currencyFees", cFees.map(f => f.id === cf.id ? { ...f, payinPct: e.target.value } : f))} placeholder="%" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
+                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payin TX Fee</label><input value={cf.payinTxFee || ""} onChange={e => updateService(prov.id, svc.id, "currencyFees", cFees.map(f => f.id === cf.id ? { ...f, payinTxFee: e.target.value } : f))} placeholder="Amount" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
+                                  </>)}
+                                  {showPayout && (<>
+                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payout Rate (%)</label><input value={cf.payoutPct || ""} onChange={e => updateService(prov.id, svc.id, "currencyFees", cFees.map(f => f.id === cf.id ? { ...f, payoutPct: e.target.value } : f))} placeholder="%" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
+                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payout TX Fee</label><input value={cf.payoutTxFee || ""} onChange={e => updateService(prov.id, svc.id, "currencyFees", cFees.map(f => f.id === cf.id ? { ...f, payoutTxFee: e.target.value } : f))} placeholder="Amount" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
+                                  </>)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Settlement */}
