@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-08-29.2";
+const APP_VERSION = "2026-08-29.3";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -1961,7 +1961,7 @@ function AviroDashboard() {
   const SETTLEMENT_TERMS = ["Daily", "3 Days", "4 Days", "5 Days", "Weekly", "Monthly"];
   const BANK_ACCT_TYPES = ["B2B", "C2B", "B2C", "Treasury"];
   const REVENUE_SHARE_FROM = ["Net Hold", "GGR", "NGR"];
-  const CLIENT_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "AED", "MYR", "THB", "VND", "BTC", "USDT", "Other"];
+  const CLIENT_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "NOK", "SEK", "DKK", "BRL", "ARS", "MXN", "AED", "SAR", "BHD", "KWD", "QAR", "JOD", "RUB", "UAH", "BYN", "KZT", "UZS", "AZN", "AMD", "GEL", "KGS", "TJS", "TMT", "MDL", "MYR", "THB", "VND", "BTC", "USDT", "Other"];
 
   const [newClientName, setNewClientName] = useState("");
   const [showAddClient, setShowAddClient] = useState(false);
@@ -4043,7 +4043,7 @@ function AviroDashboard() {
     };
     const GROUP_PLATFORMS_P = ["Signal", "Telegram", "WhatsApp", "Lark", "Teams", "Other"];
     const SETTLEMENT_TERMS_P = ["T+0", "T+1", "T+2", "T+3", "T+4", "T+5", "T+7", "Weekly", "Bi-Weekly", "Monthly"];
-    const FEE_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "AED", "MYR", "THB", "VND", "BTC", "USDT"];
+    const FEE_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "NOK", "SEK", "DKK", "BRL", "ARS", "MXN", "AED", "SAR", "BHD", "KWD", "QAR", "JOD", "RUB", "UAH", "BYN", "KZT", "UZS", "AZN", "AMD", "GEL", "KGS", "TJS", "TMT", "MDL", "MYR", "THB", "VND", "BTC", "USDT"];
     const inputStyle3 = { fontSize: 13, padding: "8px 11px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" };
     const labelStyle3 = { display: "block", fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.05em" };
     const sectionHeader3 = { fontSize: 12, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" };
