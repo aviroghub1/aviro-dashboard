@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-08-29.1";
+const APP_VERSION = "2026-08-29.2";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -4212,6 +4212,8 @@ function AviroDashboard() {
 
             const renderSvcTiers = (tiers, tiersField, tierTypeField) => {
               const tierTypeVal = svc[tierTypeField] || "tiers";
+              // Default TX fee for new tiers = the main TX fee for this direction
+              const defTxFee = tiersField === "payinTiers" ? (svc.payinTxFee || "") : (svc.payoutTxFee || "");
               return (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -4222,7 +4224,7 @@ function AviroDashboard() {
                       </button>
                     </div>
                     <button onClick={() => {
-                      const newTier = { id: `tier-${Date.now()}`, upTo: "", rate: "" };
+                      const newTier = { id: `tier-${Date.now()}`, upTo: "", rate: "", txFee: defTxFee };
                       updateService(prov.id, svc.id, tiersField, [...(tiers || []), newTier]);
                     }} style={{ fontSize: 9, background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>+ Add Tier</button>
                   </div>
@@ -4233,6 +4235,8 @@ function AviroDashboard() {
                       <span style={{ fontSize: 10, color: c.textMuted }}>{"→"}</span>
                       <input value={tier.rate || ""} onChange={e => updateService(prov.id, svc.id, tiersField, (tiers || []).map(t => t.id === tier.id ? { ...t, rate: e.target.value } : t))} placeholder="Rate %" style={{ ...inputStyle3, width: 80, fontSize: 12 }} />
                       <span style={{ fontSize: 10, color: c.textMuted }}>%</span>
+                      <input value={tier.txFee !== undefined ? tier.txFee : defTxFee} onChange={e => updateService(prov.id, svc.id, tiersField, (tiers || []).map(t => t.id === tier.id ? { ...t, txFee: e.target.value } : t))} placeholder="TX Fee" title="TX fee for this tier (defaults to the main TX fee)" style={{ ...inputStyle3, width: 70, fontSize: 12 }} />
+                      <span style={{ fontSize: 10, color: c.textMuted }}>TX</span>
                       <button onClick={() => updateService(prov.id, svc.id, tiersField, (tiers || []).filter(t => t.id !== tier.id))} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>{"✕"}</button>
                     </div>
                   ))}
@@ -4536,7 +4540,27 @@ function AviroDashboard() {
                             {cfEnabled && cFees.length === 0 && (
                               <div style={{ fontSize: 10, color: c.textMuted, fontStyle: "italic", marginTop: 6 }}>Add a currency to set specific rates. Currencies without overrides use the standard rates above.</div>
                             )}
-                            {cfEnabled && cFees.map(cf => (
+                            {cfEnabled && cFees.map(cf => {
+                              const updCf = (patch) => updateService(prov.id, svc.id, "currencyFees", cFees.map(f => f.id === cf.id ? { ...f, ...patch } : f));
+                              // Mini tier editor for a currency override (payin or payout)
+                              const renderCfTiers = (field, label, defTx) => (
+                                <div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                                    <span style={{ fontSize: 9, fontWeight: 700, color: c.textMuted, textTransform: "uppercase" }}>{label} Tiers</span>
+                                    <button onClick={() => updCf({ [field]: [...(cf[field] || []), { id: "cft-" + Date.now(), upTo: "", rate: "", txFee: defTx }] })} style={{ fontSize: 9, background: "transparent", border: `1px solid ${c.accent}40`, color: c.accent, borderRadius: 4, padding: "1px 5px", cursor: "pointer" }}>+ Tier</button>
+                                  </div>
+                                  {(cf[field] || []).map(t => (
+                                    <div key={t.id} style={{ display: "flex", gap: 4, marginBottom: 3, alignItems: "center" }}>
+                                      <span style={{ fontSize: 9, color: c.textMuted }}>Up to</span>
+                                      <input value={t.upTo || ""} onChange={e => updCf({ [field]: cf[field].map(x => x.id === t.id ? { ...x, upTo: e.target.value } : x) })} placeholder="Volume" style={{ ...inputStyle3, width: 70, fontSize: 10 }} />
+                                      <input value={t.rate || ""} onChange={e => updCf({ [field]: cf[field].map(x => x.id === t.id ? { ...x, rate: e.target.value } : x) })} placeholder="%" style={{ ...inputStyle3, width: 45, fontSize: 10 }} />
+                                      <input value={t.txFee !== undefined ? t.txFee : defTx} onChange={e => updCf({ [field]: cf[field].map(x => x.id === t.id ? { ...x, txFee: e.target.value } : x) })} placeholder="TX" title="TX fee for this tier" style={{ ...inputStyle3, width: 45, fontSize: 10 }} />
+                                      <button onClick={() => updCf({ [field]: cf[field].filter(x => x.id !== t.id) })} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 10 }}>✕</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                              return (
                               <div key={cf.id} style={{ background: c.card, borderRadius: 6, border: `1px solid ${c.border}`, padding: "8px 10px", marginTop: 6 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                                   <span style={{ fontSize: 11, fontWeight: 700, color: "#34d399" }}>{cf.currency}</span>
@@ -4544,16 +4568,21 @@ function AviroDashboard() {
                                 </div>
                                 <div style={{ display: "grid", gridTemplateColumns: showPayin && showPayout ? "1fr 1fr 1fr 1fr" : "1fr 1fr", gap: 6 }}>
                                   {showPayin && (<>
-                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payin Rate (%)</label><input value={cf.payinPct || ""} onChange={e => updateService(prov.id, svc.id, "currencyFees", cFees.map(f => f.id === cf.id ? { ...f, payinPct: e.target.value } : f))} placeholder="%" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
-                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payin TX Fee</label><input value={cf.payinTxFee || ""} onChange={e => updateService(prov.id, svc.id, "currencyFees", cFees.map(f => f.id === cf.id ? { ...f, payinTxFee: e.target.value } : f))} placeholder="Amount" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
+                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payin Rate (%)</label><input value={cf.payinPct || ""} onChange={e => updCf({ payinPct: e.target.value })} placeholder="%" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
+                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payin TX Fee</label><input value={cf.payinTxFee || ""} onChange={e => updCf({ payinTxFee: e.target.value })} placeholder="Amount" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
                                   </>)}
                                   {showPayout && (<>
-                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payout Rate (%)</label><input value={cf.payoutPct || ""} onChange={e => updateService(prov.id, svc.id, "currencyFees", cFees.map(f => f.id === cf.id ? { ...f, payoutPct: e.target.value } : f))} placeholder="%" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
-                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payout TX Fee</label><input value={cf.payoutTxFee || ""} onChange={e => updateService(prov.id, svc.id, "currencyFees", cFees.map(f => f.id === cf.id ? { ...f, payoutTxFee: e.target.value } : f))} placeholder="Amount" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
+                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payout Rate (%)</label><input value={cf.payoutPct || ""} onChange={e => updCf({ payoutPct: e.target.value })} placeholder="%" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
+                                    <div><label style={{ ...labelStyle3, fontSize: 9 }}>Payout TX Fee</label><input value={cf.payoutTxFee || ""} onChange={e => updCf({ payoutTxFee: e.target.value })} placeholder="Amount" style={{ ...inputStyle3, width: "100%", fontSize: 11 }} /></div>
                                   </>)}
                                 </div>
+                                <div style={{ display: "grid", gridTemplateColumns: showPayin && showPayout ? "1fr 1fr" : "1fr", gap: 8, marginTop: 6 }}>
+                                  {showPayin && renderCfTiers("payinTiers", "Payin", cf.payinTxFee || svc.payinTxFee || "")}
+                                  {showPayout && renderCfTiers("payoutTiers", "Payout", cf.payoutTxFee || svc.payoutTxFee || "")}
+                                </div>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         );
                       })()}
