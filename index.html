@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-08-29.5";
+const APP_VERSION = "2026-08-29.6";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -4048,6 +4048,28 @@ function AviroDashboard() {
     const labelStyle3 = { display: "block", fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.05em" };
     const sectionHeader3 = { fontSize: 12, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" };
 
+    // Build display lines for volume tiers + per-currency overrides (used in
+    // the overview table and the print — plain strings, safe for both)
+    const buildFeeExtras = (s) => {
+      const fmt = (n) => { const x = parseFloat(String(n).replace(/,/g, "")); return isNaN(x) ? n : x.toLocaleString(); };
+      const tStr = (tiers, defTx, tierType) => (tiers || []).map(t => {
+        const tx = (t.txFee !== undefined && t.txFee !== "") ? t.txFee : (defTx || "");
+        return (tierType === "targets" ? "at " : "≤") + (t.upTo ? fmt(t.upTo) : "?") + ": " + (t.rate || "?") + "%" + (tx ? " + " + fmt(tx) + " TX" : "");
+      }).join("; ");
+      const tierLines = [];
+      if ((s.payinTiers || []).length > 0) tierLines.push("Payin " + (s.payinTierType === "targets" ? "targets" : "tiers") + " — " + tStr(s.payinTiers, s.payinTxFee, s.payinTierType));
+      if ((s.payoutTiers || []).length > 0) tierLines.push("Payout " + (s.payoutTierType === "targets" ? "targets" : "tiers") + " — " + tStr(s.payoutTiers, s.payoutTxFee, s.payoutTierType));
+      const cfLines = (s.currencyFeesEnabled ? (s.currencyFees || []) : []).map(cf => {
+        const bits = [];
+        if (cf.payinPct || cf.payinTxFee) bits.push("Payin " + (cf.payinPct ? cf.payinPct + "%" : "") + (cf.payinTxFee ? (cf.payinPct ? " + " : "") + fmt(cf.payinTxFee) : ""));
+        if ((cf.payinTiers || []).length > 0) bits.push("tiers: " + tStr(cf.payinTiers, cf.payinTxFee || s.payinTxFee));
+        if (cf.payoutPct || cf.payoutTxFee) bits.push("Payout " + (cf.payoutPct ? cf.payoutPct + "%" : "") + (cf.payoutTxFee ? (cf.payoutPct ? " + " : "") + fmt(cf.payoutTxFee) : ""));
+        if ((cf.payoutTiers || []).length > 0) bits.push("payout tiers: " + tStr(cf.payoutTiers, cf.payoutTxFee || s.payoutTxFee));
+        return bits.length > 0 ? cf.currency + ": " + bits.join(" · ") : null;
+      }).filter(Boolean);
+      return { tierLines, cfLines };
+    };
+
     const entityNames = corporateEntities.map(e => e.name);
 
     const updateProvider = (provId, field, val) => setProviders(prev => prev.map(p => p.id === provId ? { ...p, [field]: val } : p));
@@ -4787,6 +4809,9 @@ function AviroDashboard() {
                   if (s.serviceType1 === "Payin" || s.serviceType1 === "Both") { var payinStr = "Payin: "; var payinCur = s.payinTxCurrency === "Processing" ? ((s.processingCurrencies || [])[0] || "Proc.") : (s.payinTxCurrency || "USD"); if (s.payinPct) payinStr += s.payinPct + "%"; if (s.payinTxFee) payinStr += (s.payinPct ? " + " : "") + payinCur + " " + fmtNum(s.payinTxFee); if (s.payinICC) payinStr += " (ICC++)"; if (s.payinPct || s.payinTxFee) ratesParts.push(payinStr); }
                   if (s.serviceType1 === "Payout" || s.serviceType1 === "Both") { var payoutStr = "Payout: "; var payoutCur = s.payoutTxCurrency === "Processing" ? ((s.processingCurrencies || [])[0] || "Proc.") : (s.payoutTxCurrency || "USD"); if (s.payoutPct) payoutStr += s.payoutPct + "%"; if (s.payoutTxFee) payoutStr += (s.payoutPct ? " + " : "") + payoutCur + " " + fmtNum(s.payoutTxFee); if (s.payoutICC) payoutStr += " (ICC++)"; if (s.payoutPct || s.payoutTxFee) ratesParts.push(payoutStr); }
                   var ratesStr = ratesParts.length > 0 ? ratesParts.join(" / ") : "—";
+                  var feeExtras = buildFeeExtras(s);
+                  var extraLines = feeExtras.tierLines.concat(feeExtras.cfLines);
+                  if (extraLines.length > 0) ratesStr += '<div style="font-size:10px;color:#666;margin-top:3px">' + extraLines.join("<br>") + "</div>";
                   var rrStr = s.rollingReserveEnabled ? (s.rollingReservePct || "?") + "% / " + (s.rollingReserveTerm || "?") + " days" + (s.rollingReserveCap ? " (cap: " + fmtNum(s.rollingReserveCap) + " " + (s.rollingReserveCapCurrency || "EUR") + ")" : "") : "—";
                   var settleStr = [s.settlementTerms, s.settlementMethod, s.settlementFee ? s.settlementFee + "%" : ""].filter(Boolean).join(" · ") || "—";
                   return [s.providerName, s.name || "—", s.serviceType1 || "—", channelStr, regionStr, (s.processingCurrencies || []).join(", ") || "—", agrStr, ratesStr, rrStr, settleStr, s.referralAgreement ? "Yes" : "No", s.canResell ? "Yes" : "No"];
@@ -4969,6 +4994,8 @@ function AviroDashboard() {
                       if (s.serviceType1 === "Payin" || s.serviceType1 === "Both") { var payinCur = s.payinTxCurrency === "Processing" ? ((s.processingCurrencies || [])[0] || "Proc.") : (s.payinTxCurrency || "USD"); var payinStr = "Payin: "; if (s.payinPct) payinStr += s.payinPct + "%"; if (s.payinTxFee) payinStr += (s.payinPct ? " + " : "") + payinCur + " " + fmtNum(s.payinTxFee); if (s.payinICC) payinStr += " (ICC++)"; if (s.payinPct || s.payinTxFee) ratesParts.push(payinStr); }
                       if (s.serviceType1 === "Payout" || s.serviceType1 === "Both") { var payoutCur = s.payoutTxCurrency === "Processing" ? ((s.processingCurrencies || [])[0] || "Proc.") : (s.payoutTxCurrency || "USD"); var payoutStr = "Payout: "; if (s.payoutPct) payoutStr += s.payoutPct + "%"; if (s.payoutTxFee) payoutStr += (s.payoutPct ? " + " : "") + payoutCur + " " + fmtNum(s.payoutTxFee); if (s.payoutICC) payoutStr += " (ICC++)"; if (s.payoutPct || s.payoutTxFee) ratesParts.push(payoutStr); }
                       var ratesDisplay = ratesParts.length > 0 ? ratesParts.join(" / ") : "—";
+                      var feeExtras = buildFeeExtras(s);
+                      var extraLines = feeExtras.tierLines.concat(feeExtras.cfLines);
                       var rrDisplay = s.rollingReserveEnabled ? (s.rollingReservePct || "?") + "% / " + (s.rollingReserveTerm || "?") + " days" + (s.rollingReserveCap ? " (cap: " + fmtNum(s.rollingReserveCap) + " " + (s.rollingReserveCapCurrency || "EUR") + ")" : "") : "—";
                       var settleDisplay = [s.settlementTerms, s.settlementMethod, s.settlementFee ? s.settlementFee + "%" : ""].filter(Boolean).join(" · ") || "—";
                       var tdS = { padding: "8px 12px", borderBottom: "1px solid " + c.border };
@@ -4981,7 +5008,14 @@ function AviroDashboard() {
                           <td style={{ ...tdS, fontSize: 11, maxWidth: 200 }}>{regionDisplay}</td>
                           <td style={{ ...tdS, fontSize: 11 }}>{(s.processingCurrencies || []).join(", ") || "—"}</td>
                           <td style={{ ...tdS, fontSize: 11 }}>{agrDisplay}</td>
-                          <td style={{ ...tdS, fontSize: 11 }}>{ratesDisplay}</td>
+                          <td style={{ ...tdS, fontSize: 11 }}>
+                            {ratesDisplay}
+                            {extraLines.length > 0 && (
+                              <div style={{ fontSize: 10, color: c.textMuted, marginTop: 3 }}>
+                                {extraLines.map(function(ln, li) { return <div key={li}>{ln}</div>; })}
+                              </div>
+                            )}
+                          </td>
                           <td style={{ ...tdS, fontSize: 11 }}>{rrDisplay}</td>
                           <td style={{ ...tdS, fontSize: 11 }}>{settleDisplay}</td>
                           <td style={{ ...tdS, textAlign: "center" }}>{s.referralAgreement ? <span style={{ color: "#34d399", fontWeight: 700 }}>Yes</span> : <span style={{ color: c.textMuted }}>No</span>}</td>
