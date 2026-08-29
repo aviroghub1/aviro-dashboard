@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-08-29.4";
+const APP_VERSION = "2026-08-29.5";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -1961,7 +1961,7 @@ function AviroDashboard() {
   const SETTLEMENT_TERMS = ["Daily", "3 Days", "4 Days", "5 Days", "Weekly", "Monthly"];
   const BANK_ACCT_TYPES = ["B2B", "C2B", "B2C", "Treasury"];
   const REVENUE_SHARE_FROM = ["Net Hold", "GGR", "NGR"];
-  const CLIENT_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "NOK", "SEK", "DKK", "BRL", "ARS", "MXN", "AED", "SAR", "BHD", "KWD", "QAR", "JOD", "RUB", "UAH", "BYN", "KZT", "UZS", "AZN", "AMD", "GEL", "KGS", "TJS", "TMT", "MDL", "INR", "MYR", "THB", "VND", "BTC", "USDT", "Other"];
+  const CLIENT_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "NOK", "SEK", "DKK", "TRY", "BRL", "ARS", "MXN", "AED", "SAR", "BHD", "KWD", "QAR", "JOD", "RUB", "UAH", "BYN", "KZT", "UZS", "AZN", "AMD", "GEL", "KGS", "TJS", "TMT", "MDL", "INR", "JPY", "MYR", "THB", "VND", "BTC", "USDT", "Other"];
 
   const [newClientName, setNewClientName] = useState("");
   const [showAddClient, setShowAddClient] = useState(false);
@@ -4043,7 +4043,7 @@ function AviroDashboard() {
     };
     const GROUP_PLATFORMS_P = ["Signal", "Telegram", "WhatsApp", "Lark", "Teams", "Other"];
     const SETTLEMENT_TERMS_P = ["T+0", "T+1", "T+2", "T+3", "T+4", "T+5", "T+7", "Weekly", "Bi-Weekly", "Monthly"];
-    const FEE_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "NOK", "SEK", "DKK", "BRL", "ARS", "MXN", "AED", "SAR", "BHD", "KWD", "QAR", "JOD", "RUB", "UAH", "BYN", "KZT", "UZS", "AZN", "AMD", "GEL", "KGS", "TJS", "TMT", "MDL", "INR", "MYR", "THB", "VND", "BTC", "USDT"];
+    const FEE_CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "CHF", "NOK", "SEK", "DKK", "TRY", "BRL", "ARS", "MXN", "AED", "SAR", "BHD", "KWD", "QAR", "JOD", "RUB", "UAH", "BYN", "KZT", "UZS", "AZN", "AMD", "GEL", "KGS", "TJS", "TMT", "MDL", "INR", "JPY", "MYR", "THB", "VND", "BTC", "USDT"];
     const inputStyle3 = { fontSize: 13, padding: "8px 11px", borderRadius: 6, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none" };
     const labelStyle3 = { display: "block", fontSize: 11, fontWeight: 600, color: c.textMuted, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.05em" };
     const sectionHeader3 = { fontSize: 12, fontWeight: 700, color: c.accent, marginBottom: 8, textTransform: "uppercase" };
@@ -4388,15 +4388,54 @@ function AviroDashboard() {
                       ) : null;
                     })()}
 
-                    {/* Processing Currencies */}
+                    {/* Processing Currencies — filtered to selected regions, "Show all" reveals full list */}
                     <div>
                       <label style={labelStyle3}>Processing Currencies</label>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                        {FEE_CURRENCIES.map(cur => {
-                          const sel = (svc.processingCurrencies || []).includes(cur);
-                          return <button key={cur} onClick={() => { const curs = svc.processingCurrencies || []; updateService(prov.id, svc.id, "processingCurrencies", sel ? curs.filter(x => x !== cur) : [...curs, cur]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? "rgba(34,197,94,0.1)" : c.surface, color: sel ? "#34d399" : c.textMuted, border: `1px solid ${sel ? "rgba(34,197,94,0.3)" : c.border}` }}>{cur}</button>;
-                        })}
-                      </div>
+                      {(() => {
+                        const REGION_CURRENCIES = {
+                          "Global": ["USD", "EUR", "GBP", "BTC", "USDT"],
+                          "UK": ["GBP"],
+                          "West Europe": ["EUR", "CHF"],
+                          "East Europe": ["EUR", "MDL", "UAH"],
+                          "Scandinavia": ["NOK", "SEK", "DKK"],
+                          "Turkey": ["TRY"],
+                          "MENA": ["AED", "SAR", "BHD", "KWD", "QAR", "JOD"],
+                          "GCC": ["AED", "SAR", "BHD", "KWD", "QAR"],
+                          "CIS": ["RUB", "UAH", "BYN", "KZT", "UZS", "AZN", "AMD", "GEL", "KGS", "TJS", "TMT", "MDL"],
+                          "Africa": [],
+                          "LATAM": ["BRL", "ARS", "MXN"],
+                          "North America": ["USD", "CAD"],
+                          "Oceania": ["AUD"],
+                          "India": ["INR"],
+                          "Asia": ["JPY", "INR", "MYR", "THB", "VND"],
+                          "South East Asia": ["MYR", "THB", "VND"],
+                          "Japan": ["JPY"],
+                        };
+                        const selRegions = svc.regions || [];
+                        const selected = svc.processingCurrencies || [];
+                        const filtering = selRegions.length > 0 && !svc.showAllCurrencies;
+                        let displayCurs;
+                        if (filtering) {
+                          const keep = new Set(["USD"]);
+                          selRegions.forEach(r => (REGION_CURRENCIES[r] || []).forEach(cur => keep.add(cur)));
+                          selected.forEach(cur => keep.add(cur)); // selected stay visible even if outside region
+                          displayCurs = FEE_CURRENCIES.filter(cur => keep.has(cur));
+                        } else {
+                          displayCurs = FEE_CURRENCIES.slice();
+                        }
+                        displayCurs = ["USD", ...displayCurs.filter(x => x !== "USD")]; // USD always first
+                        return (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                            {displayCurs.map(cur => {
+                              const sel = selected.includes(cur);
+                              return <button key={cur} onClick={() => { updateService(prov.id, svc.id, "processingCurrencies", sel ? selected.filter(x => x !== cur) : [...selected, cur]); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: sel ? 600 : 400, cursor: "pointer", background: sel ? "rgba(34,197,94,0.1)" : c.surface, color: sel ? "#34d399" : c.textMuted, border: `1px solid ${sel ? "rgba(34,197,94,0.3)" : c.border}` }}>{cur}</button>;
+                            })}
+                            {selRegions.length > 0 && (
+                              <button onClick={() => updateService(prov.id, svc.id, "showAllCurrencies", !svc.showAllCurrencies)} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 10, fontWeight: 600, cursor: "pointer", background: "transparent", color: c.accent, border: `1px dashed ${c.accent}60` }}>{svc.showAllCurrencies ? "− Show fewer" : "+ Show all"}</button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Agreement Types (multi-select pills) */}
