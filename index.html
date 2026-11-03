@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-09-22.1";
+const APP_VERSION = "2026-11-03.1";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -543,6 +543,10 @@ function AviroDashboard() {
   const DB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlvc3ZldnljdnF2aWFvbnN4c25xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA5NDMsImV4cCI6MjA5MTc0Njk0M30.IMpyt1CqwKUbM4aW0vyC0fxgNUvyNOSzk3aP9v_Iw-Q";
   const [saveStatus, setSaveStatus] = useState("");
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  // MUST be declared before every effect that lists it as a dependency —
+  // Babel var-hoisting makes later declarations read as undefined in deps
+  // arrays, which silently freezes those effects (poll/backup never ran).
+  const [hasLoaded, setHasLoaded] = useState(false);
   const lastSyncedRef = useRef(null);
   const PARTITIONS = P_PARTITIONS;
 
@@ -968,7 +972,8 @@ function AviroDashboard() {
   }, []);
 
   // Load state on mount — try partition rows first, fall back to shared row, then localStorage
-  const [hasLoaded, setHasLoaded] = useState(false);
+  // (hasLoaded is declared at the top of the persistence section so every
+  //  effect that lists it as a dependency sees its real value during render)
   useEffect(() => {
     if (hasLoaded) return;
     const load = async () => {
@@ -5141,6 +5146,54 @@ function AviroDashboard() {
       const [inputVal, setInputVal] = useState(value || "");
       const [hovered, setHovered] = useState(false);
       const handleSave = () => {
+        // RENAME: all per-entity data (docs, seals, footers, providers,
+        // agreements, overrides) is keyed by entity NAME — a rename must
+        // migrate every map to the new key or the data appears "lost"
+        // (this is what stranded the Cube Pay documents).
+        if (fieldKey === "name" && inputVal && inputVal.trim() && inputVal.trim() !== entity.name) {
+          const oldName = entity.name;
+          const newName = inputVal.trim();
+          const migrateKey = (obj, mergeArrays) => {
+            if (!obj || obj[oldName] === undefined) return obj;
+            const out = { ...obj };
+            if (mergeArrays && Array.isArray(out[newName]) && Array.isArray(out[oldName])) {
+              const ids = new Set(out[newName].map(d => d && d.id).filter(Boolean));
+              out[newName] = [...out[newName], ...out[oldName].filter(d => !d || !d.id || !ids.has(d.id))];
+            } else if (out[newName] === undefined) {
+              out[newName] = out[oldName];
+            }
+            delete out[oldName];
+            return out;
+          };
+          setEntityDocs(migrateKey(entityDocs, true));
+          setEntitySeals(migrateKey(entitySeals, true));
+          setEntityServiceProviders(migrateKey(entityServiceProviders, true));
+          setEntityCorpAgreements(migrateKey(entityCorpAgreements, true));
+          setEntityFooters(migrateKey(entityFooters, false));
+          const ovOut = migrateKey(entityOverrides, false);
+          ovOut[newName] = { ...(ovOut[newName] || {}), name: newName };
+          setEntityOverrides(ovOut);
+          // Name references inside other records
+          setEntityIntraAgreements((entityIntraAgreements || []).map(ag => ({
+            ...ag,
+            fromEntity: ag.fromEntity === oldName ? newName : ag.fromEntity,
+            toEntity: ag.toEntity === oldName ? newName : ag.toEntity,
+          })));
+          setBankAccountsList((bankAccountsList || []).map(a => a.entityName === oldName ? { ...a, entityName: newName } : a));
+          setProviders((providers || []).map(p => ({
+            ...p,
+            services: (p.services || []).map(s => {
+              if (!s.entityMap) return s;
+              const em = {};
+              Object.keys(s.entityMap).forEach(k => { em[k] = (s.entityMap[k] || []).map(n => n === oldName ? newName : n); });
+              return { ...s, entityMap: em };
+            }),
+          })));
+          setCorporateEntities(corporateEntities.map(ce => ce.name === oldName ? { ...ce, name: newName } : ce));
+          setSelectedEntity(newName);
+          setEditing(false);
+          return;
+        }
         // Save directly to the corporateEntities state
         setCorporateEntities(corporateEntities.map(ce => ce.name === entity.name ? { ...ce, [fieldKey]: inputVal } : ce));
         // Also keep entityOverrides in sync for backward compat
