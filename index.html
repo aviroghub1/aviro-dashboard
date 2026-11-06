@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-11-06.2";
+const APP_VERSION = "2026-11-06.3";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -2055,6 +2055,8 @@ function AviroDashboard() {
   const [crmProductFilter, setCrmProductFilter] = useState("Two Step"); // what we're selling right now
   const [crmNewLead, setCrmNewLead] = useState(null); // { name, product, status } while adding
   const crmDragIdRef = useRef(null);
+  // Where the open client tile was opened FROM — the back button returns there
+  const [clientOpenedFrom, setClientOpenedFrom] = useState(null); // null | "crm" | "clientanalysis"
 
   const updateClient = (id, field, val) => setGatewayClients(gatewayClients.map(cl => cl.id === id ? { ...cl, [field]: val } : cl));
 
@@ -2078,13 +2080,22 @@ function AviroDashboard() {
       return (
         <div>
           <div style={{ position: "sticky", top: 0, zIndex: 20, background: c.bg, paddingTop: 12, paddingBottom: 12, marginBottom: 12, borderBottom: `1px solid ${c.border}` }}>
-            <button onClick={() => { setSelectedClient(null); setEditingClientField(null); }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 10, padding: "6px 16px", borderRadius: 8, fontWeight: 600 }}>&larr; Back to Client Portal</button>
+            {(() => {
+              const backTargets = { crm: { section: "crm", label: "← Back to CRM" }, clientanalysis: { section: "clientanalysis", label: "← Back to Client Analysis" } };
+              const back = backTargets[clientOpenedFrom];
+              const goBack = () => { setSelectedClient(null); setEditingClientField(null); if (back) { setClientOpenedFrom(null); setSection(back.section); } };
+              return <button onClick={goBack} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.accent, cursor: "pointer", fontSize: 13, marginBottom: 10, padding: "6px 16px", borderRadius: 8, fontWeight: 600 }}>{back ? back.label : "← Back to Client Portal"}</button>;
+            })()}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h2 style={{ fontSize: 24, fontWeight: 800, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>{cl.name}</h2>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                <h2 style={{ fontSize: 24, fontWeight: 800, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>{cl.name}</h2>
+                <span style={{ fontSize: 10, color: c.textMuted }}>✓ every change saves automatically</span>
+              </div>
               <button onClick={() => {
                 if (confirm("Delete this client?")) {
                   setGatewayClients(gatewayClients.filter(x => x.id !== cl.id));
                   setSelectedClient(null);
+                  if (clientOpenedFrom === "crm") { setClientOpenedFrom(null); setSection("crm"); }
                 }
               }} style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", color: "#f87171", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Delete Client</button>
             </div>
@@ -3793,7 +3804,7 @@ function AviroDashboard() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Gateway.io Client Portal</h2>
-            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gatewayClients.filter(x => x.status === "active").length} active · {gatewayClients.filter(x => x.status === "onboarding" || !x.status).length} onboarding · {gatewayClients.filter(x => x.status === "discussion").length} in discussion · {gatewayClients.filter(x => x.status === "inactive").length} inactive</p>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{gatewayClients.filter(x => x.status === "active").length} active · {gatewayClients.filter(x => x.status === "onboarding" || !x.status).length} onboarding · {gatewayClients.filter(x => x.status === "discussion").length} in discussion · {gatewayClients.filter(x => x.status === "lead" || x.status === "potential").length} leads/potentials · {gatewayClients.filter(x => x.status === "inactive").length} inactive</p>
           </div>
           <button onClick={() => setShowAddClient(!showAddClient)} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>+ Add Client</button>
         </div>
@@ -3830,7 +3841,7 @@ function AviroDashboard() {
           {gatewayClients.map(cl => {
             const typeColor = cl.clientType === "Full Cashier Management" ? "#818cf8" : cl.clientType === "VIP Gateway" ? "#ec4899" : cl.clientType === "Gateway" ? "#34d399" : cl.clientType === "Tech Only" ? "#06b6d4" : cl.clientType === "Another PSP" ? "#fbbf24" : c.accent;
             return (
-              <div key={cl.id} onClick={() => { setSelectedClient(cl.id); setEditingClientField(null); }}
+              <div key={cl.id} onClick={() => { setSelectedClient(cl.id); setEditingClientField(null); setClientOpenedFrom(null); }}
                 style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 14, padding: 22, cursor: "pointer", borderLeft: `4px solid ${typeColor}`, transition: "all 0.15s", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}
                 onMouseEnter={e => { e.currentTarget.style.background = c.cardHover; e.currentTarget.style.transform = "translateY(-1px)"; }} onMouseLeave={e => { e.currentTarget.style.background = c.card; e.currentTarget.style.transform = "none"; }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -8864,7 +8875,7 @@ function AviroDashboard() {
                   const expiring = computeExpiring(cl);
 
                   return (
-                    <tr key={cl.id} style={{ borderBottom: `1px solid ${c.border}`, cursor: "pointer" }} onClick={() => { setSelectedClient(cl.id); setSection("clients"); }}>
+                    <tr key={cl.id} style={{ borderBottom: `1px solid ${c.border}`, cursor: "pointer" }} onClick={() => { setSelectedClient(cl.id); setClientOpenedFrom("clientanalysis"); setSection("clients"); }}>
                       <td style={{ padding: "10px 12px", fontWeight: 700, color: c.text, fontSize: 14 }}>{cl.name}</td>
                       <td style={{ padding: "10px 12px" }}><span style={{ color: stColors[st] || "#6b7280", fontWeight: 600, fontSize: 12, background: `${stColors[st] || "#6b7280"}15`, border: `1px solid ${stColors[st] || "#6b7280"}40`, padding: "3px 10px", borderRadius: 6 }}>{stLabels[st] || st}</span></td>
                       <td style={{ padding: "10px 12px", color: c.textMuted, fontSize: 12 }}>{cl.clientProfile || "—"}</td>
@@ -9120,7 +9131,7 @@ function AviroDashboard() {
     const matchesProduct = (cl) => crmProductFilter === "All" || (cl.products || []).includes(crmProductFilter);
     const visible = gatewayClients.filter(matchesProduct);
 
-    const openClient = (cl) => { setSelectedClient(cl.id); setSection("clients"); };
+    const openClient = (cl) => { setSelectedClient(cl.id); setClientOpenedFrom("crm"); setClientDetailTab("crm"); setSection("clients"); };
 
     // Follow-ups: overdue + next 7 days
     const today = new Date().toISOString().slice(0, 10);
@@ -9140,7 +9151,7 @@ function AviroDashboard() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
           <div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>CRM</h2>
-            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{visible.length} {crmProductFilter === "All" ? "" : crmProductFilter + " "}client{visible.length !== 1 ? "s" : ""} in pipeline · cards open the full client tile</p>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{visible.length} {crmProductFilter === "All" ? "" : crmProductFilter + " "}client{visible.length !== 1 ? "s" : ""} in pipeline · drag cards between stages · everything saves automatically</p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             {["All", ...CLIENT_PRODUCTS].map(p => {
@@ -9171,6 +9182,8 @@ function AviroDashboard() {
               if (!crmNewLead.name.trim()) return;
               const newCl = { id: `cl-${Date.now()}`, name: crmNewLead.name.trim(), status: crmNewLead.status, products: [crmNewLead.product], crmActivity: [], nextAction: "", nextActionDate: "", expectedVolume: "", clientType: "", clientEntities: [], agreements: [], introduction: "", introductionDeal: "", monthlyFee: "", monthlyFeeCurrency: "USD", revenueSharePct: "", revenueShareFrom: "", settlementGroup: "", settlementTerms: "", settlementFee: "", bankAccounts: [], clientProviders: [], contacts: [], groups: [], notes: [], actionPoints: [], proposedProviders: [], targetRegions: [], targetCountries: [], clientProfile: "", targetVolume: "" };
               setGatewayClients([...gatewayClients, newCl]);
+              // Make sure the new lead is visible: switch filter to its product if needed
+              if (crmProductFilter !== "All" && crmProductFilter !== crmNewLead.product) setCrmProductFilter(crmNewLead.product);
               setCrmNewLead(null);
             }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Add</button>
             <button onClick={() => setCrmNewLead(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 8, padding: "10px 14px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
