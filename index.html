@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-11-06.4";
+const APP_VERSION = "2026-11-06.5";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -407,6 +407,15 @@ function AviroDashboard() {
   const [supabaseUrl, setSupabaseUrl] = useState(""); // Supabase project URL
   const [supabaseKey, setSupabaseKey] = useState(""); // Supabase anon key
   const [clickupToken, setClickupToken] = useState(""); // ClickUp API token
+  // ===== DAVID CALENDAR + PROJECTS (transient view state) =====
+  const [gcalEvents, setGcalEvents] = useState([]); // cached Google Calendar events from Supabase
+  const [dayCalDate, setDayCalDate] = useState(new Date().toISOString().slice(0, 10));
+  const [projSpaceFilter, setProjSpaceFilter] = useState("all");
+  const [projAssigneeFilter, setProjAssigneeFilter] = useState("all");
+  const [projNewTask, setProjNewTask] = useState(null); // { name, listId, dueDate, assignee }
+  const [cuBusy, setCuBusy] = useState({}); // taskId -> true while a ClickUp write is in flight
+  const projDragRef = useRef(null);
+
   const [clickupDavidTasks, setClickupDavidTasks] = useState([]); // Live ClickUp tasks for David
   const [clickupSophieTasks, setClickupSophieTasks] = useState([]); // Live ClickUp tasks for Sophie
   const [clickupLoading, setClickupLoading] = useState(false);
@@ -1053,6 +1062,18 @@ function AviroDashboard() {
         }
       } catch (e) { console.warn("ClickUp Supabase cache load failed:", e); }
 
+      // Load cached Google Calendar events
+      try {
+        const gRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.gcal_events&select=state", {
+          headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY },
+        });
+        if (gRes.ok) {
+          const gRows = await gRes.json();
+          const evs = gRows.length > 0 && gRows[0].state ? (gRows[0].state.events || gRows[0].state || []) : [];
+          if (Array.isArray(evs)) setGcalEvents(evs);
+        }
+      } catch (e) { console.warn("Calendar cache load failed:", e); }
+
       setHasLoaded(true);
     };
     load();
@@ -1088,6 +1109,34 @@ function AviroDashboard() {
     const interval = setInterval(() => fetchClickUpTasks(clickupToken), 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [hasLoaded, clickupToken, fetchClickUpTasks]);
+
+  // ClickUp write-back: complete / setStatus / create — then refresh tasks
+  const clickupAction = useCallback(async (params) => {
+    if (!clickupToken) { alert("Connect ClickUp first (Settings)"); return { ok: false }; }
+    const busyKey = params.taskId || "new";
+    setCuBusy(prev => ({ ...prev, [busyKey]: true }));
+    try {
+      const res = await fetch("/.netlify/functions/clickup-actions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...params, token: clickupToken }),
+      });
+      const data = await res.json();
+      if (!data.ok) { alert("ClickUp error: " + (data.error || "unknown")); return data; }
+      // Optimistic local update for complete/setStatus
+      if (params.action === "complete") {
+        setClickupDavidTasks(prev => prev.filter(t => t.id !== params.taskId));
+        setClickupSophieTasks(prev => prev.filter(t => t.id !== params.taskId));
+      } else if (params.action === "setStatus") {
+        const upd = (prev) => prev.map(t => t.id === params.taskId ? { ...t, status: params.status } : t);
+        setClickupDavidTasks(upd);
+        setClickupSophieTasks(upd);
+      }
+      // Background refresh to pick up the truth from ClickUp
+      setTimeout(() => fetchClickUpTasks(clickupToken), 1500);
+      return data;
+    } catch (e) { alert("ClickUp request failed: " + e.message); return { ok: false }; }
+    finally { setCuBusy(prev => { const n = { ...prev }; delete n[busyKey]; return n; }); }
+  }, [clickupToken, fetchClickUpTasks]);
 
   // ===== METABASE HELPERS =====
   const mbProxyCall = useCallback(async (baseUrl, path, method, body, token) => {
@@ -7939,7 +7988,7 @@ function AviroDashboard() {
       { key: "cubepay", title: "Cube Pay", desc: "Client Onboarding & KYB Management", icon: "user", gradient: "linear-gradient(135deg, #06b6d4, #0891b2)", defaultSection: "cpclients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #fbbf24, #f87171)", defaultSection: null },
       { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #34d399, #10b981)", defaultSection: "entities" },
-      { key: "david", title: "David Tasks", desc: "Quick Jobs, Signal Tasks & Daily Operations", icon: "zap", gradient: "linear-gradient(135deg, #60a5fa, #3b82f6)", defaultSection: "quickjobs" },
+      { key: "david", title: "David Calendar", desc: "My Day — Schedule, ClickUp Jobs & Projects", icon: "calendar", gradient: "linear-gradient(135deg, #60a5fa, #3b82f6)", defaultSection: "daycal" },
       { key: "finance", title: "Finance", desc: "Crypto Wallet Registry & Screening", icon: "bank", gradient: "linear-gradient(135deg, #f59e0b, #d97706)", defaultSection: "finance" },
       { key: "settings", title: "Settings", desc: "FX Rates, Connections & Configuration", icon: "bank", gradient: "linear-gradient(135deg, #9ca3af, #6b7280)", defaultSection: "settings" },
     ];
@@ -9127,6 +9176,239 @@ function AviroDashboard() {
     );
   };
 
+  // ===== PROJECTS (ClickUp-backed kanban — ClickUp is the source of truth) =====
+  const renderProjects = () => {
+    const inputStyleP = { fontSize: 13, padding: "9px 14px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const allTasks = [
+      ...clickupDavidTasks.map(t => ({ ...t, who: "David" })),
+      ...clickupSophieTasks.map(t => ({ ...t, who: "Sophie" })),
+    ];
+    const spaces = [...new Set(allTasks.map(t => t.space || t.list).filter(Boolean))].sort();
+    const lists = [];
+    allTasks.forEach(t => { if (t.listId && !lists.some(l => l.id === t.listId)) lists.push({ id: t.listId, name: t.list || t.listId }); });
+
+    const filtered = allTasks.filter(t =>
+      (projSpaceFilter === "all" || (t.space || t.list) === projSpaceFilter) &&
+      (projAssigneeFilter === "all" || t.who === projAssigneeFilter)
+    );
+    // Columns = statuses discovered from the filtered tasks, open types first
+    const statusOrder = {};
+    filtered.forEach(t => {
+      const key = t.status || "unknown";
+      if (!statusOrder[key]) statusOrder[key] = { name: key, color: t.statusColor || "#818cf8", type: t.statusType || "open", count: 0 };
+      statusOrder[key].count++;
+    });
+    const typeRank = { open: 0, custom: 1, done: 2, closed: 3 };
+    const columns = Object.values(statusOrder).sort((a, b) => (typeRank[a.type] || 1) - (typeRank[b.type] || 1) || a.name.localeCompare(b.name));
+    const today = new Date().toISOString().slice(0, 10);
+    const PRI_COLORS = { urgent: "#f87171", high: "#fbbf24", normal: "#60a5fa", low: "#6b7280" };
+
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>Projects</h2>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>Live from ClickUp — drag between columns, tick to complete, everything writes back{clickupLastFetched ? " · updated " + clickupLastFetched : ""}</p>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {["all", "David", "Sophie"].map(a => (
+              <button key={a} onClick={() => setProjAssigneeFilter(a)} style={{ background: projAssigneeFilter === a ? c.accentBg : "transparent", border: `1px solid ${projAssigneeFilter === a ? c.accent : c.border}`, color: projAssigneeFilter === a ? c.accent : c.textMuted, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontWeight: projAssigneeFilter === a ? 700 : 500 }}>{a === "all" ? "Everyone" : a}</button>
+            ))}
+            <select value={projSpaceFilter} onChange={e => setProjSpaceFilter(e.target.value)} style={{ ...inputStyleP, fontSize: 12, padding: "7px 12px" }}>
+              <option value="all">All Spaces</option>
+              {spaces.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button onClick={() => fetchClickUpTasks(clickupToken)} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 8, padding: "7px 12px", cursor: "pointer", fontSize: 12 }}>{clickupLoading ? "⟳ Syncing..." : "↻ Refresh"}</button>
+            <button onClick={() => setProjNewTask(projNewTask ? null : { name: "", listId: lists[0] ? lists[0].id : "", dueDate: "", assignee: "david" })} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ New Task</button>
+          </div>
+        </div>
+
+        {!clickupToken && <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>Connect ClickUp in Settings to load the board.</div>}
+
+        {projNewTask && (
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.accent}40`, padding: 16, marginBottom: 16, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ flex: 2, minWidth: 200 }}>
+              <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 }}>Task Name</label>
+              <input value={projNewTask.name} onChange={e => setProjNewTask({ ...projNewTask, name: e.target.value })} autoFocus placeholder="What needs doing..." style={{ ...inputStyleP, width: "100%" }} />
+            </div>
+            <div style={{ minWidth: 160 }}>
+              <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 }}>List</label>
+              <select value={projNewTask.listId} onChange={e => setProjNewTask({ ...projNewTask, listId: e.target.value })} style={{ ...inputStyleP, width: "100%" }}>
+                {lists.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 }}>Due</label>
+              <input type="date" value={projNewTask.dueDate} onChange={e => setProjNewTask({ ...projNewTask, dueDate: e.target.value })} style={{ ...inputStyleP }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 }}>For</label>
+              <select value={projNewTask.assignee} onChange={e => setProjNewTask({ ...projNewTask, assignee: e.target.value })} style={{ ...inputStyleP }}>
+                <option value="david">David</option><option value="sophie">Sophie</option>
+              </select>
+            </div>
+            <button onClick={async () => {
+              if (!projNewTask.name.trim() || !projNewTask.listId) return;
+              const r = await clickupAction({ action: "create", listId: projNewTask.listId, name: projNewTask.name.trim(), dueDate: projNewTask.dueDate, assignee: projNewTask.assignee });
+              if (r.ok) setProjNewTask(null);
+            }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{cuBusy["new"] ? "Creating..." : "Create in ClickUp"}</button>
+            <button onClick={() => setProjNewTask(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 8, padding: "10px 14px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
+          </div>
+        )}
+
+        {clickupToken && columns.length === 0 && !clickupLoading && (
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.border}`, padding: 30, textAlign: "center", color: c.textMuted, fontSize: 13 }}>No open tasks match these filters.</div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(columns.length, 1)}, minmax(200px, 1fr))`, gap: 10, overflowX: "auto", alignItems: "start" }}>
+          {columns.map(col => (
+            <div key={col.name}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); const id = projDragRef.current; projDragRef.current = null; if (id) clickupAction({ action: "setStatus", taskId: id, status: col.name }); }}
+              style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, borderTop: `3px solid ${col.color}`, padding: 10, minHeight: 200 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "0 2px" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: col.color, textTransform: "uppercase" }}>{col.name}</span>
+                <span style={{ fontSize: 10, color: c.textMuted }}>{col.count}</span>
+              </div>
+              {filtered.filter(t => (t.status || "unknown") === col.name).map(t => {
+                const overdue = t.dueDate && t.dueDate < today;
+                const busy = !!cuBusy[t.id];
+                return (
+                  <div key={t.id + t.who} draggable onDragStart={() => { projDragRef.current = t.id; }}
+                    style={{ background: c.card, borderRadius: 10, border: `1px solid ${overdue ? "rgba(248,113,113,0.35)" : c.border}`, padding: 11, marginBottom: 8, cursor: "grab", opacity: busy ? 0.5 : 1 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      <input type="checkbox" checked={false} disabled={busy} title="Complete in ClickUp" onChange={() => { if (confirm("Complete \"" + t.name + "\" in ClickUp?")) clickupAction({ action: "complete", taskId: t.id }); }} style={{ accentColor: "#34d399", marginTop: 2, cursor: "pointer" }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: c.text, marginBottom: 4 }}>{t.name}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          {t.priority && <span style={{ width: 7, height: 7, borderRadius: "50%", background: PRI_COLORS[t.priority] || "#6b7280" }} title={t.priority} />}
+                          <span style={{ fontSize: 9, color: c.textMuted }}>{t.list}</span>
+                          {t.dueDate && <span style={{ fontSize: 9, fontWeight: 700, color: overdue ? "#f87171" : c.textMuted }}>{overdue ? "OVERDUE " : ""}{t.dueDate}</span>}
+                          <span style={{ fontSize: 8, fontWeight: 700, color: t.who === "David" ? "#60a5fa" : "#f472b6", background: (t.who === "David" ? "#60a5fa" : "#f472b6") + "18", padding: "1px 6px", borderRadius: 3 }}>{t.who}</span>
+                          {t.url && <a href={t.url} target="_blank" rel="noopener" style={{ fontSize: 9, color: c.accent, textDecoration: "none" }} title="Open in ClickUp">↗</a>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ===== DAVID CALENDAR (my day: gcal timeline + ClickUp due + quick jobs) =====
+  const renderDayCal = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const selDate = dayCalDate || today;
+    // Week strip: 10 days starting yesterday
+    const days = Array.from({ length: 10 }, (_, i) => {
+      const d = new Date(Date.now() + (i - 1) * 86400000);
+      return d.toISOString().slice(0, 10);
+    });
+    const dayName = (ds) => new Date(ds + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "short" });
+    const fmtHour = (h) => {
+      const hh = Math.floor(h); const mm = Math.round((h - hh) * 60);
+      return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+    };
+    const events = gcalEvents.filter(e => e.date === selDate).sort((a, b) => (a.isAllDay ? -1 : b.isAllDay ? 1 : a.startHour - b.startHour));
+    // Jobs: ClickUp tasks (David) due on/before selected date + undone quick jobs
+    const cuDue = clickupDavidTasks.filter(t => t.dueDate && t.dueDate <= selDate).sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+    const openQuickJobs = quickJobs.filter(j => !j.done);
+    const CAT_COLORS = { aviro: "#818cf8", personal: "#06b6d4", meeting: "#34d399", call: "#fbbf24" };
+
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>{selDate === today ? "Today" : new Date(selDate + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</h2>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{events.length} event{events.length !== 1 ? "s" : ""} · {cuDue.length} ClickUp job{cuDue.length !== 1 ? "s" : ""} due · {openQuickJobs.length} quick job{openQuickJobs.length !== 1 ? "s" : ""} open</p>
+          </div>
+          <button onClick={async () => {
+            try { await fetch("/api/gcal-sync"); } catch (e) {}
+            try {
+              const gRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.gcal_events&select=state", { headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY } });
+              if (gRes.ok) { const rows = await gRes.json(); const evs = rows.length > 0 && rows[0].state ? (rows[0].state.events || []) : []; if (Array.isArray(evs)) setGcalEvents(evs); }
+            } catch (e) {}
+          }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12 }}>↻ Sync Calendar</button>
+        </div>
+
+        {/* Week strip */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 18, overflowX: "auto" }}>
+          {days.map(d => {
+            const sel = d === selDate;
+            const evCount = gcalEvents.filter(e => e.date === d).length;
+            return (
+              <button key={d} onClick={() => setDayCalDate(d)} style={{ flex: "0 0 auto", minWidth: 74, background: sel ? c.accentBg : c.card, border: `1px solid ${sel ? c.accent : d === today ? c.accent + "60" : c.border}`, borderRadius: 10, padding: "9px 10px", cursor: "pointer", textAlign: "center" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: sel ? c.accent : c.textMuted, textTransform: "uppercase" }}>{d === today ? "Today" : dayName(d)}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: sel ? c.accent : c.text }}>{d.slice(8)}</div>
+                {evCount > 0 && <div style={{ fontSize: 8, color: c.textMuted }}>{evCount} ev</div>}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 16, alignItems: "start" }}>
+          {/* Calendar timeline */}
+          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 12 }}>Schedule</div>
+            {events.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic", padding: "16px 0" }}>Nothing scheduled.</div>}
+            {events.map(ev => (
+              <div key={ev.id + ev.title} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "9px 0", borderBottom: `1px solid ${c.border}30` }}>
+                <div style={{ width: 86, flexShrink: 0, fontSize: 12, fontWeight: 700, color: c.accent, fontFamily: "monospace" }}>
+                  {ev.isAllDay ? "All day" : fmtHour(ev.startHour) + "–" + fmtHour(ev.endHour)}
+                </div>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: CAT_COLORS[ev.cat] || "#818cf8", marginTop: 4, flexShrink: 0 }} />
+                <div style={{ fontSize: 13, color: c.text, fontWeight: 500 }}>{ev.title}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Jobs column */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>ClickUp — due {selDate === today ? "today" : "by " + selDate}</span>
+                <button onClick={() => setSection("projects")} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Board →</button>
+              </div>
+              {!clickupToken && <div style={{ fontSize: 12, color: c.textMuted }}>Connect ClickUp in Settings.</div>}
+              {clickupToken && cuDue.length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>Nothing due. Clear runway.</div>}
+              {cuDue.map(t => {
+                const overdue = t.dueDate < today;
+                const busy = !!cuBusy[t.id];
+                return (
+                  <div key={t.id} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "7px 0", borderBottom: `1px solid ${c.border}30`, opacity: busy ? 0.5 : 1 }}>
+                    <input type="checkbox" checked={false} disabled={busy} title="Complete in ClickUp" onChange={() => { if (confirm("Complete \"" + t.name + "\" in ClickUp?")) clickupAction({ action: "complete", taskId: t.id }); }} style={{ accentColor: "#34d399", marginTop: 2, cursor: "pointer" }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12.5, color: c.text, fontWeight: 500 }}>{t.name}</div>
+                      <div style={{ fontSize: 10, color: overdue ? "#f87171" : c.textMuted }}>{overdue ? "OVERDUE · " : ""}{t.dueDate} · {t.list}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>Quick Jobs</span>
+                <button onClick={() => setSection("quickjobs")} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>All →</button>
+              </div>
+              {openQuickJobs.length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>All done.</div>}
+              {openQuickJobs.slice(0, 12).map(j => (
+                <div key={j.id} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "6px 0", borderBottom: `1px solid ${c.border}30` }}>
+                  <input type="checkbox" checked={false} onChange={() => setQuickJobs(quickJobs.map(x => x.id === j.id ? { ...x, done: true } : x))} style={{ accentColor: "#34d399", marginTop: 2, cursor: "pointer" }} />
+                  <span style={{ fontSize: 12.5, color: c.text }}>{j.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // ===== GATEWAY CRM (pipeline view over gatewayClients — same records, no duplication) =====
   const renderGatewayCRM = () => {
     const updCl = (id, patch) => setGatewayClients(gatewayClients.map(cl => cl.id === id ? { ...cl, ...patch } : cl));
@@ -9614,7 +9896,7 @@ function AviroDashboard() {
 
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
-    david: { label: "DAVID", sections: ["quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
+    david: { label: "DAVID CALENDAR", sections: ["daycal", "projects", "quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
     gateway: { label: "GATEWAY.IO", sections: ["crm", "clients", "roadmap", "providers", "bankaccounts", "contractgen", "clientanalysis", "kybtemplate"] },
     cubepay: { label: "CUBE PAY", sections: ["cpclients"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
@@ -9633,6 +9915,8 @@ function AviroDashboard() {
 
   const allNavItems = [
     { section: "david", label: "DAVID", isHeader: true, group: "david" },
+    { section: "daycal", icon: "calendar", label: "My Day", group: "david" },
+    { section: "projects", icon: "list", label: "Projects", group: "david" },
     { section: "quickjobs", icon: "zap", label: "Quick Jobs", group: "david" },
     { section: "signal", icon: "signal", label: "Signal Tasks", group: "david" },
     { section: "sophie", icon: "delegate", label: "Sophie Tasks", group: "david" },
@@ -9663,7 +9947,7 @@ function AviroDashboard() {
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator, cpclients: renderCubePayClients, clientanalysis: renderClientAnalysis, kybtemplate: renderKybTemplate, finance: renderFinance, crm: renderGatewayCRM };
+  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator, cpclients: renderCubePayClients, clientanalysis: renderClientAnalysis, kybtemplate: renderKybTemplate, finance: renderFinance, crm: renderGatewayCRM, daycal: renderDayCal, projects: renderProjects };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
