@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-11-06.3";
+const APP_VERSION = "2026-11-06.4";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -5246,6 +5246,14 @@ function AviroDashboard() {
       const [editing, setEditing] = useState(false);
       const [inputVal, setInputVal] = useState(value || "");
       const [hovered, setHovered] = useState(false);
+      const [copied, setCopied] = useState(false);
+      const copyValue = (e) => {
+        e.stopPropagation(); // don't open edit mode
+        if (!value) return;
+        if (navigator.clipboard) navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      };
       const handleSave = () => {
         // RENAME: all per-entity data (docs, seals, footers, providers,
         // agreements, overrides) is keyed by entity NAME — a rename must
@@ -5312,6 +5320,11 @@ function AviroDashboard() {
           {!editing ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ color: value ? c.text : c.textMuted, fontWeight: 500, fontStyle: value ? "normal" : "italic" }}>{value || "Click to add"}</span>
+              {value && (
+                copied
+                  ? <span style={{ color: "#34d399", fontSize: 11, fontWeight: 700 }}>✓ copied</span>
+                  : <button onClick={copyValue} title={"Copy " + label} style={{ background: "transparent", border: "none", color: hovered ? c.accent : c.textMuted, cursor: "pointer", fontSize: 12, padding: "0 2px", opacity: hovered ? 1 : 0.45, transition: "all 0.15s" }}>⧉</button>
+              )}
               <span style={{ color: hovered ? c.accent : c.textMuted, fontSize: 11, opacity: hovered ? 1 : 0.4, transition: "all 0.15s" }}>✎</span>
             </div>
           ) : (
