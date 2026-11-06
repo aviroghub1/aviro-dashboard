@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-11-06.1";
+const APP_VERSION = "2026-11-06.2";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -7910,6 +7910,7 @@ function AviroDashboard() {
   // ===== HOMEPAGE =====
   const renderHome = () => {
     const homeCards = [
+      { key: "crm", title: "CRM", desc: "Two Step Pipeline, Leads & Follow-ups", icon: "inbox", gradient: "linear-gradient(135deg, #a78bfa, #7c3aed)", defaultSection: "crm" },
       { key: "gateway", title: "Gateway.io", desc: "Client Portal & Payment Operations", icon: "gateway", gradient: "linear-gradient(135deg, #818cf8, #a78bfa)", defaultSection: "clients" },
       { key: "cubepay", title: "Cube Pay", desc: "Client Onboarding & KYB Management", icon: "user", gradient: "linear-gradient(135deg, #06b6d4, #0891b2)", defaultSection: "cpclients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #fbbf24, #f87171)", defaultSection: null },
