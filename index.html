@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-11-06.5";
+const APP_VERSION = "2026-11-06.6";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -407,8 +407,8 @@ function AviroDashboard() {
   const [supabaseUrl, setSupabaseUrl] = useState(""); // Supabase project URL
   const [supabaseKey, setSupabaseKey] = useState(""); // Supabase anon key
   const [clickupToken, setClickupToken] = useState(""); // ClickUp API token
-  // ===== DAVID CALENDAR + PROJECTS (transient view state) =====
-  const [gcalEvents, setGcalEvents] = useState([]); // cached Google Calendar events from Supabase
+  // ===== MY DAY + PROJECTS (transient view state) =====
+  // (Google Calendar integration fully removed 2026-11-06 — David keeps his calendar private)
   const [dayCalDate, setDayCalDate] = useState(new Date().toISOString().slice(0, 10));
   const [projSpaceFilter, setProjSpaceFilter] = useState("all");
   const [projAssigneeFilter, setProjAssigneeFilter] = useState("all");
@@ -1061,18 +1061,6 @@ function AviroDashboard() {
           console.log("Loaded " + cachedCount + " cached ClickUp tasks from Supabase");
         }
       } catch (e) { console.warn("ClickUp Supabase cache load failed:", e); }
-
-      // Load cached Google Calendar events
-      try {
-        const gRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.gcal_events&select=state", {
-          headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY },
-        });
-        if (gRes.ok) {
-          const gRows = await gRes.json();
-          const evs = gRows.length > 0 && gRows[0].state ? (gRows[0].state.events || gRows[0].state || []) : [];
-          if (Array.isArray(evs)) setGcalEvents(evs);
-        }
-      } catch (e) { console.warn("Calendar cache load failed:", e); }
 
       setHasLoaded(true);
     };
@@ -7988,7 +7976,7 @@ function AviroDashboard() {
       { key: "cubepay", title: "Cube Pay", desc: "Client Onboarding & KYB Management", icon: "user", gradient: "linear-gradient(135deg, #06b6d4, #0891b2)", defaultSection: "cpclients" },
       { key: "betting", title: "Betting Brands", desc: "Brand Portfolio & Performance", icon: "grid", gradient: "linear-gradient(135deg, #fbbf24, #f87171)", defaultSection: null },
       { key: "corporate", title: "Aviro Corporate Matrix", desc: "Entities, Banking & Corporate Structure", icon: "building", gradient: "linear-gradient(135deg, #34d399, #10b981)", defaultSection: "entities" },
-      { key: "david", title: "David Calendar", desc: "My Day — Schedule, ClickUp Jobs & Projects", icon: "calendar", gradient: "linear-gradient(135deg, #60a5fa, #3b82f6)", defaultSection: "daycal" },
+      { key: "david", title: "My Day", desc: "ClickUp Jobs, Quick Jobs & Projects", icon: "calendar", gradient: "linear-gradient(135deg, #60a5fa, #3b82f6)", defaultSection: "daycal" },
       { key: "finance", title: "Finance", desc: "Crypto Wallet Registry & Screening", icon: "bank", gradient: "linear-gradient(135deg, #f59e0b, #d97706)", defaultSection: "finance" },
       { key: "settings", title: "Settings", desc: "FX Rates, Connections & Configuration", icon: "bank", gradient: "linear-gradient(135deg, #9ca3af, #6b7280)", defaultSection: "settings" },
     ];
@@ -9299,75 +9287,45 @@ function AviroDashboard() {
     );
   };
 
-  // ===== DAVID CALENDAR (my day: gcal timeline + ClickUp due + quick jobs) =====
+  // ===== MY DAY (ClickUp due + quick jobs — calendar removed by request, kept private) =====
   const renderDayCal = () => {
     const today = new Date().toISOString().slice(0, 10);
     const selDate = dayCalDate || today;
-    // Week strip: 10 days starting yesterday
+    // Day strip: 10 days starting yesterday
     const days = Array.from({ length: 10 }, (_, i) => {
       const d = new Date(Date.now() + (i - 1) * 86400000);
       return d.toISOString().slice(0, 10);
     });
     const dayName = (ds) => new Date(ds + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "short" });
-    const fmtHour = (h) => {
-      const hh = Math.floor(h); const mm = Math.round((h - hh) * 60);
-      return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
-    };
-    const events = gcalEvents.filter(e => e.date === selDate).sort((a, b) => (a.isAllDay ? -1 : b.isAllDay ? 1 : a.startHour - b.startHour));
     // Jobs: ClickUp tasks (David) due on/before selected date + undone quick jobs
     const cuDue = clickupDavidTasks.filter(t => t.dueDate && t.dueDate <= selDate).sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
     const openQuickJobs = quickJobs.filter(j => !j.done);
-    const CAT_COLORS = { aviro: "#818cf8", personal: "#06b6d4", meeting: "#34d399", call: "#fbbf24" };
 
     return (
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
           <div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>{selDate === today ? "Today" : new Date(selDate + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</h2>
-            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{events.length} event{events.length !== 1 ? "s" : ""} · {cuDue.length} ClickUp job{cuDue.length !== 1 ? "s" : ""} due · {openQuickJobs.length} quick job{openQuickJobs.length !== 1 ? "s" : ""} open</p>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{cuDue.length} ClickUp job{cuDue.length !== 1 ? "s" : ""} due · {openQuickJobs.length} quick job{openQuickJobs.length !== 1 ? "s" : ""} open</p>
           </div>
-          <button onClick={async () => {
-            try { await fetch("/api/gcal-sync"); } catch (e) {}
-            try {
-              const gRes = await fetch(DB_URL + "/rest/v1/dashboard_state?id=eq.gcal_events&select=state", { headers: { apikey: DB_KEY, Authorization: "Bearer " + DB_KEY } });
-              if (gRes.ok) { const rows = await gRes.json(); const evs = rows.length > 0 && rows[0].state ? (rows[0].state.events || []) : []; if (Array.isArray(evs)) setGcalEvents(evs); }
-            } catch (e) {}
-          }} style={{ background: c.surface, border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontSize: 12 }}>↻ Sync Calendar</button>
         </div>
 
-        {/* Week strip */}
+        {/* Day strip */}
         <div style={{ display: "flex", gap: 6, marginBottom: 18, overflowX: "auto" }}>
           {days.map(d => {
             const sel = d === selDate;
-            const evCount = gcalEvents.filter(e => e.date === d).length;
+            const dueCount = clickupDavidTasks.filter(t => t.dueDate === d).length;
             return (
               <button key={d} onClick={() => setDayCalDate(d)} style={{ flex: "0 0 auto", minWidth: 74, background: sel ? c.accentBg : c.card, border: `1px solid ${sel ? c.accent : d === today ? c.accent + "60" : c.border}`, borderRadius: 10, padding: "9px 10px", cursor: "pointer", textAlign: "center" }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: sel ? c.accent : c.textMuted, textTransform: "uppercase" }}>{d === today ? "Today" : dayName(d)}</div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: sel ? c.accent : c.text }}>{d.slice(8)}</div>
-                {evCount > 0 && <div style={{ fontSize: 8, color: c.textMuted }}>{evCount} ev</div>}
+                {dueCount > 0 && <div style={{ fontSize: 8, color: c.textMuted }}>{dueCount} due</div>}
               </button>
             );
           })}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 16, alignItems: "start" }}>
-          {/* Calendar timeline */}
-          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase", marginBottom: 12 }}>Schedule</div>
-            {events.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic", padding: "16px 0" }}>Nothing scheduled.</div>}
-            {events.map(ev => (
-              <div key={ev.id + ev.title} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "9px 0", borderBottom: `1px solid ${c.border}30` }}>
-                <div style={{ width: 86, flexShrink: 0, fontSize: 12, fontWeight: 700, color: c.accent, fontFamily: "monospace" }}>
-                  {ev.isAllDay ? "All day" : fmtHour(ev.startHour) + "–" + fmtHour(ev.endHour)}
-                </div>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: CAT_COLORS[ev.cat] || "#818cf8", marginTop: 4, flexShrink: 0 }} />
-                <div style={{ fontSize: 13, color: c.text, fontWeight: 500 }}>{ev.title}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Jobs column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
             <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 18 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: c.accent, textTransform: "uppercase" }}>ClickUp — due {selDate === today ? "today" : "by " + selDate}</span>
@@ -9403,7 +9361,6 @@ function AviroDashboard() {
                 </div>
               ))}
             </div>
-          </div>
         </div>
       </div>
     );
@@ -9896,7 +9853,7 @@ function AviroDashboard() {
 
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
-    david: { label: "DAVID CALENDAR", sections: ["daycal", "projects", "quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
+    david: { label: "DAVID", sections: ["daycal", "projects", "quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
     gateway: { label: "GATEWAY.IO", sections: ["crm", "clients", "roadmap", "providers", "bankaccounts", "contractgen", "clientanalysis", "kybtemplate"] },
     cubepay: { label: "CUBE PAY", sections: ["cpclients"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
