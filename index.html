@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-11-03.1";
+const APP_VERSION = "2026-11-06.1";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -2050,6 +2050,12 @@ function AviroDashboard() {
   const [newClientName, setNewClientName] = useState("");
   const [showAddClient, setShowAddClient] = useState(false);
 
+  // ===== CRM (transient view state — clients themselves live in gatewayClients) =====
+  const CLIENT_PRODUCTS = ["Two Step", "Gateway", "Cube Pay"];
+  const [crmProductFilter, setCrmProductFilter] = useState("Two Step"); // what we're selling right now
+  const [crmNewLead, setCrmNewLead] = useState(null); // { name, product, status } while adding
+  const crmDragIdRef = useRef(null);
+
   const updateClient = (id, field, val) => setGatewayClients(gatewayClients.map(cl => cl.id === id ? { ...cl, [field]: val } : cl));
 
   const renderClients = () => {
@@ -2085,9 +2091,9 @@ function AviroDashboard() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
               {(() => {
-                const statuses = ["active", "onboarding", "discussion", "inactive"];
-                const statusColors = { active: "#34d399", onboarding: "#fbbf24", discussion: "#60a5fa", inactive: "#6b7280" };
-                const statusLabels = { active: "Active", onboarding: "Onboarding", discussion: "In Discussion", inactive: "Inactive" };
+                const statuses = ["lead", "potential", "discussion", "onboarding", "active", "inactive"];
+                const statusColors = { lead: "#a78bfa", potential: "#06b6d4", active: "#34d399", onboarding: "#fbbf24", discussion: "#60a5fa", inactive: "#6b7280" };
+                const statusLabels = { lead: "Lead", potential: "Potential", active: "Active", onboarding: "Onboarding", discussion: "In Discussion", inactive: "Inactive" };
                 const current = cl.status || "onboarding";
                 return (
                   <div style={{ display: "flex", gap: 4 }}>
@@ -2106,7 +2112,7 @@ function AviroDashboard() {
 
           {/* Sub-tab navigation */}
           <div style={{ display: "flex", gap: 6, marginBottom: 24, borderBottom: `1px solid ${c.border}`, paddingBottom: 0 }}>
-            {[{ key: "home", label: "Client Home" }, { key: "corporate", label: "Entity Information & KYB" }, { key: "contracts", label: "Contracts" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }, { key: "provideracceptance", label: "Provider Acceptance" }].map(tab => {
+            {[{ key: "home", label: "Client Home" }, { key: "crm", label: "CRM" }, { key: "corporate", label: "Entity Information & KYB" }, { key: "contracts", label: "Contracts" }, { key: "providers", label: "Providers & Deal" }, { key: "rates", label: "Rates Overview" }, { key: "introducer", label: "Introducer" }, { key: "provideracceptance", label: "Provider Acceptance" }].map(tab => {
               const sel = clientDetailTab === tab.key;
               return <button key={tab.key} onClick={() => setClientDetailTab(tab.key)} style={{ padding: "12px 22px", fontSize: 13, fontWeight: sel ? 700 : 500, color: sel ? c.accent : c.textMuted, background: sel ? `${c.accent}12` : "transparent", border: "none", borderBottom: sel ? `2px solid ${c.accent}` : "2px solid transparent", cursor: "pointer", marginBottom: -1, transition: "all 0.15s" }}>{tab.label}</button>;
             })}
@@ -3068,6 +3074,90 @@ function AviroDashboard() {
               </div>
             </>)}
 
+            {/* ===== CRM TAB ===== */}
+            {clientDetailTab === "crm" && (() => {
+              const CRM_PRODUCTS = ["Two Step", "Gateway", "Cube Pay"];
+              const activity = (cl.crmActivity || []).slice().reverse();
+              const todayStr = new Date().toISOString().slice(0, 10);
+              return (
+                <div>
+                  {/* Products + pipeline essentials */}
+                  <div style={sectionCard}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: c.accent, margin: "0 0 14px 0", textTransform: "uppercase", letterSpacing: "0.03em" }}>Pipeline</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                      <div>
+                        <label style={labelStyle}>Products</label>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {CRM_PRODUCTS.map(p => {
+                            const sel = (cl.products || []).includes(p);
+                            return <button key={p} onClick={() => { const cur = cl.products || []; updateClient(cl.id, "products", sel ? cur.filter(x => x !== p) : [...cur, p]); }} style={{ padding: "6px 14px", borderRadius: 7, fontSize: 12, fontWeight: sel ? 700 : 400, cursor: "pointer", background: sel ? c.accentBg : c.surface, color: sel ? c.accent : c.textMuted, border: `1px solid ${sel ? c.accent : c.border}` }}>{p}</button>;
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Expected Monthly Volume</label>
+                        <input value={cl.expectedVolume || ""} onChange={e => updateClient(cl.id, "expectedVolume", e.target.value)} placeholder="e.g. 500000" style={{ ...inputStyle, width: "100%" }} />
+                      </div>
+                      <div />
+                      <div>
+                        <label style={labelStyle}>Next Action</label>
+                        <input value={cl.nextAction || ""} onChange={e => updateClient(cl.id, "nextAction", e.target.value)} placeholder="e.g. Send Two Step pricing" style={{ ...inputStyle, width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Next Action Date</label>
+                        <input type="date" value={cl.nextActionDate || ""} onChange={e => updateClient(cl.id, "nextActionDate", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                        {cl.nextActionDate && cl.nextActionDate < todayStr && <div style={{ fontSize: 10, color: "#f87171", fontWeight: 700, marginTop: 4 }}>OVERDUE</div>}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "flex-end" }}>
+                        {cl.nextAction && <button onClick={() => {
+                          // Mark done: log it and clear
+                          const entry = { id: `ca-${Date.now()}`, date: todayStr, type: "Done", note: cl.nextAction, by: (authUser && authUser.email) || "" };
+                          updateClient(cl.id, "crmActivity", [...(cl.crmActivity || []), entry]);
+                          setTimeout(() => { setGatewayClients(prev => prev.map(x => x.id === cl.id ? { ...x, nextAction: "", nextActionDate: "" } : x)); }, 50);
+                        }} style={{ background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.3)", color: "#34d399", borderRadius: 8, padding: "9px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✓ Done — log it</button>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Activity log */}
+                  <div style={sectionCard}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: c.accent, margin: "0 0 14px 0", textTransform: "uppercase", letterSpacing: "0.03em" }}>Activity Log <span style={{ color: c.textMuted, fontWeight: 400, textTransform: "none" }}>({activity.length})</span></div>
+                    {(() => {
+                      const add = () => {
+                        const dateEl = document.getElementById("crmActDate");
+                        const typeEl = document.getElementById("crmActType");
+                        const noteEl = document.getElementById("crmActNote");
+                        if (!noteEl.value.trim()) return;
+                        const entry = { id: `ca-${Date.now()}`, date: dateEl.value || todayStr, type: typeEl.value, note: noteEl.value.trim(), by: (authUser && authUser.email) || "" };
+                        updateClient(cl.id, "crmActivity", [...(cl.crmActivity || []), entry]);
+                        noteEl.value = "";
+                      };
+                      return (
+                        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                          <input id="crmActDate" type="date" defaultValue={todayStr} style={{ ...inputStyle, width: 150 }} />
+                          <select id="crmActType" defaultValue="Call" style={{ ...inputStyle, width: 120 }}>
+                            {["Call", "Meeting", "Email", "Telegram", "Note"].map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                          <input id="crmActNote" placeholder="What happened..." onKeyDown={e => { if (e.key === "Enter") add(); }} style={{ ...inputStyle, flex: 1, minWidth: 220 }} />
+                          <button onClick={add} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "9px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Log</button>
+                        </div>
+                      );
+                    })()}
+                    {activity.length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No activity logged yet.</div>}
+                    {activity.map(a => (
+                      <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 0", borderBottom: `1px solid ${c.border}30` }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: a.type === "Done" ? "#34d399" : c.accent, background: a.type === "Done" ? "rgba(52,211,153,0.08)" : c.accentBg, padding: "2px 8px", borderRadius: 4, whiteSpace: "nowrap", marginTop: 1 }}>{a.type}</span>
+                        <span style={{ fontSize: 11, color: c.textMuted, whiteSpace: "nowrap", marginTop: 2 }}>{a.date}</span>
+                        <span style={{ fontSize: 13, color: c.text, flex: 1 }}>{a.note}</span>
+                        {a.by && <span style={{ fontSize: 10, color: c.textMuted, marginTop: 2 }}>{String(a.by).split("@")[0]}</span>}
+                        <button onClick={() => { if (confirm("Delete this log entry?")) updateClient(cl.id, "crmActivity", (cl.crmActivity || []).filter(x => x.id !== a.id)); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* ===== RATES OVERVIEW TAB ===== */}
             {clientDetailTab === "rates" && (() => {
               const clProviders = cl.clientProviders || [];
@@ -3745,7 +3835,7 @@ function AviroDashboard() {
                 onMouseEnter={e => { e.currentTarget.style.background = c.cardHover; e.currentTarget.style.transform = "translateY(-1px)"; }} onMouseLeave={e => { e.currentTarget.style.background = c.card; e.currentTarget.style.transform = "none"; }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <div style={{ fontSize: 16, fontWeight: 700, color: c.text }}>{cl.name}</div>
-                  {(() => { const sc = { active: "#34d399", onboarding: "#fbbf24", discussion: "#60a5fa", inactive: "#6b7280" }; const sl = { active: "Active", onboarding: "Onboarding", discussion: "In Discussion", inactive: "Inactive" }; const st = cl.status || "onboarding"; return <span style={{ fontSize: 9, color: sc[st] || c.textMuted, background: `${sc[st] || c.textMuted}15`, border: `1px solid ${sc[st] || c.textMuted}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 700, textTransform: "uppercase" }}>{sl[st] || st}</span>; })()}
+                  {(() => { const sc = { lead: "#a78bfa", potential: "#06b6d4", active: "#34d399", onboarding: "#fbbf24", discussion: "#60a5fa", inactive: "#6b7280" }; const sl = { lead: "Lead", potential: "Potential", active: "Active", onboarding: "Onboarding", discussion: "In Discussion", inactive: "Inactive" }; const st = cl.status || "onboarding"; return <span style={{ fontSize: 9, color: sc[st] || c.textMuted, background: `${sc[st] || c.textMuted}15`, border: `1px solid ${sc[st] || c.textMuted}40`, padding: "2px 8px", borderRadius: 4, fontWeight: 700, textTransform: "uppercase" }}>{sl[st] || st}</span>; })()}
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                   {cl.clientType && <span style={{ fontSize: 11, color: typeColor, background: `${typeColor}15`, border: `1px solid ${typeColor}40`, padding: "4px 10px", borderRadius: 6, fontWeight: 600 }}>{cl.clientType}</span>}
@@ -8716,7 +8806,7 @@ function AviroDashboard() {
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 600, textTransform: "uppercase" }}>Status:</span>
             <div style={{ display: "flex", gap: 4 }}>
-              {[{ key: "all", label: "All" }, { key: "active", label: "Active" }, { key: "onboarding", label: "Onboarding" }, { key: "discussion", label: "In Discussion" }, { key: "inactive", label: "Inactive" }].map(f => (
+              {[{ key: "all", label: "All" }, { key: "lead", label: "Leads" }, { key: "potential", label: "Potentials" }, { key: "active", label: "Active" }, { key: "onboarding", label: "Onboarding" }, { key: "discussion", label: "In Discussion" }, { key: "inactive", label: "Inactive" }].map(f => (
                 <button key={f.key} onClick={() => setAnalysisFilter(f.key)} style={{
                   background: analysisFilter === f.key ? c.accent : "transparent",
                   border: `1px solid ${analysisFilter === f.key ? c.accent : c.border}`,
@@ -9008,6 +9098,148 @@ function AviroDashboard() {
             )}
           </div>
         )}
+      </div>
+    );
+  };
+
+  // ===== GATEWAY CRM (pipeline view over gatewayClients — same records, no duplication) =====
+  const renderGatewayCRM = () => {
+    const updCl = (id, patch) => setGatewayClients(gatewayClients.map(cl => cl.id === id ? { ...cl, ...patch } : cl));
+    const STAGES = [
+      { key: "lead", label: "Leads", color: "#a78bfa" },
+      { key: "potential", label: "Potentials", color: "#06b6d4" },
+      { key: "discussion", label: "In Discussion", color: "#60a5fa" },
+      { key: "onboarding", label: "Onboarding", color: "#fbbf24" },
+      { key: "active", label: "Active", color: "#34d399" },
+      { key: "inactive", label: "Inactive / Lost", color: "#6b7280" },
+    ];
+    const inputStyleC = { fontSize: 13, padding: "9px 14px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
+    const fmtVol = (v) => { const n = parseFloat(String(v || "").replace(/,/g, "")); return isNaN(n) ? null : n.toLocaleString(); };
+
+    const matchesProduct = (cl) => crmProductFilter === "All" || (cl.products || []).includes(crmProductFilter);
+    const visible = gatewayClients.filter(matchesProduct);
+
+    const openClient = (cl) => { setSelectedClient(cl.id); setSection("clients"); };
+
+    // Follow-ups: overdue + next 7 days
+    const today = new Date().toISOString().slice(0, 10);
+    const weekAhead = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const followUps = visible
+      .filter(cl => cl.nextActionDate && (cl.status || "onboarding") !== "inactive")
+      .filter(cl => cl.nextActionDate <= weekAhead)
+      .sort((a, b) => (a.nextActionDate || "").localeCompare(b.nextActionDate || ""));
+
+    const lastActivity = (cl) => {
+      const log = cl.crmActivity || [];
+      return log.length > 0 ? log[log.length - 1] : null;
+    };
+
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: c.text, margin: 0, letterSpacing: "-0.02em" }}>CRM</h2>
+            <p style={{ color: c.textSecondary, fontSize: 13, margin: "4px 0 0 0" }}>{visible.length} {crmProductFilter === "All" ? "" : crmProductFilter + " "}client{visible.length !== 1 ? "s" : ""} in pipeline · cards open the full client tile</p>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {["All", ...CLIENT_PRODUCTS].map(p => {
+              const count = p === "All" ? gatewayClients.length : gatewayClients.filter(cl => (cl.products || []).includes(p)).length;
+              const sel = crmProductFilter === p;
+              return <button key={p} onClick={() => setCrmProductFilter(p)} style={{ background: sel ? c.accentBg : "transparent", border: `1px solid ${sel ? c.accent : c.border}`, color: sel ? c.accent : c.textMuted, borderRadius: 8, padding: "7px 16px", cursor: "pointer", fontSize: 12, fontWeight: sel ? 700 : 500 }}>{p} ({count})</button>;
+            })}
+            <button onClick={() => setCrmNewLead(crmNewLead ? null : { name: "", product: crmProductFilter === "All" ? "Two Step" : crmProductFilter, status: "lead" })} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add Lead</button>
+          </div>
+        </div>
+
+        {/* Quick-add lead */}
+        {crmNewLead && (
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid ${c.accent}40`, padding: 16, marginBottom: 16, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ flex: 2, minWidth: 200 }}>
+              <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 }}>Company Name</label>
+              <input value={crmNewLead.name} onChange={e => setCrmNewLead({ ...crmNewLead, name: e.target.value })} autoFocus placeholder="e.g. Acme Gaming Ltd" style={{ ...inputStyleC, width: "100%" }} onKeyDown={e => { if (e.key === "Enter") document.getElementById("crmAddLeadBtn").click(); }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 130 }}>
+              <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 }}>Product</label>
+              <select value={crmNewLead.product} onChange={e => setCrmNewLead({ ...crmNewLead, product: e.target.value })} style={{ ...inputStyleC, width: "100%" }}>{CLIENT_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}</select>
+            </div>
+            <div style={{ flex: 1, minWidth: 130 }}>
+              <label style={{ fontSize: 10, color: c.textMuted, fontWeight: 600, textTransform: "uppercase", display: "block", marginBottom: 3 }}>Stage</label>
+              <select value={crmNewLead.status} onChange={e => setCrmNewLead({ ...crmNewLead, status: e.target.value })} style={{ ...inputStyleC, width: "100%" }}><option value="lead">Lead</option><option value="potential">Potential</option><option value="discussion">In Discussion</option></select>
+            </div>
+            <button id="crmAddLeadBtn" onClick={() => {
+              if (!crmNewLead.name.trim()) return;
+              const newCl = { id: `cl-${Date.now()}`, name: crmNewLead.name.trim(), status: crmNewLead.status, products: [crmNewLead.product], crmActivity: [], nextAction: "", nextActionDate: "", expectedVolume: "", clientType: "", clientEntities: [], agreements: [], introduction: "", introductionDeal: "", monthlyFee: "", monthlyFeeCurrency: "USD", revenueSharePct: "", revenueShareFrom: "", settlementGroup: "", settlementTerms: "", settlementFee: "", bankAccounts: [], clientProviders: [], contacts: [], groups: [], notes: [], actionPoints: [], proposedProviders: [], targetRegions: [], targetCountries: [], clientProfile: "", targetVolume: "" };
+              setGatewayClients([...gatewayClients, newCl]);
+              setCrmNewLead(null);
+            }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Add</button>
+            <button onClick={() => setCrmNewLead(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 8, padding: "10px 14px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
+          </div>
+        )}
+
+        {/* Follow-ups strip */}
+        {followUps.length > 0 && (
+          <div style={{ background: c.card, borderRadius: 12, border: `1px solid rgba(251,191,36,0.25)`, padding: 14, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#fbbf24", textTransform: "uppercase", marginBottom: 8 }}>Follow-ups — overdue & next 7 days</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {followUps.map(cl => {
+                const overdue = cl.nextActionDate < today;
+                const col = overdue ? "#f87171" : "#fbbf24";
+                return (
+                  <div key={cl.id} onClick={() => openClient(cl)} style={{ display: "flex", alignItems: "center", gap: 8, background: c.surface, border: `1px solid ${col}40`, borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: col, flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{cl.name}</span>
+                    <span style={{ fontSize: 11, color: c.textSecondary }}>{cl.nextAction || "follow up"}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: col }}>{overdue ? "OVERDUE " : ""}{cl.nextActionDate}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Kanban board */}
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${STAGES.length}, minmax(185px, 1fr))`, gap: 10, overflowX: "auto", alignItems: "start" }}>
+          {STAGES.map(stage => {
+            const cards = visible.filter(cl => (cl.status || "onboarding") === stage.key);
+            const volSum = cards.reduce((s, cl) => { const n = parseFloat(String(cl.expectedVolume || "").replace(/,/g, "")); return s + (isNaN(n) ? 0 : n); }, 0);
+            return (
+              <div key={stage.key}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const id = crmDragIdRef.current; if (id) { updCl(id, { status: stage.key }); crmDragIdRef.current = null; } }}
+                style={{ background: c.surface, borderRadius: 12, border: `1px solid ${c.border}`, borderTop: `3px solid ${stage.color}`, padding: 10, minHeight: 220 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "0 2px" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: stage.color, textTransform: "uppercase" }}>{stage.label}</span>
+                  <span style={{ fontSize: 10, color: c.textMuted }}>{cards.length}{volSum > 0 ? " · " + volSum.toLocaleString() : ""}</span>
+                </div>
+                {cards.map(cl => {
+                  const act = lastActivity(cl);
+                  const overdue = cl.nextActionDate && cl.nextActionDate < today;
+                  return (
+                    <div key={cl.id} draggable
+                      onDragStart={() => { crmDragIdRef.current = cl.id; }}
+                      style={{ background: c.card, borderRadius: 10, border: `1px solid ${overdue ? "rgba(248,113,113,0.35)" : c.border}`, padding: 12, marginBottom: 8, cursor: "grab" }}>
+                      <div onClick={() => openClient(cl)} style={{ fontSize: 13, fontWeight: 700, color: c.text, cursor: "pointer", marginBottom: 5 }}>{cl.name}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
+                        {CLIENT_PRODUCTS.map(p => {
+                          const sel = (cl.products || []).includes(p);
+                          return <button key={p} title={sel ? "Remove " + p : "Tag as " + p} onClick={() => { const cur = cl.products || []; updCl(cl.id, { products: sel ? cur.filter(x => x !== p) : [...cur, p] }); }} style={{ fontSize: 8, fontWeight: 700, padding: "2px 6px", borderRadius: 4, cursor: "pointer", textTransform: "uppercase", background: sel ? (p === "Two Step" ? "rgba(167,139,250,0.15)" : c.accentBg) : "transparent", color: sel ? (p === "Two Step" ? "#a78bfa" : c.accent) : c.textMuted, border: `1px solid ${sel ? (p === "Two Step" ? "#a78bfa50" : c.accent + "40") : c.border}`, opacity: sel ? 1 : 0.55 }}>{p}</button>;
+                        })}
+                      </div>
+                      {fmtVol(cl.expectedVolume) && <div style={{ fontSize: 10, color: "#34d399", marginBottom: 4 }}>Vol: {fmtVol(cl.expectedVolume)}/mo</div>}
+                      {cl.nextAction && (
+                        <div style={{ fontSize: 10, color: overdue ? "#f87171" : c.textSecondary, marginBottom: 3 }}>
+                          → {cl.nextAction}{cl.nextActionDate ? " · " + cl.nextActionDate : ""}
+                        </div>
+                      )}
+                      {act && <div style={{ fontSize: 9, color: c.textMuted, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(act.type || "Note") + " " + (act.date || "") + ": " + (act.note || "")}</div>}
+                    </div>
+                  );
+                })}
+                {cards.length === 0 && <div style={{ fontSize: 10, color: c.textMuted, textAlign: "center", padding: "18px 0", fontStyle: "italic" }}>Drop here</div>}
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -9356,7 +9588,7 @@ function AviroDashboard() {
   // ===== NAVIGATION GROUPS =====
   const sectionGroups = {
     david: { label: "DAVID", sections: ["quickjobs", "signal", "sophie", "personal", "notes", "progress"] },
-    gateway: { label: "GATEWAY.IO", sections: ["clients", "roadmap", "providers", "bankaccounts", "contractgen", "clientanalysis", "kybtemplate"] },
+    gateway: { label: "GATEWAY.IO", sections: ["crm", "clients", "roadmap", "providers", "bankaccounts", "contractgen", "clientanalysis", "kybtemplate"] },
     cubepay: { label: "CUBE PAY", sections: ["cpclients"] },
     corporate: { label: "CORPORATE MATRIX", sections: ["entities", "moneyflow", "banks", "brands"] },
     finance: { label: "FINANCE", sections: ["finance"] },
@@ -9381,6 +9613,7 @@ function AviroDashboard() {
     { section: "notes", icon: "list", label: "Notes", group: "david" },
     { section: "progress", icon: "signal", label: "Daily Progress", group: "david" },
     { section: "gateway", label: "GATEWAY.IO", isHeader: true, group: "gateway" },
+    { section: "crm", icon: "inbox", label: "CRM", group: "gateway" },
     { section: "clients", icon: "gateway", label: "Client Portal", group: "gateway" },
     { section: "roadmap", icon: "roadmap", label: "Integration Roadmap", group: "gateway" },
     { section: "providers", icon: "bank", label: "Providers", group: "gateway" },
@@ -9403,7 +9636,7 @@ function AviroDashboard() {
 
   const navItems = section === "home" ? [] : allNavItems.filter(item => item.group === activeGroup);
 
-  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator, cpclients: renderCubePayClients, clientanalysis: renderClientAnalysis, kybtemplate: renderKybTemplate, finance: renderFinance };
+  const sections = { home: renderHome, quickjobs: renderQuickJobs, signal: renderSignal, sophie: renderSophie, personal: renderPersonalJobs, notes: renderNotes, progress: renderDailyProgress, clients: renderClients, roadmap: renderRoadmap, providers: renderProviders, entities: renderEntities, moneyflow: renderMoneyFlow, banks: renderBankRelationships, bankaccounts: renderBankAccounts, brands: renderBrands, settings: renderSettings, contractgen: renderContractGenerator, cpclients: renderCubePayClients, clientanalysis: renderClientAnalysis, kybtemplate: renderKybTemplate, finance: renderFinance, crm: renderGatewayCRM };
 
   // ===== AUTH LOADING =====
   if (authLoading) {
