@@ -28,15 +28,31 @@ exports.handler = async (event) => {
   const user = (params.user || "david").toLowerCase();
   const assigneeId = user === "sophie" ? SOPHIE_ID : DAVID_ID;
   const teamId = params.team_id || process.env.CLICKUP_TEAM_ID || TEAM_ID_FALLBACK;
+  const teamMode = user === "team"; // all open tasks in the workspace, any/no assignee
 
   try {
-    // Fetch all open tasks for this assignee, page by page (100 per page max)
+    // Space id -> name map (the team task feed returns space ids WITHOUT names)
+    let spaceNames = {};
+    let spacesList = [];
+    try {
+      const spRes = await fetch(`https://api.clickup.com/api/v2/team/${teamId}/space?archived=false`, {
+        headers: { Authorization: token, "Content-Type": "application/json" },
+      });
+      if (spRes.ok) {
+        const spData = await spRes.json();
+        (spData.spaces || []).forEach(s => { spaceNames[s.id] = s.name; });
+        spacesList = (spData.spaces || []).map(s => ({ id: s.id, name: s.name }));
+      }
+    } catch (e) { /* space names are an enhancement, not fatal */ }
+
+    // Fetch open tasks page by page (100 per page max)
     let allTasks = [];
     let page = 0;
     let hasMore = true;
 
     while (hasMore) {
-      const url = `https://api.clickup.com/api/v2/team/${teamId}/task?assignees[]=${assigneeId}&include_closed=false&subtasks=false&page=${page}&order_by=due_date&reverse=true`;
+      const assigneeFilter = teamMode ? "" : `assignees[]=${assigneeId}&`;
+      const url = `https://api.clickup.com/api/v2/team/${teamId}/task?${assigneeFilter}include_closed=false&subtasks=false&page=${page}&order_by=due_date&reverse=true`;
       const res = await fetch(url, {
         headers: { Authorization: token, "Content-Type": "application/json" },
       });
@@ -50,7 +66,7 @@ exports.handler = async (event) => {
       // ClickUp returns empty array when no more pages
       hasMore = tasks.length >= 100;
       page++;
-      if (page > 10) break; // safety cap
+      if (page > (teamMode ? 25 : 10)) break; // safety cap
     }
 
     // Transform to simplified format
@@ -62,7 +78,8 @@ exports.handler = async (event) => {
       statusType: t.status?.type || "open",
       priority: t.priority?.priority || null,
       dueDate: t.due_date ? new Date(parseInt(t.due_date)).toISOString().slice(0, 10) : null,
-      space: t.space?.name || t.list?.name || "",
+      space: spaceNames[t.space?.id] || t.space?.name || t.list?.name || "",
+      spaceId: t.space?.id || null,
       list: t.list?.name || "",
       listId: t.list?.id || null,
       url: t.url,
@@ -73,7 +90,7 @@ exports.handler = async (event) => {
 
     // Cache to Supabase for fast dashboard startup
     try {
-      const cacheId = user === "sophie" ? "clickup_sophie_tasks" : "clickup_david_tasks";
+      const cacheId = teamMode ? "clickup_team_tasks" : (user === "sophie" ? "clickup_sophie_tasks" : "clickup_david_tasks");
       await fetch(`${DB_URL}/rest/v1/dashboard_state`, {
         method: "POST",
         headers: {
@@ -84,7 +101,7 @@ exports.handler = async (event) => {
         },
         body: JSON.stringify({
           id: cacheId,
-          state: { tasks: simplified },
+          state: teamMode ? { tasks: simplified, spaces: spacesList } : { tasks: simplified },
           updated_at: new Date().toISOString(),
           updated_by: "clickup_proxy",
         }),
@@ -96,7 +113,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: CORS,
-      body: JSON.stringify({ ok: true, user, count: simplified.length, tasks: simplified }),
+      body: JSON.stringify({ ok: true, user, count: simplified.length, tasks: simplified, spaces: spacesList }),
     };
   } catch (e) {
     return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: e.message }) };
