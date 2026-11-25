@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-11-25.2";
+const APP_VERSION = "2026-11-25.3";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -9405,6 +9405,12 @@ function AviroDashboard() {
                           {aviroPeople.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                         {st.ownerId && <PersonChip id={st.ownerId} size={12} />}
+                        {(() => { const stOverdue = !st.done && st.targetDate && st.targetDate < today; return (<>
+                          <input type="date" value={st.startDate || ""} onChange={e => updStageT(st.id, { startDate: e.target.value })} title="Stage start date (optional)" style={{ ...inputStyleA, fontSize: 11, padding: "5px 8px", width: 128 }} />
+                          <span style={{ fontSize: 10, color: c.textMuted }}>→</span>
+                          <input type="date" value={st.targetDate || ""} onChange={e => updStageT(st.id, { targetDate: e.target.value })} title="Stage target date (optional)" style={{ ...inputStyleA, fontSize: 11, padding: "5px 8px", width: 128, borderColor: stOverdue ? "rgba(248,113,113,0.6)" : c.border, color: stOverdue ? "#f87171" : c.text }} />
+                          {stOverdue && <span style={{ fontSize: 10, fontWeight: 800, color: "#f87171" }}>OVERDUE</span>}
+                        </>); })()}
                         {st.done ? <span style={{ fontSize: 10, fontWeight: 800, color: "#34d399" }}>✓ DONE</span> : ready ? <span style={{ fontSize: 10, fontWeight: 800, color: c.accent }}>READY</span> : <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted }}>waiting</span>}
                         <button onClick={() => { if (confirm("Remove this stage?")) updTask(t.id, { stages: stages.filter(x => x.id !== st.id) }); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 12 }}>✕</button>
                       </div>
@@ -9642,7 +9648,7 @@ function AviroDashboard() {
                     {readyStages.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic" }}>Nothing is waiting on {p.name}.</div>}
                     {readyStages.map(({ t, st, si, proj }) => (
                       <div key={t.id + st.id} onClick={() => { setApView("projects"); setApOpenProject(t.projectId); setApExpandedTask(t.id); }} style={{ padding: "10px 12px", borderRadius: 10, background: c.surface, border: `1px solid ${proj ? proj.color + "50" : c.border}`, borderLeft: `5px solid ${proj ? proj.color : c.accent}`, marginBottom: 8, cursor: "pointer" }}>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: c.text }}>{si + 1}. {st.name || "Stage"}</div>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: c.text }}>{si + 1}. {st.name || "Stage"}{st.targetDate && <span style={{ fontSize: 10, fontWeight: 800, color: st.targetDate < today ? "#f87171" : c.textMuted, marginLeft: 8 }}>{st.targetDate < today ? "OVERDUE " : "→ "}{st.targetDate}</span>}</div>
                         <div style={{ fontSize: 11, color: c.textMuted }}>{t.text}{proj ? " · " + proj.name : ""}</div>
                       </div>
                     ))}
