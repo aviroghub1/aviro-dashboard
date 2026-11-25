@@ -147,7 +147,7 @@ const DocStatusBadge = ({ status }) => {
 };
 
 // ===== APP VERSION — bump on every deploy, must match version.json =====
-const APP_VERSION = "2026-11-25.1";
+const APP_VERSION = "2026-11-25.2";
 
 // ===== PERSISTENCE MERGE ENGINE (pure functions, unit-tested) =====
 const P_TOMBSTONE_TTL = 30 * 86400000; // 30 days
@@ -421,6 +421,10 @@ function AviroDashboard() {
   const [apOpenProject, setApOpenProject] = useState(null); // project id
   const [apNewProject, setApNewProject] = useState(null); // { name }
   const [apPersonFilter, setApPersonFilter] = useState(null); // selected person id on Tasks by Person
+  const [apExpandedTask, setApExpandedTask] = useState(null); // open task card id
+  const [apCreateTask, setApCreateTask] = useState(false); // CREATE TASK panel open
+  const [apNoteEditing, setApNoteEditing] = useState(null); // note id being edited
+  const [apAddingNote, setApAddingNote] = useState(null); // "taskId" or "taskId/stageId" with note box open
   const [cuBusy, setCuBusy] = useState({}); // taskId -> true while a ClickUp write is in flight
 
   const [clickupDavidTasks, setClickupDavidTasks] = useState([]); // Live ClickUp tasks for David
@@ -9179,61 +9183,243 @@ function AviroDashboard() {
     );
   };
 
-  // ===== AVIRO PROJECTS — our own project tool (replaced ClickUp 2026-11-25) =====
-  // Team can add/update tasks; only admins manage projects, stages and people.
+  // ===== AVIRO PROJECTS v3 — tasks carry their own stages, checklists and notes =====
+  // Team can add/update tasks; only admins manage projects and people.
   const renderProjects = () => {
     const inputStyleA = { fontSize: 14, padding: "10px 14px", borderRadius: 8, border: `1px solid ${c.border}`, background: c.surface, color: c.text, outline: "none", boxSizing: "border-box" };
     const labelStyleA = { fontSize: 11, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 5, letterSpacing: "0.04em" };
     const PALETTE = ["#818cf8", "#34d399", "#fbbf24", "#f87171", "#06b6d4", "#f472b6", "#a78bfa", "#fb923c", "#4ade80", "#60a5fa"];
     const today = new Date().toISOString().slice(0, 10);
     const myEmail = (authUser && authUser.email) || "";
+    const myName = myEmail.split("@")[0];
     const isAdmin = myEmail === "david@aviro-group.com";
 
     const personById = (id) => aviroPeople.find(p => p.id === id);
     const PersonChip = ({ id, size }) => {
       const p = personById(id);
       if (!p) return null;
-      return <span style={{ fontSize: size || 11, fontWeight: 800, color: "#fff", background: p.color, padding: size > 11 ? "4px 12px" : "2px 9px", borderRadius: 6, whiteSpace: "nowrap" }}>{p.name}{p.isOutside ? " ◦" : ""}</span>;
+      return <span style={{ fontSize: size || 11, fontWeight: 800, color: "#fff", background: p.color, padding: size > 11 ? "4px 12px" : "2px 9px", borderRadius: 6, whiteSpace: "nowrap" }}>{p.name}</span>;
     };
     const updProject = (id, patch) => setAviroProjects(aviroProjects.map(p => p.id === id ? { ...p, ...patch } : p));
     const updTask = (id, patch) => setAviroTasks(aviroTasks.map(t => t.id === id ? { ...t, ...patch } : t));
     const taskBlockers = (t) => (t.dependsOn || []).map(id => aviroTasks.find(x => x.id === id)).filter(x => x && !x.done);
+    // Main owner + others; stage assignees are auto-included in task people
+    const mainOwner = (t) => t.mainOwnerId || (t.ownerIds || [])[0] || "";
+    const taskPeople = (t) => {
+      const ids = [];
+      const add = (id) => { if (id && !ids.includes(id)) ids.push(id); };
+      add(mainOwner(t));
+      (t.ownerIds || []).forEach(add);
+      (t.stages || []).forEach(s => add(s.ownerId));
+      return ids;
+    };
+    const taskStageProgress = (t) => {
+      const st = t.stages || [];
+      if (st.length === 0) return null;
+      return { done: st.filter(s => s.done).length, total: st.length };
+    };
+    const stageReadyInTask = (t, idx) => (t.stages || []).slice(0, idx).every(s => s.done);
 
-    // A stage is READY when every task in all EARLIER stages of its project is done
-    const stageReady = (proj, stageIdx) => {
-      const stages = proj.stages || [];
-      for (let i = 0; i < stageIdx; i++) {
-        const prior = aviroTasks.filter(t => t.projectId === proj.id && t.stageId === stages[i].id && !t.done);
-        if (prior.length > 0) return false;
-      }
-      return true;
+    // ---- Shared blocks: checklist + notes (work on a task OR a stage via get/set) ----
+    const ChecklistBlock = ({ obj, onPatch, idPrefix }) => (
+      <div style={{ marginTop: 8 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: c.textMuted, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!obj.checklistOn} onChange={e => onPatch({ checklistOn: e.target.checked })} style={{ accentColor: c.accent }} />
+          Checklist — things needed
+        </label>
+        {obj.checklistOn && (
+          <div style={{ marginTop: 6, marginLeft: 4 }}>
+            {(obj.checklist || []).map(item => (
+              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                <input type="checkbox" checked={!!item.done} onChange={() => onPatch({ checklist: obj.checklist.map(x => x.id === item.id ? { ...x, done: !x.done } : x) })} style={{ accentColor: "#34d399", width: 15, height: 15 }} />
+                <span style={{ fontSize: 13, color: item.done ? c.textMuted : c.text, textDecoration: item.done ? "line-through" : "none", flex: 1 }}>{item.text}</span>
+                <button onClick={() => onPatch({ checklist: obj.checklist.filter(x => x.id !== item.id) })} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>✕</button>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+              <input id={idPrefix + "-ckadd"} placeholder="Needed..." style={{ ...inputStyleA, flex: 1, fontSize: 12, padding: "6px 10px" }} onKeyDown={e => {
+                if (e.key === "Enter" && e.target.value.trim()) { onPatch({ checklist: [...(obj.checklist || []), { id: "ck-" + Date.now(), text: e.target.value.trim(), done: false }] }); e.target.value = ""; }
+              }} />
+              <button onClick={() => { const el = document.getElementById(idPrefix + "-ckadd"); if (el.value.trim()) { onPatch({ checklist: [...(obj.checklist || []), { id: "ck-" + Date.now(), text: el.value.trim(), done: false }] }); el.value = ""; } }} style={{ background: c.surface, border: `1px solid ${c.accent}60`, color: c.accent, borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>+ Add</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
+    const NotesBlock = ({ obj, onPatch, noteKey }) => {
+      const notes = obj.notes || [];
+      return (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: c.textMuted }}>Notes {notes.length > 0 ? "(" + notes.length + ")" : ""}</span>
+            <button onClick={() => setApAddingNote(apAddingNote === noteKey ? null : noteKey)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.accent, borderRadius: 6, padding: "2px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Add Note</button>
+          </div>
+          {apAddingNote === noteKey && (
+            <div style={{ marginTop: 6 }}>
+              <textarea id={"apnote-" + noteKey} rows={2} placeholder="Write the note..." autoFocus style={{ ...inputStyleA, width: "100%", fontSize: 13, resize: "vertical" }} />
+              <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                <button onClick={() => {
+                  const el = document.getElementById("apnote-" + noteKey);
+                  if (!el.value.trim()) return;
+                  onPatch({ notes: [...notes, { id: "nt-" + Date.now(), text: el.value.trim(), by: myName, at: new Date().toISOString().slice(0, 10) }] });
+                  setApAddingNote(null);
+                }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Confirm Note</button>
+                <button onClick={() => setApAddingNote(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
+              </div>
+            </div>
+          )}
+          {notes.map(n => (
+            <div key={n.id} style={{ background: c.bg, borderRadius: 8, border: `1px solid ${c.border}`, padding: "8px 12px", marginTop: 6 }}>
+              {apNoteEditing === n.id ? (
+                <div>
+                  <textarea id={"apnoteedit-" + n.id} defaultValue={n.text} rows={2} autoFocus style={{ ...inputStyleA, width: "100%", fontSize: 13, resize: "vertical" }} />
+                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                    <button onClick={() => {
+                      const el = document.getElementById("apnoteedit-" + n.id);
+                      if (!el.value.trim()) return;
+                      onPatch({ notes: notes.map(x => x.id === n.id ? { ...x, text: el.value.trim(), editedAt: new Date().toISOString().slice(0, 10) } : x) });
+                      setApNoteEditing(null);
+                    }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 6, padding: "5px 14px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Confirm</button>
+                    <button onClick={() => setApNoteEditing(null)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11 }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 13, color: c.text, whiteSpace: "pre-wrap" }}>{n.text}</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
+                    <span style={{ fontSize: 10, color: c.textMuted }}>{n.by} · {n.at}{n.editedAt ? " (edited)" : ""}</span>
+                    <button onClick={() => setApNoteEditing(n.id)} style={{ background: "transparent", border: "none", color: c.accent, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>Edit</button>
+                    <button onClick={() => { if (confirm("Delete this note?")) onPatch({ notes: notes.filter(x => x.id !== n.id) }); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 10 }}>Delete</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      );
     };
 
-    // ---- TASK ROW ----
-    const TaskRow = ({ t, showProject }) => {
+    const OutsideBlock = ({ obj, onPatch }) => (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: c.textMuted, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!obj.needOutside} onChange={e => onPatch({ needOutside: e.target.checked })} style={{ accentColor: c.accent }} />
+          Need outside people
+        </label>
+        {obj.needOutside && (
+          <input value={obj.outsideName || ""} onChange={e => onPatch({ outsideName: e.target.value })} placeholder="Who? e.g. Suntera, the bank..." style={{ ...inputStyleA, flex: 1, minWidth: 180, fontSize: 12, padding: "6px 10px" }} />
+        )}
+      </div>
+    );
+
+    // ---- TASK CARD ----
+    const TaskCard = ({ t, showProject }) => {
       const blockers = taskBlockers(t);
       const blocked = blockers.length > 0;
       const overdue = !t.done && t.targetDate && t.targetDate < today;
-      const notStarted = !t.done && t.startDate && t.startDate > today;
       const proj = aviroProjects.find(p => p.id === t.projectId);
+      const prog = taskStageProgress(t);
+      const expanded = apExpandedTask === t.id;
+      const people = taskPeople(t);
+      const stages = t.stages || [];
+      const updStageT = (sid, patch) => {
+        let next = stages.map(s => s.id === sid ? { ...s, ...patch } : s);
+        // Auto-add anyone assigned a stage to the task's people
+        const patchObj = { stages: next };
+        if (patch.ownerId && !people.includes(patch.ownerId)) patchObj.ownerIds = [...(t.ownerIds || []), patch.ownerId];
+        updTask(t.id, patchObj);
+      };
       return (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 10px", borderRadius: 8, marginBottom: 4, background: t.done ? "transparent" : c.surface, border: `1px solid ${t.done ? "transparent" : overdue ? "rgba(248,113,113,0.4)" : c.border}`, opacity: t.done ? 0.55 : 1 }}>
-          <input type="checkbox" checked={!!t.done} disabled={blocked} title={blocked ? "Cannot start until finished: " + blockers.map(b => b.text).join(", ") : "Mark done"} onChange={() => {
-            if (blocked) return;
-            updTask(t.id, t.done ? { done: false, completedAt: "", completedBy: "" } : { done: true, completedAt: new Date().toISOString(), completedBy: myEmail });
-          }} style={{ accentColor: "#34d399", width: 18, height: 18, marginTop: 1, cursor: blocked ? "not-allowed" : "pointer" }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: c.text, textDecoration: t.done ? "line-through" : "none" }}>{t.text}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 4 }}>
-              {showProject && proj && <span style={{ fontSize: 10, fontWeight: 800, color: proj.color, border: `1px solid ${proj.color}60`, padding: "1px 8px", borderRadius: 4 }}>{proj.name}</span>}
-              {(t.ownerIds || []).map(oid => <PersonChip key={oid} id={oid} />)}
-              {blocked && <span style={{ fontSize: 10, fontWeight: 700, color: "#fbbf24" }} title={blockers.map(b => b.text).join(", ")}>🔒 waiting on {blockers.length}</span>}
-              {notStarted && <span style={{ fontSize: 10, color: "#06b6d4", fontWeight: 700 }}>starts {t.startDate}</span>}
-              {t.startDate && !notStarted && !t.done && <span style={{ fontSize: 10, color: c.textMuted }}>from {t.startDate}</span>}
-              {t.targetDate && !t.done && <span style={{ fontSize: 10, fontWeight: 700, color: overdue ? "#f87171" : c.textMuted }}>{overdue ? "OVERDUE " : "→ "}{t.targetDate}</span>}
+        <div style={{ background: c.card, borderRadius: 14, border: `2px solid ${t.done ? "transparent" : overdue ? "rgba(248,113,113,0.45)" : expanded ? (proj ? proj.color + "60" : c.accent + "60") : c.border}`, padding: "14px 16px", marginBottom: 10, opacity: t.done ? 0.55 : 1 }}>
+          {/* Header row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <input type="checkbox" checked={!!t.done} disabled={blocked} title={blocked ? "Cannot start until finished: " + blockers.map(b => b.text).join(", ") : "Mark task done"} onChange={() => {
+              if (blocked) return;
+              updTask(t.id, t.done ? { done: false, completedAt: "", completedBy: "" } : { done: true, completedAt: new Date().toISOString(), completedBy: myEmail });
+            }} style={{ accentColor: "#34d399", width: 22, height: 22, cursor: blocked ? "not-allowed" : "pointer", flexShrink: 0 }} />
+            <div onClick={() => setApExpandedTask(expanded ? null : t.id)} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: c.text, textDecoration: t.done ? "line-through" : "none" }}>{t.text}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                {showProject && proj && <span style={{ fontSize: 10, fontWeight: 800, color: proj.color, border: `1px solid ${proj.color}60`, padding: "1px 8px", borderRadius: 4 }}>{proj.name}</span>}
+                {mainOwner(t) && <PersonChip id={mainOwner(t)} size={12} />}
+                {people.filter(id => id !== mainOwner(t)).slice(0, 5).map(id => { const p = personById(id); return p ? <span key={id} title={p.name} style={{ width: 22, height: 22, borderRadius: "50%", background: p.color, color: "#fff", fontSize: 10, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{p.name.charAt(0).toUpperCase()}</span> : null; })}
+                {prog && <span style={{ fontSize: 11, fontWeight: 800, color: prog.done === prog.total ? "#34d399" : c.accent }}>stage {Math.min(prog.done + 1, prog.total)}/{prog.total}</span>}
+                {blocked && <span style={{ fontSize: 11, fontWeight: 700, color: "#fbbf24" }}>🔒 waiting on {blockers.length}</span>}
+                {t.targetDate && !t.done && <span style={{ fontSize: 11, fontWeight: 700, color: overdue ? "#f87171" : c.textMuted }}>{overdue ? "OVERDUE " : "→ "}{t.targetDate}</span>}
+                {t.needOutside && t.outsideName && <span style={{ fontSize: 10, color: c.textMuted, border: `1px dashed ${c.border}`, padding: "1px 8px", borderRadius: 4 }}>◦ {t.outsideName}</span>}
+              </div>
             </div>
+            <button onClick={() => setApExpandedTask(expanded ? null : t.id)} style={{ background: "transparent", border: "none", color: c.textMuted, cursor: "pointer", fontSize: 16, flexShrink: 0 }}>{expanded ? "▾" : "▸"}</button>
           </div>
-          <button onClick={() => { if (confirm("Delete this task?")) setAviroTasks(aviroTasks.filter(x => x.id !== t.id)); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 13 }}>✕</button>
+
+          {/* Expanded body */}
+          {expanded && (
+            <div style={{ marginTop: 12, borderTop: `1px solid ${c.border}`, paddingTop: 12 }}>
+              {/* Owners + dates */}
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 6 }}>
+                <div>
+                  <label style={labelStyleA}>Main Owner</label>
+                  <select value={mainOwner(t)} onChange={e => updTask(t.id, { mainOwnerId: e.target.value })} style={{ ...inputStyleA, minWidth: 140 }}>
+                    <option value="">— Pick —</option>
+                    {aviroPeople.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyleA}>Also On It</label>
+                  <select value="" onChange={e => { if (!e.target.value) return; const cur = t.ownerIds || []; updTask(t.id, { ownerIds: cur.includes(e.target.value) ? cur.filter(x => x !== e.target.value) : [...cur, e.target.value] }); }} style={{ ...inputStyleA, minWidth: 130 }}>
+                    <option value="">± person</option>
+                    {aviroPeople.map(p => <option key={p.id} value={p.id}>{(t.ownerIds || []).includes(p.id) ? "− " : "+ "}{p.name}</option>)}
+                  </select>
+                </div>
+                <div><label style={labelStyleA}>Start</label><input type="date" value={t.startDate || ""} onChange={e => updTask(t.id, { startDate: e.target.value })} style={{ ...inputStyleA }} /></div>
+                <div><label style={labelStyleA}>Target</label><input type="date" value={t.targetDate || ""} onChange={e => updTask(t.id, { targetDate: e.target.value })} style={{ ...inputStyleA }} /></div>
+                <div>
+                  <label style={labelStyleA}>Cannot start until</label>
+                  <select value="" onChange={e => { if (!e.target.value) return; const cur = t.dependsOn || []; updTask(t.id, { dependsOn: cur.includes(e.target.value) ? cur.filter(x => x !== e.target.value) : [...cur, e.target.value] }); }} style={{ ...inputStyleA, minWidth: 170, fontSize: 12 }}>
+                    <option value="">± task finished...</option>
+                    {aviroTasks.filter(x => x.projectId === t.projectId && x.id !== t.id).map(x => <option key={x.id} value={x.id}>{(t.dependsOn || []).includes(x.id) ? "− " : "+ "}{x.text.slice(0, 40)}{x.done ? " ✓" : ""}</option>)}
+                  </select>
+                </div>
+                <span style={{ flex: 1 }} />
+                <button onClick={() => { if (confirm("Delete this task?")) setAviroTasks(aviroTasks.filter(x => x.id !== t.id)); }} style={{ background: "transparent", border: "1px solid rgba(248,113,113,0.3)", color: "#f87171", borderRadius: 7, padding: "7px 12px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Delete Task</button>
+              </div>
+              <OutsideBlock obj={t} onPatch={(patch) => updTask(t.id, patch)} />
+              <ChecklistBlock obj={t} onPatch={(patch) => updTask(t.id, patch)} idPrefix={"tk" + t.id} />
+
+              {/* Stages of this task */}
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: c.accent, textTransform: "uppercase" }}>Stages of this task</span>
+                  <button onClick={() => updTask(t.id, { stages: [...stages, { id: "ts-" + Date.now(), name: "", ownerId: "", done: false }] })} style={{ background: "transparent", border: `1px solid ${c.accent}60`, color: c.accent, borderRadius: 6, padding: "3px 12px", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Add Stage</button>
+                </div>
+                {stages.map((st, si) => {
+                  const ready = stageReadyInTask(t, si);
+                  return (
+                    <div key={st.id} style={{ background: c.surface, borderRadius: 10, border: `1px solid ${st.done ? "rgba(52,211,153,0.4)" : ready ? c.accent + "50" : c.border}`, padding: "10px 12px", marginBottom: 8, opacity: st.done || ready ? 1 : 0.65 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <input type="checkbox" checked={!!st.done} disabled={!ready && !st.done} title={ready || st.done ? "Stage done" : "Earlier stages first"} onChange={() => updStageT(st.id, { done: !st.done })} style={{ accentColor: "#34d399", width: 18, height: 18, cursor: ready || st.done ? "pointer" : "not-allowed" }} />
+                        <span style={{ fontSize: 15, fontWeight: 900, color: proj ? proj.color : c.accent }}>{si + 1}.</span>
+                        <input value={st.name} onChange={e => updStageT(st.id, { name: e.target.value })} placeholder="Stage name..." style={{ ...inputStyleA, flex: 2, minWidth: 150, fontWeight: 700, fontSize: 14, textDecoration: st.done ? "line-through" : "none" }} />
+                        <select value={st.ownerId || ""} onChange={e => updStageT(st.id, { ownerId: e.target.value })} style={{ ...inputStyleA, minWidth: 130, fontSize: 13 }}>
+                          <option value="">— Who —</option>
+                          {aviroPeople.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        {st.ownerId && <PersonChip id={st.ownerId} size={12} />}
+                        {st.done ? <span style={{ fontSize: 10, fontWeight: 800, color: "#34d399" }}>✓ DONE</span> : ready ? <span style={{ fontSize: 10, fontWeight: 800, color: c.accent }}>READY</span> : <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted }}>waiting</span>}
+                        <button onClick={() => { if (confirm("Remove this stage?")) updTask(t.id, { stages: stages.filter(x => x.id !== st.id) }); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 12 }}>✕</button>
+                      </div>
+                      <OutsideBlock obj={st} onPatch={(patch) => updStageT(st.id, patch)} />
+                      <ChecklistBlock obj={st} onPatch={(patch) => updStageT(st.id, patch)} idPrefix={"st" + st.id} />
+                      <NotesBlock obj={st} onPatch={(patch) => updStageT(st.id, patch)} noteKey={t.id + "/" + st.id} />
+                    </div>
+                  );
+                })}
+                {stages.length === 0 && <div style={{ fontSize: 12, color: c.textMuted, fontStyle: "italic" }}>No stages — fine for simple tasks. Add stages to split the work between people.</div>}
+              </div>
+
+              <NotesBlock obj={t} onPatch={(patch) => updTask(t.id, patch)} noteKey={t.id} />
+            </div>
+          )}
         </div>
       );
     };
@@ -9245,9 +9431,7 @@ function AviroDashboard() {
       const doneT = pTasks.filter(t => t.done);
       const pct = pTasks.length > 0 ? Math.round(doneT.length / pTasks.length * 100) : 0;
       const overdueCount = openT.filter(t => t.targetDate && t.targetDate < today).length;
-      const peopleInvolved = [...new Set(pTasks.flatMap(t => t.ownerIds || []))];
-      const stages = proj.stages || [];
-      const updStage = (sid, patch) => updProject(proj.id, { stages: stages.map(s => s.id === sid ? { ...s, ...patch } : s) });
+      const peopleInvolved = [...new Set(pTasks.flatMap(t => taskPeople(t)))];
       const statBox = (label, val, color) => (
         <div style={{ background: c.surface, borderRadius: 10, padding: "12px 20px", border: `1px solid ${c.border}`, textAlign: "center" }}>
           <div style={{ fontSize: 26, fontWeight: 900, color: color || c.text }}>{val}</div>
@@ -9277,12 +9461,10 @@ function AviroDashboard() {
                 </div>
               )}
             </div>
-            {/* Overview stats */}
             <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
               {statBox("Open", openT.length)}
               {statBox("Done", doneT.length, "#34d399")}
               {statBox("Overdue", overdueCount, overdueCount > 0 ? "#f87171" : undefined)}
-              {statBox("Stages", stages.length)}
               {statBox("People", peopleInvolved.length)}
             </div>
             <div style={{ marginTop: 14 }}>
@@ -9291,115 +9473,49 @@ function AviroDashboard() {
             </div>
           </div>
 
-          {/* Stages */}
-          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 22, marginBottom: 18 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: c.accent, textTransform: "uppercase" }}>Stages <span style={{ fontWeight: 400, textTransform: "none", color: c.textMuted }}>— in order; a stage is ready when everything before it is done</span></span>
-              {isAdmin && <button onClick={() => updProject(proj.id, { stages: [...stages, { id: "st-" + Date.now(), name: "", ownerId: "", outsidePerson: "" }] })} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "7px 16px", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>+ Add Stage</button>}
-            </div>
-            {stages.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic" }}>No stages yet{isAdmin ? ' — e.g. "Legal setup", "Integration", "Go live".' : "."}</div>}
-            {stages.map((st, si) => {
-              const stTasks = aviroTasks.filter(t => t.projectId === proj.id && t.stageId === st.id);
-              const stDone = stTasks.filter(t => t.done).length;
-              const ready = stageReady(proj, si);
-              const complete = stTasks.length > 0 && stDone === stTasks.length;
-              return (
-                <div key={st.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 10, background: c.surface, border: `1px solid ${complete ? "rgba(52,211,153,0.4)" : ready ? c.accent + "50" : c.border}`, marginBottom: 8, flexWrap: "wrap", opacity: ready || complete ? 1 : 0.6 }}>
-                  <span style={{ fontSize: 16, fontWeight: 900, color: proj.color, width: 28 }}>{si + 1}.</span>
-                  {isAdmin
-                    ? <input value={st.name} onChange={e => updStage(st.id, { name: e.target.value })} placeholder="Stage name..." style={{ ...inputStyleA, flex: 2, minWidth: 160, fontWeight: 700 }} />
-                    : <span style={{ flex: 2, minWidth: 160, fontSize: 15, fontWeight: 700, color: c.text }}>{st.name || "Stage"}</span>}
-                  {isAdmin ? (
-                    <select value={st.ownerId || ""} onChange={e => updStage(st.id, { ownerId: e.target.value })} style={{ ...inputStyleA, minWidth: 140 }}>
-                      <option value="">— Stage owner —</option>
-                      {aviroPeople.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  ) : null}
-                  {st.ownerId && <PersonChip id={st.ownerId} size={13} />}
-                  {isAdmin
-                    ? <input value={st.outsidePerson || st.outsidePeople || ""} onChange={e => updStage(st.id, { outsidePerson: e.target.value })} placeholder="Outside person (lawyer, bank...)" style={{ ...inputStyleA, flex: 1, minWidth: 160, fontSize: 12 }} />
-                    : (st.outsidePerson || st.outsidePeople) ? <span style={{ fontSize: 11, color: c.textMuted, border: `1px dashed ${c.border}`, padding: "3px 10px", borderRadius: 6 }}>◦ {st.outsidePerson || st.outsidePeople}</span> : null}
-                  {complete ? <span style={{ fontSize: 11, fontWeight: 800, color: "#34d399" }}>✓ DONE</span>
-                    : ready ? <span style={{ fontSize: 11, fontWeight: 800, color: c.accent }}>READY {stTasks.length > 0 ? stDone + "/" + stTasks.length : ""}</span>
-                    : <span style={{ fontSize: 11, fontWeight: 700, color: c.textMuted }}>waiting</span>}
-                  {isAdmin && <button onClick={() => { if (confirm("Remove this stage? Its tasks stay on the project.")) updProject(proj.id, { stages: stages.filter(x => x.id !== st.id) }); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 13 }}>✕</button>}
+          {/* CREATE TASK */}
+          {!apCreateTask ? (
+            <button onClick={() => setApCreateTask(true)} style={{ background: `linear-gradient(135deg, ${proj.color}, ${proj.color}cc)`, border: "none", color: "#fff", borderRadius: 12, padding: "14px 32px", cursor: "pointer", fontSize: 16, fontWeight: 900, marginBottom: 16, letterSpacing: "0.03em" }}>＋ CREATE TASK</button>
+          ) : (
+            <div style={{ background: c.card, borderRadius: 14, border: `2px solid ${proj.color}60`, padding: 20, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: proj.color, textTransform: "uppercase", marginBottom: 12 }}>Create Task</div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <div style={{ flex: 2, minWidth: 220 }}>
+                  <label style={labelStyleA}>What needs doing?</label>
+                  <input id="apCtText" autoFocus placeholder="Task name..." style={{ ...inputStyleA, width: "100%", fontSize: 16, fontWeight: 700 }} onKeyDown={e => { if (e.key === "Enter") document.getElementById("apCtBtn").click(); }} />
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Tasks */}
-          <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 22 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: c.accent, textTransform: "uppercase" }}>Tasks</span>
-            <div style={{ display: "flex", gap: 8, margin: "12px 0 16px", flexWrap: "wrap", alignItems: "flex-end" }}>
-              <div style={{ flex: 2, minWidth: 220 }}>
-                <label style={labelStyleA}>New Task</label>
-                <input id="apNewTaskText" placeholder="What needs doing..." style={{ ...inputStyleA, width: "100%" }} onKeyDown={e => { if (e.key === "Enter") document.getElementById("apAddTaskBtn").click(); }} />
-              </div>
-              <div style={{ minWidth: 140 }}>
-                <label style={labelStyleA}>Stage</label>
-                <select id="apNewTaskStage" style={{ ...inputStyleA, width: "100%" }}>
-                  <option value="">— No stage —</option>
-                  {stages.map((s, i) => <option key={s.id} value={s.id}>{(i + 1) + ". " + (s.name || "Stage")}</option>)}
-                </select>
-              </div>
-              <div style={{ minWidth: 140 }}>
-                <label style={labelStyleA}>Owner</label>
-                <select id="apNewTaskOwner" style={{ ...inputStyleA, width: "100%" }}>
-                  <option value="">— Unowned —</option>
-                  {aviroPeople.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-              <div><label style={labelStyleA}>Start</label><input id="apNewTaskStart" type="date" style={{ ...inputStyleA }} /></div>
-              <div><label style={labelStyleA}>Target</label><input id="apNewTaskTarget" type="date" style={{ ...inputStyleA }} /></div>
-              <button id="apAddTaskBtn" onClick={() => {
-                const textEl = document.getElementById("apNewTaskText");
-                if (!textEl.value.trim()) return;
-                const stageEl = document.getElementById("apNewTaskStage");
-                const ownerEl = document.getElementById("apNewTaskOwner");
-                const startEl = document.getElementById("apNewTaskStart");
-                const targetEl = document.getElementById("apNewTaskTarget");
-                setAviroTasks([...aviroTasks, { id: "at-" + Date.now(), projectId: proj.id, stageId: stageEl.value || "", text: textEl.value.trim(), ownerIds: ownerEl.value ? [ownerEl.value] : [], dependsOn: [], startDate: startEl.value || "", targetDate: targetEl.value || "", done: false, createdAt: new Date().toISOString(), createdBy: myEmail }]);
-                textEl.value = "";
-              }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "11px 22px", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>+ Add</button>
-            </div>
-
-            {/* Open tasks grouped by stage */}
-            {[...stages.map((s, i) => ({ ...s, idx: i + 1 })), { id: "", name: "No stage", idx: null }].map(st => {
-              const grp = openT.filter(t => (t.stageId || "") === st.id);
-              if (grp.length === 0) return null;
-              return (
-                <div key={st.id || "none"} style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: c.textMuted, textTransform: "uppercase", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>{st.idx ? st.idx + ". " : ""}{st.name || "Stage"} {st.ownerId && <PersonChip id={st.ownerId} />}</div>
-                  {grp.map(t => (
-                    <div key={t.id}>
-                      <TaskRow t={t} />
-                      {/* Owner + dependency quick-edit per task */}
-                      <div style={{ display: "flex", gap: 6, margin: "-2px 0 6px 38px", flexWrap: "wrap", alignItems: "center" }}>
-                        <select value="" onChange={e => { if (!e.target.value) return; const cur = t.ownerIds || []; updTask(t.id, { ownerIds: cur.includes(e.target.value) ? cur.filter(x => x !== e.target.value) : [...cur, e.target.value] }); }} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 5, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted }}>
-                          <option value="">± owner</option>
-                          {aviroPeople.map(p => <option key={p.id} value={p.id}>{(t.ownerIds || []).includes(p.id) ? "− " : "+ "}{p.name}</option>)}
-                        </select>
-                        <select value="" onChange={e => { if (!e.target.value) return; const cur = t.dependsOn || []; updTask(t.id, { dependsOn: cur.includes(e.target.value) ? cur.filter(x => x !== e.target.value) : [...cur, e.target.value] }); }} style={{ fontSize: 10, padding: "2px 6px", borderRadius: 5, border: `1px solid ${c.border}`, background: "transparent", color: c.textMuted }}>
-                          <option value="">± cannot start until...</option>
-                          {pTasks.filter(x => x.id !== t.id).map(x => <option key={x.id} value={x.id}>{(t.dependsOn || []).includes(x.id) ? "− " : "+ "}{x.text.slice(0, 45)}{x.done ? " ✓" : ""}</option>)}
-                        </select>
-                        {(t.dependsOn || []).length > 0 && <span style={{ fontSize: 9, color: c.textMuted }}>waits for {(t.dependsOn || []).length}</span>}
-                      </div>
-                    </div>
-                  ))}
+                <div>
+                  <label style={labelStyleA}>Main Owner</label>
+                  <select id="apCtOwner" style={{ ...inputStyleA, minWidth: 150 }}>
+                    <option value="">— Pick —</option>
+                    {aviroPeople.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
                 </div>
-              );
-            })}
-            {openT.length === 0 && <div style={{ fontSize: 14, color: c.textMuted, fontStyle: "italic", padding: "10px 0" }}>No open tasks.</div>}
-
-            {doneT.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: "#34d399", textTransform: "uppercase", marginBottom: 6 }}>Done ({doneT.length})</div>
-                {doneT.slice(-10).map(t => <TaskRow key={t.id} t={t} />)}
+                <div><label style={labelStyleA}>Start (optional)</label><input id="apCtStart" type="date" style={{ ...inputStyleA }} /></div>
+                <div><label style={labelStyleA}>Target (optional)</label><input id="apCtTarget" type="date" style={{ ...inputStyleA }} /></div>
+                <button id="apCtBtn" onClick={() => {
+                  const text = document.getElementById("apCtText").value.trim();
+                  if (!text) return;
+                  const id = "at-" + Date.now();
+                  setAviroTasks([...aviroTasks, { id, projectId: proj.id, text, mainOwnerId: document.getElementById("apCtOwner").value || "", ownerIds: [], dependsOn: [], startDate: document.getElementById("apCtStart").value || "", targetDate: document.getElementById("apCtTarget").value || "", done: false, stages: [], notes: [], checklistOn: false, checklist: [], needOutside: false, outsideName: "", createdAt: new Date().toISOString(), createdBy: myEmail }]);
+                  setApCreateTask(false);
+                  setApExpandedTask(id);
+                }} style={{ background: proj.color, border: "none", color: "#fff", borderRadius: 8, padding: "12px 28px", cursor: "pointer", fontSize: 15, fontWeight: 900 }}>Create</button>
+                <button onClick={() => setApCreateTask(false)} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.textMuted, borderRadius: 8, padding: "12px 14px", cursor: "pointer", fontSize: 12 }}>Cancel</button>
               </div>
-            )}
-          </div>
+              <div style={{ fontSize: 11, color: c.textMuted, marginTop: 8 }}>Stages, more people, checklist and notes are added inside the task after creating it.</div>
+            </div>
+          )}
+
+          {/* Task cards */}
+          {openT.map(t => <TaskCard key={t.id} t={t} />)}
+          {openT.length === 0 && <div style={{ fontSize: 14, color: c.textMuted, fontStyle: "italic", padding: "10px 0" }}>No open tasks.</div>}
+          {doneT.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#34d399", textTransform: "uppercase", marginBottom: 6 }}>Done ({doneT.length})</div>
+              {doneT.slice(-8).map(t => <TaskCard key={t.id} t={t} />)}
+            </div>
+          )}
         </div>
       );
     };
@@ -9424,10 +9540,8 @@ function AviroDashboard() {
           </div>
         </div>
 
-        {/* PROJECT DETAIL */}
         {apView === "projects" && openProj && renderProjectDetail(openProj)}
 
-        {/* PROJECT TILES */}
         {apView === "projects" && !openProj && (
           <div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 16 }}>
@@ -9436,7 +9550,7 @@ function AviroDashboard() {
                 const done = pTasks.filter(t => t.done).length;
                 const pct = pTasks.length > 0 ? Math.round(done / pTasks.length * 100) : 0;
                 const overdueCount = pTasks.filter(t => !t.done && t.targetDate && t.targetDate < today).length;
-                const owners = [...new Set(pTasks.filter(t => !t.done).flatMap(t => t.ownerIds || []))];
+                const owners = [...new Set(pTasks.filter(t => !t.done).flatMap(t => taskPeople(t)))];
                 return (
                   <div key={proj.id} onClick={() => setApOpenProject(proj.id)}
                     onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; }}
@@ -9475,7 +9589,7 @@ function AviroDashboard() {
                   if (!apNewProject.name.trim()) return;
                   const color = PALETTE[activeProjects.length % PALETTE.length];
                   const id = "ap-" + Date.now();
-                  setAviroProjects([...aviroProjects, { id, name: apNewProject.name.trim(), color, description: "", stages: [], archived: false, createdAt: new Date().toISOString() }]);
+                  setAviroProjects([...aviroProjects, { id, name: apNewProject.name.trim(), color, description: "", archived: false, createdAt: new Date().toISOString() }]);
                   setApNewProject(null);
                   setApOpenProject(id);
                 }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "12px 26px", cursor: "pointer", fontSize: 15, fontWeight: 800 }}>Create</button>
@@ -9487,12 +9601,12 @@ function AviroDashboard() {
           </div>
         )}
 
-        {/* TASKS BY PERSON — pick someone */}
+        {/* TASKS BY PERSON */}
         {apView === "byperson" && (
           <div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
               {aviroPeople.map(p => {
-                const openCount = allOpen.filter(t => (t.ownerIds || []).includes(p.id)).length;
+                const openCount = allOpen.filter(t => taskPeople(t).includes(p.id)).length;
                 const sel = apPersonFilter === p.id;
                 return (
                   <button key={p.id} onClick={() => setApPersonFilter(sel ? null : p.id)} style={{ display: "flex", alignItems: "center", gap: 10, background: sel ? p.color : c.card, border: `2px solid ${p.color}`, borderRadius: 12, padding: "12px 20px", cursor: "pointer" }}>
@@ -9507,37 +9621,36 @@ function AviroDashboard() {
             {apPersonFilter && (() => {
               const p = personById(apPersonFilter);
               if (!p) return null;
-              const theirs = allOpen.filter(t => (t.ownerIds || []).includes(p.id)).sort((a, b) => (a.targetDate || "9999").localeCompare(b.targetDate || "9999"));
-              // Stages owned by them that are READY now
+              const theirs = allOpen.filter(t => taskPeople(t).includes(p.id)).sort((a, b) => (a.targetDate || "9999").localeCompare(b.targetDate || "9999"));
+              // Task-stages owned by them that are READY now
               const readyStages = [];
-              activeProjects.forEach(proj => (proj.stages || []).forEach((st, si) => {
-                if (st.ownerId === p.id && stageReady(proj, si)) {
-                  const stOpen = aviroTasks.filter(t => t.projectId === proj.id && t.stageId === st.id && !t.done);
-                  const stAll = aviroTasks.filter(t => t.projectId === proj.id && t.stageId === st.id);
-                  if (stAll.length === 0 || stOpen.length > 0) readyStages.push({ proj, st, si, open: stOpen.length });
+              allOpen.forEach(t => (t.stages || []).forEach((st, si) => {
+                if (st.ownerId === p.id && !st.done && stageReadyInTask(t, si)) {
+                  const proj = aviroProjects.find(x => x.id === t.projectId);
+                  readyStages.push({ t, st, si, proj });
                 }
               }));
               return (
                 <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16, alignItems: "start" }}>
-                  <div style={{ background: c.card, borderRadius: 14, border: `2px solid ${p.color}60`, borderTop: `6px solid ${p.color}`, padding: 20 }}>
-                    <div style={{ fontSize: 15, fontWeight: 900, color: c.text, marginBottom: 12 }}>{p.name}'s open tasks ({theirs.length})</div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: c.text, marginBottom: 10 }}>{p.name}'s open tasks ({theirs.length})</div>
                     {theirs.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic" }}>Nothing open.</div>}
-                    {theirs.map(t => <TaskRow key={t.id} t={t} showProject />)}
+                    {theirs.map(t => <TaskCard key={t.id} t={t} showProject />)}
                   </div>
                   <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: c.accent, textTransform: "uppercase", marginBottom: 10 }}>Stages ready for {p.name} now</div>
-                    {readyStages.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic" }}>None waiting — nothing is blocked on {p.name}.</div>}
-                    {readyStages.map(({ proj, st, si, open }) => (
-                      <div key={proj.id + st.id} onClick={() => { setApView("projects"); setApOpenProject(proj.id); }} style={{ padding: "10px 12px", borderRadius: 10, background: c.surface, border: `1px solid ${proj.color}50`, borderLeft: `5px solid ${proj.color}`, marginBottom: 8, cursor: "pointer" }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: c.accent, textTransform: "uppercase", marginBottom: 10 }}>Ready for {p.name} now</div>
+                    {readyStages.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic" }}>Nothing is waiting on {p.name}.</div>}
+                    {readyStages.map(({ t, st, si, proj }) => (
+                      <div key={t.id + st.id} onClick={() => { setApView("projects"); setApOpenProject(t.projectId); setApExpandedTask(t.id); }} style={{ padding: "10px 12px", borderRadius: 10, background: c.surface, border: `1px solid ${proj ? proj.color + "50" : c.border}`, borderLeft: `5px solid ${proj ? proj.color : c.accent}`, marginBottom: 8, cursor: "pointer" }}>
                         <div style={{ fontSize: 13, fontWeight: 800, color: c.text }}>{si + 1}. {st.name || "Stage"}</div>
-                        <div style={{ fontSize: 11, color: c.textMuted }}>{proj.name}{open > 0 ? " · " + open + " open task" + (open > 1 ? "s" : "") : " · no tasks yet"}</div>
+                        <div style={{ fontSize: 11, color: c.textMuted }}>{t.text}{proj ? " · " + proj.name : ""}</div>
                       </div>
                     ))}
                   </div>
                 </div>
               );
             })()}
-            {!apPersonFilter && aviroPeople.length > 0 && <div style={{ color: c.textMuted, fontSize: 14 }}>Pick a person to see their tasks and which stages are ready for them.</div>}
+            {!apPersonFilter && aviroPeople.length > 0 && <div style={{ color: c.textMuted, fontSize: 14 }}>Pick a person to see their tasks and what's ready for them now.</div>}
           </div>
         )}
 
@@ -9557,19 +9670,17 @@ function AviroDashboard() {
                 </div>
               ))}
             </div>
-            {/* Project table */}
             <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20, marginBottom: 18, overflowX: "auto" }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: c.accent, textTransform: "uppercase", marginBottom: 10 }}>Project by Project</div>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-                <thead><tr>{["Project", "Progress", "", "Open", "Done", "Overdue", "Stages"].map((h, i) => <th key={i} style={{ textAlign: "left", padding: "8px 10px", fontSize: 10, fontWeight: 800, color: c.textMuted, textTransform: "uppercase", borderBottom: `1px solid ${c.border}` }}>{h}</th>)}</tr></thead>
+                <thead><tr>{["Project", "Progress", "", "Open", "Done", "Overdue", "People"].map((h, i) => <th key={i} style={{ textAlign: "left", padding: "8px 10px", fontSize: 10, fontWeight: 800, color: c.textMuted, textTransform: "uppercase", borderBottom: `1px solid ${c.border}` }}>{h}</th>)}</tr></thead>
                 <tbody>
                   {activeProjects.map(proj => {
                     const pTasks = aviroTasks.filter(t => t.projectId === proj.id);
                     const done = pTasks.filter(t => t.done).length;
                     const pct = pTasks.length > 0 ? Math.round(done / pTasks.length * 100) : 0;
                     const od = pTasks.filter(t => !t.done && t.targetDate && t.targetDate < today).length;
-                    const stages = proj.stages || [];
-                    const curStage = stages.findIndex((st, si) => stageReady(proj, si) && aviroTasks.some(t => t.projectId === proj.id && t.stageId === st.id && !t.done));
+                    const ppl = [...new Set(pTasks.filter(t => !t.done).flatMap(t => taskPeople(t)))];
                     return (
                       <tr key={proj.id} onClick={() => { setApView("projects"); setApOpenProject(proj.id); }} style={{ cursor: "pointer" }}>
                         <td style={{ padding: "10px", fontWeight: 900, color: proj.color, fontSize: 15 }}>{proj.name}</td>
@@ -9578,7 +9689,7 @@ function AviroDashboard() {
                         <td style={{ padding: "10px", fontWeight: 700, color: c.text }}>{pTasks.length - done}</td>
                         <td style={{ padding: "10px", fontWeight: 700, color: "#34d399" }}>{done}</td>
                         <td style={{ padding: "10px", fontWeight: 800, color: od > 0 ? "#f87171" : c.textMuted }}>{od}</td>
-                        <td style={{ padding: "10px", fontSize: 12, color: c.textMuted }}>{stages.length > 0 ? (curStage >= 0 ? "on " + (curStage + 1) + ". " + (stages[curStage].name || "stage") + " of " + stages.length : stages.length + " stages") : "—"}</td>
+                        <td style={{ padding: "10px" }}>{ppl.slice(0, 5).map(oid => { const p = personById(oid); return p ? <span key={oid} title={p.name} style={{ width: 22, height: 22, borderRadius: "50%", background: p.color, color: "#fff", fontSize: 10, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center", marginRight: 3 }}>{p.name.charAt(0).toUpperCase()}</span> : null; })}</td>
                       </tr>
                     );
                   })}
@@ -9586,15 +9697,14 @@ function AviroDashboard() {
               </table>
               {activeProjects.length === 0 && <div style={{ fontSize: 13, color: c.textMuted, fontStyle: "italic", marginTop: 8 }}>No projects yet.</div>}
             </div>
-            {/* Who is carrying what */}
             <div style={{ background: c.card, borderRadius: 14, border: `1px solid ${c.border}`, padding: 20 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: c.accent, textTransform: "uppercase", marginBottom: 12 }}>Who is carrying what</div>
               {(() => {
-                const counts = aviroPeople.map(p => ({ p, n: allOpen.filter(t => (t.ownerIds || []).includes(p.id)).length })).sort((a, b) => b.n - a.n);
+                const counts = aviroPeople.map(p => ({ p, n: allOpen.filter(t => taskPeople(t).includes(p.id)).length })).sort((a, b) => b.n - a.n);
                 const max = Math.max(1, ...counts.map(x => x.n));
                 return counts.map(({ p, n }) => (
                   <div key={p.id} onClick={() => { setApView("byperson"); setApPersonFilter(p.id); }} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, cursor: "pointer" }}>
-                    <span style={{ minWidth: 110, fontSize: 14, fontWeight: 800, color: c.text }}>{p.name}{p.isOutside ? " ◦" : ""}</span>
+                    <span style={{ minWidth: 110, fontSize: 14, fontWeight: 800, color: c.text }}>{p.name}</span>
                     <div style={{ flex: 1, height: 22, background: c.surface, borderRadius: 6, overflow: "hidden" }}>
                       <div style={{ width: (n / max * 100) + "%", height: "100%", background: p.color, display: "flex", alignItems: "center", paddingLeft: 8 }}>
                         {n > 0 && <span style={{ fontSize: 12, fontWeight: 900, color: "#fff" }}>{n}</span>}
@@ -9630,12 +9740,7 @@ function AviroDashboard() {
                   ? <input value={p.name} onChange={e => setAviroPeople(aviroPeople.map(x => x.id === p.id ? { ...x, name: e.target.value } : x))} style={{ ...inputStyleA, flex: 1, minWidth: 140, fontSize: 17, fontWeight: 800 }} />
                   : <span style={{ flex: 1, fontSize: 17, fontWeight: 800, color: c.text }}>{p.name}</span>}
                 {isAdmin && PALETTE.map(col => <button key={col} onClick={() => setAviroPeople(aviroPeople.map(x => x.id === p.id ? { ...x, color: col } : x))} style={{ width: 17, height: 17, borderRadius: "50%", background: col, border: p.color === col ? "2px solid #fff" : "none", cursor: "pointer" }} />)}
-                {isAdmin ? (
-                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: c.textMuted, cursor: "pointer" }}>
-                    <input type="checkbox" checked={!!p.isOutside} onChange={e => setAviroPeople(aviroPeople.map(x => x.id === p.id ? { ...x, isOutside: e.target.checked } : x))} style={{ accentColor: c.accent }} /> Outside
-                  </label>
-                ) : p.isOutside && <span style={{ fontSize: 10, color: c.textMuted, border: `1px dashed ${c.border}`, padding: "2px 8px", borderRadius: 4 }}>OUTSIDE</span>}
-                <span style={{ fontSize: 12, fontWeight: 700, color: c.textMuted }}>{allOpen.filter(t => (t.ownerIds || []).includes(p.id)).length} open</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: c.textMuted }}>{allOpen.filter(t => taskPeople(t).includes(p.id)).length} open</span>
                 {isAdmin && <button onClick={() => { if (confirm("Remove " + p.name + "? Their tasks stay but lose the owner tag.")) setAviroPeople(aviroPeople.filter(x => x.id !== p.id)); }} style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 14 }}>✕</button>}
               </div>
             ))}
@@ -9643,18 +9748,15 @@ function AviroDashboard() {
             {isAdmin && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
                 <input id="apNewPersonName" placeholder="Name..." style={{ ...inputStyleA, width: 200 }} onKeyDown={e => { if (e.key === "Enter") document.getElementById("apAddPersonBtn").click(); }} />
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: c.textMuted, cursor: "pointer" }}>
-                  <input type="checkbox" id="apNewPersonOutside" style={{ accentColor: c.accent }} /> Outside person
-                </label>
                 <button id="apAddPersonBtn" onClick={() => {
                   const nameEl = document.getElementById("apNewPersonName");
-                  const outEl = document.getElementById("apNewPersonOutside");
                   const name = nameEl.value.trim();
                   if (!name) return;
                   const color = PALETTE[aviroPeople.length % PALETTE.length];
-                  setAviroPeople([...aviroPeople, { id: "pp-" + Date.now(), name, color, isOutside: outEl.checked }]);
-                  nameEl.value = ""; outEl.checked = false;
+                  setAviroPeople([...aviroPeople, { id: "pp-" + Date.now(), name, color }]);
+                  nameEl.value = "";
                 }} style={{ background: c.accent, border: "none", color: "#fff", borderRadius: 8, padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>+ Add Person</button>
+                <span style={{ alignSelf: "center", fontSize: 11, color: c.textMuted }}>Outside people aren't added here — tick "Need outside people" on a task or stage and type them in.</span>
               </div>
             )}
           </div>
